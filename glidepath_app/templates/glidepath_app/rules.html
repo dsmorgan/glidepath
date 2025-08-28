@@ -35,7 +35,15 @@
     <canvas id="categoryChart"></canvas>
 </div>
 <script>
-(function() {
+if (window._renderChartsCallback) {
+    htmx.off('htmx:load', window._renderChartsCallback);
+}
+window._renderChartsCallback = function () {
+    const classCanvas = document.getElementById('classChart');
+    const categoryCanvas = document.getElementById('categoryChart');
+    if (!classCanvas || !categoryCanvas) {
+        return;
+    }
     if (window.classChart) {
         chartAdapter.destroy(window.classChart);
     }
@@ -64,12 +72,13 @@
         scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => v + '%' } } }
     };
     window.classChart = chartAdapter.init(
-        document.getElementById('classChart').getContext('2d'),
+        classCanvas.getContext('2d'),
         { type: 'bar', data: {{ class_chart|safe }}, options: commonOpts, plugins:[retirePlugin] }
     );
     window.categoryChart = chartAdapter.init(
-        document.getElementById('categoryChart').getContext('2d'),
+        categoryCanvas.getContext('2d'),
         { type: 'bar', data: {{ category_chart|safe }}, options: commonOpts, plugins:[retirePlugin] }
     );
-})();
+};
+htmx.onLoad(window._renderChartsCallback);
 </script>
