@@ -58,14 +58,29 @@ def import_glidepath_rules(file_obj) -> RuleSet:
     class_cols = [c for c in reader.fieldnames if c in ASSET_CLASSES]
     category_cols = [c for c in reader.fieldnames if ":" in c]
 
+    rows = []
+    for row in reader:
+        gt = int(row["gt-retire-age"])
+        lt = int(row["lt-retire-age"])
+        gt = max(-100, gt)
+        lt = min(100, lt)
+        if gt >= lt:
+            raise ValueError("gt-retire-age must be less than lt-retire-age")
+        rows.append((gt, lt, row))
+
+    rows.sort(key=lambda x: x[0])
+    current = -100
+    for gt, lt, _ in rows:
+        if gt > current:
+            raise ValueError(f"Missing rules for ages {current} to {gt}")
+        if gt < current:
+            raise ValueError(f"Overlapping rules for ages {gt} to {current}")
+        current = lt
+    if current != 100:
+        raise ValueError(f"Missing rules for ages {current} to 100")
+
     with transaction.atomic():
-        for row in reader:
-            gt = int(row["gt-retire-age"])
-            lt = int(row["lt-retire-age"])
-            gt = max(-100, gt)
-            lt = min(100, lt)
-            if gt >= lt:
-                raise ValueError("gt-retire-age must be less than lt-retire-age")
+        for gt, lt, row in rows:
             rule = GlidepathRule.objects.create(
                 ruleset=ruleset, gt_retire_age=gt, lt_retire_age=lt
             )
