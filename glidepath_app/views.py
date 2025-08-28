@@ -7,18 +7,26 @@ from .forms import GlidepathRuleUploadForm
 from .models import GlidepathRule, RuleSet
 from .services import export_glidepath_rules, import_glidepath_rules
 
-BASE_COLORS = [
-    "#1f77b4",
-    "#ff7f0e",
-    "#2ca02c",
-    "#d62728",
-    "#9467bd",
-    "#8c564b",
-    "#e377c2",
-    "#7f7f7f",
-    "#bcbd22",
-    "#17becf",
+DEFAULT_COLORS = [
+    "#4dc9f6",
+    "#f67019",
+    "#f53794",
+    "#537bc4",
+    "#acc236",
+    "#166a8f",
+    "#00a950",
+    "#58595b",
+    "#8549ba",
+    "#e5ae38",
 ]
+
+
+def _base_color(idx: int) -> str:
+    """Return a base color, cycling through defaults and generating new ones."""
+    if idx < len(DEFAULT_COLORS):
+        return DEFAULT_COLORS[idx]
+    hue = (idx * 47) % 360
+    return f"hsl({hue}, 65%, 55%)"
 
 
 def _lighten(color: str, factor: float) -> str:
@@ -54,7 +62,7 @@ def _build_chart_data(rules):
 
     class_datasets = []
     for idx, name in enumerate(class_names):
-        color = BASE_COLORS[idx % len(BASE_COLORS)]
+        color = _base_color(idx)
         data = []
         for _, rule in chart_rules:
             perc = 0.0
@@ -63,7 +71,16 @@ def _build_chart_data(rules):
                     perc = float(ca.percentage)
                     break
             data.append(perc)
-        class_datasets.append({"label": name, "data": data, "backgroundColor": color})
+        class_datasets.append(
+            {
+                "label": name,
+                "data": data,
+                "backgroundColor": color,
+                "borderColor": color,
+                "fill": True,
+                "stack": "class",
+            }
+        )
 
     category_datasets = []
     for class_idx, class_name in enumerate(class_names):
@@ -74,7 +91,7 @@ def _build_chart_data(rules):
                     cname = ca.asset_category.name
                     if cname not in cat_names:
                         cat_names.append(cname)
-        base_color = BASE_COLORS[class_idx % len(BASE_COLORS)]
+        base_color = _base_color(class_idx)
         count = len(cat_names)
         for j, cname in enumerate(cat_names):
             color = _lighten(base_color, 0.2 + 0.6 * j / max(1, count))
@@ -90,12 +107,26 @@ def _build_chart_data(rules):
                         break
                 data.append(perc)
             category_datasets.append(
-                {"label": cname, "data": data, "backgroundColor": color}
+                {
+                    "label": cname,
+                    "data": data,
+                    "backgroundColor": color,
+                    "borderColor": color,
+                    "fill": True,
+                    "stack": "category",
+                }
             )
+
+    pie_data = {"labels": [], "datasets": [{"data": [], "backgroundColor": []}]}
+    if "-7" in labels:
+        idx = labels.index("-7")
+        pie_data["labels"] = [ds["label"] for ds in class_datasets]
+        pie_data["datasets"][0]["data"] = [ds["data"][idx] for ds in class_datasets]
+        pie_data["datasets"][0]["backgroundColor"] = [ds["backgroundColor"] for ds in class_datasets]
 
     class_chart = {"labels": labels, "datasets": class_datasets}
     category_chart = {"labels": labels, "datasets": category_datasets}
-    return class_chart, category_chart
+    return class_chart, category_chart, pie_data
 
 
 def upload_rules(request):
@@ -132,7 +163,7 @@ def upload_rules(request):
         "category_allocations__asset_category__asset_class",
     )
 
-    class_chart, category_chart = _build_chart_data(list(rules))
+    class_chart, category_chart, pie_chart = _build_chart_data(list(rules))
 
     context = {
         "form": form,
@@ -142,6 +173,7 @@ def upload_rules(request):
         "selected_set": selected_set,
         "class_chart": json.dumps(class_chart),
         "category_chart": json.dumps(category_chart),
+        "class_pie_chart": json.dumps(pie_chart),
     }
 
     template = "glidepath_app/upload.html"
