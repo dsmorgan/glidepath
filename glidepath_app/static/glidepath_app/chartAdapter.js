@@ -11,7 +11,9 @@
             chart.update();
         },
         destroy: function (chart) {
-            chart.destroy();
+            if (chart && typeof chart.destroy === 'function') {
+                chart.destroy();
+            }
         }
     };
 })();
