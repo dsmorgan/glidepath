@@ -1,6 +1,7 @@
 from django.urls import path
-from hello.views import home
+from glidepath_app.views import upload_rules, export_rules
 
 urlpatterns = [
-    path('', home, name='home'),
+    path('', upload_rules, name='home'),
+    path('export/', export_rules, name='export_rules'),
 ]

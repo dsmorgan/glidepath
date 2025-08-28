@@ -9,7 +9,7 @@ ALLOWED_HOSTS: list[str] = ["*"]
 INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.staticfiles',
-    'hello',
+    'glidepath_app',
 ]
 
 MIDDLEWARE = [
@@ -18,7 +18,14 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'glidepath_project.urls'
 
-TEMPLATES: list[dict] = []
+TEMPLATES: list[dict] = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [],
+        'APP_DIRS': True,
+        'OPTIONS': {'context_processors': []},
+    }
+]
 
 WSGI_APPLICATION = 'glidepath_project.wsgi.application'
 
