@@ -21,7 +21,7 @@ class ImportRulesTests(TestCase):
     def test_import_normalizes_and_export_skips_zero(self):
         csv_data = (
             "gt-retire-age,lt-retire-age,Stocks,Bonds,Stocks : Large Cap\n"
-            "0,1,100%,0%,100%\n"
+            "-100,100,100%,0%,100%\n"
         )
         f = io.BytesIO(csv_data.encode("utf-8"))
         f.name = "rules.csv"
@@ -32,7 +32,7 @@ class ImportRulesTests(TestCase):
         self.assertNotIn("Bonds", header)
 
     def test_unique_ruleset_names(self):
-        data = "gt-retire-age,lt-retire-age,Stocks,Stocks:Large Cap\n0,1,100%,100%\n"
+        data = "gt-retire-age,lt-retire-age,Stocks,Stocks:Large Cap\n-100,100,100%,100%\n"
         for _ in range(2):
             f = io.BytesIO(data.encode("utf-8"))
             f.name = "rules.csv"
@@ -40,3 +40,25 @@ class ImportRulesTests(TestCase):
         names = list(RuleSet.objects.order_by("id").values_list("name", flat=True))
         self.assertEqual(names[0], "rules")
         self.assertEqual(names[1], "rules (1)")
+
+    def test_missing_years_raise_error(self):
+        data = (
+            "gt-retire-age,lt-retire-age,Stocks,Stocks:Large Cap\n"
+            "-100,0,100%,100%\n"
+            "1,100,100%,100%\n"
+        )
+        f = io.BytesIO(data.encode("utf-8"))
+        with self.assertRaises(ValueError) as cm:
+            import_glidepath_rules(f)
+        self.assertIn("Missing", str(cm.exception))
+
+    def test_overlapping_years_raise_error(self):
+        data = (
+            "gt-retire-age,lt-retire-age,Stocks,Stocks:Large Cap\n"
+            "-100,10,100%,100%\n"
+            "5,100,100%,100%\n"
+        )
+        f = io.BytesIO(data.encode("utf-8"))
+        with self.assertRaises(ValueError) as cm:
+            import_glidepath_rules(f)
+        self.assertIn("Overlapping", str(cm.exception))
