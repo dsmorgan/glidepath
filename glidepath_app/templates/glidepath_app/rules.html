@@ -1,0 +1,75 @@
+<div class="overflow-x-auto">
+    <table class="min-w-full border">
+        <thead class="bg-gray-100">
+            <tr>
+                <th class="px-2 py-1 border">gt-retire-age</th>
+                <th class="px-2 py-1 border">lt-retire-age</th>
+                <th class="px-2 py-1 border">Classes</th>
+                <th class="px-2 py-1 border">Categories</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for rule in rules %}
+            <tr class="odd:bg-white even:bg-gray-50">
+                <td class="px-2 py-1 border">{{ rule.gt_retire_age }}</td>
+                <td class="px-2 py-1 border">{{ rule.lt_retire_age }}</td>
+                <td class="px-2 py-1 border">
+                    {% for ca in rule.class_allocations.all %}
+                        {{ ca.asset_class.name }}: {{ ca.percentage }}%<br>
+                    {% endfor %}
+                </td>
+                <td class="px-2 py-1 border">
+                    {% for ca in rule.category_allocations.all %}
+                        {{ ca.asset_category.asset_class.name }}:{{ ca.asset_category.name }}: {{ ca.percentage }}%<br>
+                    {% endfor %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+<div class="mt-8">
+    <canvas id="classChart"></canvas>
+</div>
+<div class="mt-8">
+    <canvas id="categoryChart"></canvas>
+</div>
+<script>
+(function() {
+    if (window.classChart) {
+        chartAdapter.destroy(window.classChart);
+    }
+    if (window.categoryChart) {
+        chartAdapter.destroy(window.categoryChart);
+    }
+    const retirePlugin = {
+        id: 'retireLine',
+        afterDraw(chart) {
+            const index = chart.data.labels.indexOf('0');
+            if (index !== -1) {
+                const x = chart.scales.x.getPixelForValue(index);
+                const ctx = chart.ctx;
+                ctx.save();
+                ctx.strokeStyle = 'red';
+                ctx.beginPath();
+                ctx.moveTo(x, chart.chartArea.top);
+                ctx.lineTo(x, chart.chartArea.bottom);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+    };
+    const commonOpts = {
+        plugins: { legend: { position: 'bottom' } },
+        scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => v + '%' } } }
+    };
+    window.classChart = chartAdapter.init(
+        document.getElementById('classChart').getContext('2d'),
+        { type: 'bar', data: {{ class_chart|safe }}, options: commonOpts, plugins:[retirePlugin] }
+    );
+    window.categoryChart = chartAdapter.init(
+        document.getElementById('categoryChart').getContext('2d'),
+        { type: 'bar', data: {{ category_chart|safe }}, options: commonOpts, plugins:[retirePlugin] }
+    );
+})();
+</script>

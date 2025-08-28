@@ -1,61 +1,32 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Glidepath Rules</title>
-</head>
-<body>
-<h1>Glidepath Rules</h1>
+{% extends 'glidepath_app/base.html' %}
+{% block title %}Glidepath Rules{% endblock %}
+{% block content %}
+<h1 class="text-2xl mb-4">Glidepath Rules</h1>
 {% if error %}
-<p style="color:red;">{{ error }}</p>
+<p class="text-red-500">{{ error }}</p>
 {% endif %}
-<form method="get">
-    <select name="ruleset" onchange="this.form.submit()">
+<form method="get" class="mb-4">
+    <select name="ruleset" class="border p-1" hx-get="{% url 'home' %}" hx-target="#rules" hx-trigger="change">
         {% for rs in rule_sets %}
             <option value="{{ rs.id }}" {% if selected_set and rs.id == selected_set.id %}selected{% endif %}>{{ rs.name }}</option>
         {% endfor %}
     </select>
-    <noscript><button type="submit">View</button></noscript>
+    <noscript><button type="submit" class="ml-2 px-2 py-1 bg-blue-500 text-white">View</button></noscript>
 </form>
-<form method="post" style="display:inline;">
+<form method="post" style="display:inline;" class="mr-2">
     {% csrf_token %}
     <input type="hidden" name="delete" value="{{ selected_set.id }}">
-    <button type="submit" {% if not selected_set %}disabled{% endif %}>Delete</button>
+    <button type="submit" class="px-2 py-1 bg-red-500 text-white" {% if not selected_set %}disabled{% endif %}>Delete</button>
 </form>
-<form method="post" enctype="multipart/form-data">
+<form method="post" enctype="multipart/form-data" class="inline">
     {% csrf_token %}
-    <input type="file" name="file" required>
-    <button type="submit">Upload</button>
+    <input type="file" name="file" required class="border p-1">
+    <button type="submit" class="px-2 py-1 bg-green-500 text-white">Upload</button>
 </form>
 {% if selected_set %}
-<p><a href="{% url 'export_rules' %}?ruleset={{ selected_set.id }}">Export CSV</a></p>
+<p class="mt-2"><a class="text-blue-600 underline" href="{% url 'export_rules' %}?ruleset={{ selected_set.id }}">Export CSV</a></p>
 {% endif %}
-<table border="1">
-    <thead>
-        <tr>
-            <th>gt-retire-age</th>
-            <th>lt-retire-age</th>
-            <th>Classes</th>
-            <th>Categories</th>
-        </tr>
-    </thead>
-    <tbody>
-    {% for rule in rules %}
-        <tr>
-            <td>{{ rule.gt_retire_age }}</td>
-            <td>{{ rule.lt_retire_age }}</td>
-            <td>
-                {% for ca in rule.class_allocations.all %}
-                    {{ ca.asset_class.name }}: {{ ca.percentage }}%<br>
-                {% endfor %}
-            </td>
-            <td>
-                {% for ca in rule.category_allocations.all %}
-                    {{ ca.asset_category.asset_class.name }}:{{ ca.asset_category.name }}: {{ ca.percentage }}%<br>
-                {% endfor %}
-            </td>
-        </tr>
-    {% endfor %}
-    </tbody>
-</table>
-</body>
-</html>
+<div id="rules" class="mt-4">
+    {% include 'glidepath_app/rules.html' %}
+</div>
+{% endblock %}
