@@ -14,6 +14,8 @@ docker-compose up --build
 
 Then visit <http://localhost:8000/> to see the greeting.
 
+Database migrations are applied automatically when the container starts.
+
 ## Running tests
 
 ```bash
