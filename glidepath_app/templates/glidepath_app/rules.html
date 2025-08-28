@@ -34,6 +34,9 @@
 <div class="mt-8">
     <canvas id="categoryChart"></canvas>
 </div>
+<div class="mt-8">
+    <canvas id="classPieChart"></canvas>
+</div>
 <script>
 if (window._renderChartsCallback) {
     htmx.off('htmx:load', window._renderChartsCallback);
@@ -41,7 +44,8 @@ if (window._renderChartsCallback) {
 window._renderChartsCallback = function () {
     const classCanvas = document.getElementById('classChart');
     const categoryCanvas = document.getElementById('categoryChart');
-    if (!classCanvas || !categoryCanvas) {
+    const pieCanvas = document.getElementById('classPieChart');
+    if (!classCanvas || !categoryCanvas || !pieCanvas) {
         return;
     }
     if (window.classChart) {
@@ -49,6 +53,9 @@ window._renderChartsCallback = function () {
     }
     if (window.categoryChart) {
         chartAdapter.destroy(window.categoryChart);
+    }
+    if (window.classPieChart) {
+        chartAdapter.destroy(window.classPieChart);
     }
     const retirePlugin = {
         id: 'retireLine',
@@ -63,21 +70,43 @@ window._renderChartsCallback = function () {
                 ctx.moveTo(x, chart.chartArea.top);
                 ctx.lineTo(x, chart.chartArea.bottom);
                 ctx.stroke();
+                ctx.fillStyle = 'red';
+                ctx.textAlign = 'center';
+                ctx.fillText('Retirement', x, chart.chartArea.top - 5);
                 ctx.restore();
             }
         }
     };
+    const tooltip = {
+        callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y}%`
+        }
+    };
     const commonOpts = {
-        plugins: { legend: { position: 'bottom' } },
+        plugins: { legend: { position: 'bottom' }, tooltip },
         scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => v + '%' } } }
     };
     window.classChart = chartAdapter.init(
         classCanvas.getContext('2d'),
-        { type: 'bar', data: {{ class_chart|safe }}, options: commonOpts, plugins:[retirePlugin] }
+        { type: 'line', data: {{ class_chart|safe }}, options: commonOpts, plugins:[retirePlugin] }
     );
     window.categoryChart = chartAdapter.init(
         categoryCanvas.getContext('2d'),
-        { type: 'bar', data: {{ category_chart|safe }}, options: commonOpts, plugins:[retirePlugin] }
+        { type: 'line', data: {{ category_chart|safe }}, options: commonOpts, plugins:[retirePlugin] }
+    );
+    const pieOpts = {
+        plugins: {
+            legend: { position: 'bottom' },
+            tooltip: {
+                callbacks: {
+                    label: ctx => `${ctx.label}: ${ctx.parsed}%`
+                }
+            }
+        }
+    };
+    window.classPieChart = chartAdapter.init(
+        pieCanvas.getContext('2d'),
+        { type: 'pie', data: {{ class_pie_chart|safe }}, options: pieOpts }
     );
 };
 htmx.onLoad(window._renderChartsCallback);
