@@ -6,7 +6,7 @@
     <title>{% block title %}Glidepath{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.9"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{% static 'glidepath_app/chart.min.js' %}"></script>
     <script src="{% static 'glidepath_app/chartAdapter.js' %}"></script>
 </head>
 <body class="p-4">
