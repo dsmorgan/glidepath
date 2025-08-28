@@ -1,5 +1,7 @@
 import csv
 import io
+import os
+import re
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict
 
@@ -11,6 +13,7 @@ from .models import (
     CategoryAllocation,
     ClassAllocation,
     GlidepathRule,
+    RuleSet,
 )
 
 ASSET_CLASSES = ["Stocks", "Bonds", "Crypto", "Other"]
@@ -25,9 +28,29 @@ def _parse_percent(value: str) -> Decimal:
     return Decimal(value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-def import_glidepath_rules(file_obj) -> None:
+def _normalize_header(header: str) -> str:
+    return re.sub(r"\s*:\s*", ":", header).strip()
+
+
+def _unique_ruleset_name(base: str) -> str:
+    existing = set(RuleSet.objects.values_list("name", flat=True))
+    name = base
+    idx = 1
+    while name in existing:
+        name = f"{base} ({idx})"
+        idx += 1
+    return name
+
+
+def import_glidepath_rules(file_obj) -> RuleSet:
+    name = os.path.splitext(os.path.basename(getattr(file_obj, "name", "") or "rules"))[0]
+    name = name or "rules"
+    ruleset = RuleSet.objects.create(name=_unique_ruleset_name(name))
+
     text = io.TextIOWrapper(file_obj, encoding="utf-8")
     reader = csv.DictReader(text)
+    if reader.fieldnames:
+        reader.fieldnames = [_normalize_header(c) for c in reader.fieldnames]
     required = {"gt-retire-age", "lt-retire-age"}
     if not required.issubset(reader.fieldnames or []):
         raise ValueError("Missing required columns: gt-retire-age and lt-retire-age")
@@ -36,7 +59,6 @@ def import_glidepath_rules(file_obj) -> None:
     category_cols = [c for c in reader.fieldnames if ":" in c]
 
     with transaction.atomic():
-        GlidepathRule.objects.all().delete()
         for row in reader:
             gt = int(row["gt-retire-age"])
             lt = int(row["lt-retire-age"])
@@ -44,7 +66,9 @@ def import_glidepath_rules(file_obj) -> None:
             lt = min(100, lt)
             if gt >= lt:
                 raise ValueError("gt-retire-age must be less than lt-retire-age")
-            rule = GlidepathRule.objects.create(gt_retire_age=gt, lt_retire_age=lt)
+            rule = GlidepathRule.objects.create(
+                ruleset=ruleset, gt_retire_age=gt, lt_retire_age=lt
+            )
 
             # class allocations
             class_pcts: Dict[str, Decimal] = {}
@@ -108,11 +132,25 @@ def import_glidepath_rules(file_obj) -> None:
                         rule=rule, asset_category=category, percentage=pct
                     )
 
+    return ruleset
 
-def export_glidepath_rules() -> str:
-    asset_classes = list(AssetClass.objects.order_by("name"))
+
+def export_glidepath_rules(ruleset: RuleSet) -> str:
+    asset_classes = list(
+        AssetClass.objects.filter(
+            classallocation__rule__ruleset=ruleset,
+            classallocation__percentage__gt=0,
+        )
+        .distinct()
+        .order_by("name")
+    )
     categories = list(
-        AssetCategory.objects.order_by("asset_class__name", "name")
+        AssetCategory.objects.filter(
+            categoryallocation__rule__ruleset=ruleset,
+            categoryallocation__percentage__gt=0,
+        )
+        .distinct()
+        .order_by("asset_class__name", "name")
     )
 
     headers = ["gt-retire-age", "lt-retire-age"]
@@ -122,7 +160,9 @@ def export_glidepath_rules() -> str:
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=headers)
     writer.writeheader()
-    for rule in GlidepathRule.objects.order_by("gt_retire_age"):
+    for rule in GlidepathRule.objects.filter(ruleset=ruleset).order_by(
+        "gt_retire_age"
+    ):
         row = {
             "gt-retire-age": rule.gt_retire_age,
             "lt-retire-age": rule.lt_retire_age,

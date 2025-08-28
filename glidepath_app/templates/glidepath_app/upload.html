@@ -8,11 +8,27 @@
 {% if error %}
 <p style="color:red;">{{ error }}</p>
 {% endif %}
+<form method="get">
+    <select name="ruleset" onchange="this.form.submit()">
+        {% for rs in rule_sets %}
+            <option value="{{ rs.id }}" {% if selected_set and rs.id == selected_set.id %}selected{% endif %}>{{ rs.name }}</option>
+        {% endfor %}
+    </select>
+    <noscript><button type="submit">View</button></noscript>
+</form>
+<form method="post" style="display:inline;">
+    {% csrf_token %}
+    <input type="hidden" name="delete" value="{{ selected_set.id }}">
+    <button type="submit" {% if not selected_set %}disabled{% endif %}>Delete</button>
+</form>
 <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
     <input type="file" name="file" required>
     <button type="submit">Upload</button>
 </form>
-<p><a href="{% url 'export_rules' %}">Export CSV</a></p>
+{% if selected_set %}
+<p><a href="{% url 'export_rules' %}?ruleset={{ selected_set.id }}">Export CSV</a></p>
+{% endif %}
 <table border="1">
     <thead>
         <tr>

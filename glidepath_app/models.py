@@ -2,6 +2,13 @@ from decimal import Decimal
 from django.db import models
 
 
+class RuleSet(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class AssetClass(models.Model):
     name = models.CharField(max_length=50, unique=True)
 
@@ -23,12 +30,15 @@ class AssetCategory(models.Model):
 
 
 class GlidepathRule(models.Model):
+    ruleset = models.ForeignKey(
+        RuleSet, related_name="rules", on_delete=models.CASCADE, null=True
+    )
     gt_retire_age = models.IntegerField()
     lt_retire_age = models.IntegerField()
 
     class Meta:
-        unique_together = ("gt_retire_age", "lt_retire_age")
-        ordering = ["gt_retire_age", "lt_retire_age"]
+        unique_together = ("ruleset", "gt_retire_age", "lt_retire_age")
+        ordering = ["ruleset", "gt_retire_age", "lt_retire_age"]
 
     def save(self, *args, **kwargs):
         self.gt_retire_age = max(-100, self.gt_retire_age)
