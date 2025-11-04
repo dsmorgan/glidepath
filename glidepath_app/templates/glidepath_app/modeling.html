@@ -1,0 +1,43 @@
+{% extends 'glidepath_app/base.html' %}
+{% block title %}Glidepath - Modeling{% endblock %}
+{% block content %}
+<div class="bg-white shadow rounded-lg p-8">
+    <h1 class="text-3xl font-bold text-gray-900 mb-6">Investment Modeling</h1>
+
+    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                </svg>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-yellow-700">
+                    This section is under development. Modeling features will be available soon.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="prose max-w-none">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Planned Features</h2>
+        <ul class="list-disc list-inside space-y-2 text-gray-700">
+            <li>Run Monte Carlo simulations for retirement scenarios</li>
+            <li>Model different glidepath strategies and compare outcomes</li>
+            <li>Analyze portfolio performance under various market conditions</li>
+            <li>Visualize projected growth and drawdown scenarios</li>
+            <li>Calculate success probabilities for retirement goals</li>
+            <li>Test sensitivity to different assumptions (returns, inflation, etc.)</li>
+        </ul>
+    </div>
+
+    <div class="mt-8">
+        <a href="{% url 'home' %}" class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+            </svg>
+            Back to Home
+        </a>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends 'glidepath_app/base.html' %}
+{% block title %}Glidepath - Home{% endblock %}
+{% block content %}
+<div class="bg-white shadow rounded-lg p-8">
+    <h1 class="text-4xl font-bold text-gray-900 mb-6">Welcome to Glidepath</h1>
+
+    <p class="text-lg text-gray-700 mb-8">
+        Glidepath is a comprehensive investment allocation management system designed to help you manage
+        retirement glide paths, funds, accounts, and portfolios with ease.
+    </p>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Rules Card -->
+        <a href="{% url 'rules' %}" class="block p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-50 transition">
+            <h2 class="text-2xl font-semibold text-indigo-600 mb-3">Rules</h2>
+            <p class="text-gray-600">
+                Import, manage, and visualize glidepath allocation rules based on retirement age bands.
+            </p>
+        </a>
+
+        <!-- Funds Card -->
+        <a href="{% url 'funds' %}" class="block p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-50 transition">
+            <h2 class="text-2xl font-semibold text-indigo-600 mb-3">Funds</h2>
+            <p class="text-gray-600">
+                Manage your investment funds, track performance, and analyze fund allocations.
+            </p>
+        </a>
+
+        <!-- Accounts Card -->
+        <a href="{% url 'accounts' %}" class="block p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-50 transition">
+            <h2 class="text-2xl font-semibold text-indigo-600 mb-3">Accounts</h2>
+            <p class="text-gray-600">
+                Track and manage investment accounts across different retirement vehicles.
+            </p>
+        </a>
+
+        <!-- Portfolios Card -->
+        <a href="{% url 'portfolios' %}" class="block p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-50 transition">
+            <h2 class="text-2xl font-semibold text-indigo-600 mb-3">Portfolios</h2>
+            <p class="text-gray-600">
+                Build and manage comprehensive investment portfolios with multiple accounts and funds.
+            </p>
+        </a>
+
+        <!-- Modeling Card -->
+        <a href="{% url 'modeling' %}" class="block p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-50 transition">
+            <h2 class="text-2xl font-semibold text-indigo-600 mb-3">Modeling</h2>
+            <p class="text-gray-600">
+                Run simulations and model different retirement scenarios and allocation strategies.
+            </p>
+        </a>
+    </div>
+
+    <div class="mt-8 p-6 bg-blue-50 border border-blue-200 rounded-lg">
+        <h3 class="text-xl font-semibold text-blue-900 mb-2">Getting Started</h3>
+        <p class="text-blue-800">
+            Begin by importing your glidepath rules in the <a href="{% url 'rules' %}" class="underline font-medium">Rules</a> section.
+            You can upload CSV files containing allocation rules by retirement age bands.
+        </p>
+    </div>
+</div>
+{% endblock %}
