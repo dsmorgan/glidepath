@@ -47,25 +47,29 @@
     </table>
 </div>
 <script>
-if (window._renderChartsCallback) {
-    htmx.off('htmx:load', window._renderChartsCallback);
-}
-window._renderChartsCallback = function () {
-    const classCanvas = document.getElementById('classChart');
-    const categoryCanvas = document.getElementById('categoryChart');
-    const pieCanvas = document.getElementById('classPieChart');
-    if (!classCanvas || !categoryCanvas || !pieCanvas) {
-        return;
-    }
+(function() {
+    // Destroy existing charts
     if (window.classChart) {
         chartAdapter.destroy(window.classChart);
+        window.classChart = null;
     }
     if (window.categoryChart) {
         chartAdapter.destroy(window.categoryChart);
+        window.categoryChart = null;
     }
     if (window.classPieChart) {
         chartAdapter.destroy(window.classPieChart);
+        window.classPieChart = null;
     }
+
+    const classCanvas = document.getElementById('classChart');
+    const categoryCanvas = document.getElementById('categoryChart');
+    const pieCanvas = document.getElementById('classPieChart');
+
+    if (!classCanvas || !categoryCanvas || !pieCanvas) {
+        return;
+    }
+
     const retirePlugin = {
         id: 'retireLine',
         afterDraw(chart) {
@@ -86,25 +90,31 @@ window._renderChartsCallback = function () {
             }
         }
     };
+
     const tooltip = {
         callbacks: {
             label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y}%`
         }
     };
+
     const commonOpts = {
         plugins: { legend: { position: 'bottom' }, tooltip },
         scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => v + '%' } } },
         responsive: true,
         maintainAspectRatio: false
     };
+
+    // Create new charts with current data
     window.classChart = chartAdapter.init(
         classCanvas.getContext('2d'),
         { type: 'line', data: {{ class_chart|safe }}, options: commonOpts, plugins:[retirePlugin] }
     );
+
     window.categoryChart = chartAdapter.init(
         categoryCanvas.getContext('2d'),
         { type: 'line', data: {{ category_chart|safe }}, options: commonOpts, plugins:[retirePlugin] }
     );
+
     const pieOpts = {
         plugins: {
             legend: { position: 'bottom' },
@@ -117,10 +127,10 @@ window._renderChartsCallback = function () {
         responsive: true,
         maintainAspectRatio: false
     };
+
     window.classPieChart = chartAdapter.init(
         pieCanvas.getContext('2d'),
         { type: 'pie', data: {{ class_pie_chart|safe }}, options: pieOpts }
     );
-};
-htmx.onLoad(window._renderChartsCallback);
+})();
 </script>
