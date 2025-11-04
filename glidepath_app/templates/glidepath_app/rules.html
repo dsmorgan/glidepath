@@ -1,3 +1,17 @@
+<!-- Charts Section - Now at the top -->
+<div class="mb-8 flex flex-wrap justify-center gap-4">
+    <div class="w-full lg:w-[32%] h-[40vh] min-w-[300px]">
+        <canvas id="classChart" class="w-full h-full"></canvas>
+    </div>
+    <div class="w-full lg:w-[32%] h-[40vh] min-w-[300px]">
+        <canvas id="categoryChart" class="w-full h-full"></canvas>
+    </div>
+    <div class="w-full lg:w-[32%] h-[40vh] min-w-[300px]">
+        <canvas id="classPieChart" class="w-full h-full"></canvas>
+    </div>
+</div>
+
+<!-- Table Section - Now below charts -->
 <div class="overflow-x-auto">
     <table class="min-w-full border">
         <thead class="bg-gray-100">
@@ -11,33 +25,26 @@
         <tbody>
         {% for rule in rules %}
             <tr class="odd:bg-white even:bg-gray-50">
-                <td class="px-2 py-1 border">{{ rule.gt_retire_age }}</td>
-                <td class="px-2 py-1 border">{{ rule.lt_retire_age }}</td>
-                <td class="px-2 py-1 border">
-                    {% for ca in rule.class_allocations.all %}
-                        {{ ca.asset_class.name }}: {{ ca.percentage }}%<br>
-                    {% endfor %}
+                <td class="px-2 py-1 border align-top">{{ rule.gt_retire_age }}</td>
+                <td class="px-2 py-1 border align-top">{{ rule.lt_retire_age }}</td>
+                <td class="px-2 py-1 border align-top">
+                    <div class="max-h-[4.5em] overflow-y-auto leading-tight">
+                        {% for ca in rule.class_allocations.all %}
+                            {{ ca.asset_class.name }}: {{ ca.percentage }}%<br>
+                        {% endfor %}
+                    </div>
                 </td>
-                <td class="px-2 py-1 border">
-                    {% for ca in rule.category_allocations.all %}
-                        {{ ca.asset_category.asset_class.name }}:{{ ca.asset_category.name }}: {{ ca.percentage }}%<br>
-                    {% endfor %}
+                <td class="px-2 py-1 border align-top">
+                    <div class="max-h-[4.5em] overflow-y-auto leading-tight">
+                        {% for ca in rule.category_allocations.all %}
+                            {{ ca.asset_category.asset_class.name }}:{{ ca.asset_category.name }}: {{ ca.percentage }}%<br>
+                        {% endfor %}
+                    </div>
                 </td>
             </tr>
         {% endfor %}
         </tbody>
     </table>
-</div>
-<div class="mt-8 flex flex-wrap justify-center gap-4">
-    <div class="w-full max-w-[50vw] md:w-1/2 lg:w-1/3 h-[33vh]">
-        <canvas id="classChart" class="w-full h-full"></canvas>
-    </div>
-    <div class="w-full max-w-[50vw] md:w-1/2 lg:w-1/3 h-[33vh]">
-        <canvas id="categoryChart" class="w-full h-full"></canvas>
-    </div>
-    <div class="w-full max-w-[50vw] md:w-1/2 lg:w-1/3 h-[33vh]">
-        <canvas id="classPieChart" class="w-full h-full"></canvas>
-    </div>
 </div>
 <script>
 if (window._renderChartsCallback) {
