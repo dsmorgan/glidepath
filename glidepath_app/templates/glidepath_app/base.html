@@ -9,8 +9,53 @@
     <script src="{% static 'glidepath_app/chart.min.js' %}"></script>
     <script src="{% static 'glidepath_app/chartAdapter.js' %}"></script>
 </head>
-<body class="p-4">
-    {% block content %}{% endblock %}
+<body class="bg-gray-50">
+    <!-- Navigation Bar -->
+    <nav class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex">
+                    <!-- Logo -->
+                    <div class="flex-shrink-0 flex items-center">
+                        <a href="{% url 'home' %}" class="flex items-center">
+                            <img class="h-10 w-auto" src="{% static 'glidepath_app/glidepath.png' %}" alt="Glidepath Logo">
+                            <span class="ml-3 text-xl font-semibold text-gray-800">Glidepath</span>
+                        </a>
+                    </div>
+                    <!-- Navigation Links -->
+                    <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+                        <a href="{% url 'rules' %}" class="{% if request.resolver_match.url_name == 'rules' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Rules
+                        </a>
+                        <a href="{% url 'funds' %}" class="{% if request.resolver_match.url_name == 'funds' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Funds
+                        </a>
+                        <a href="{% url 'accounts' %}" class="{% if request.resolver_match.url_name == 'accounts' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Accounts
+                        </a>
+                        <a href="{% url 'portfolios' %}" class="{% if request.resolver_match.url_name == 'portfolios' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Portfolios
+                        </a>
+                        <a href="{% url 'modeling' %}" class="{% if request.resolver_match.url_name == 'modeling' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Modeling
+                        </a>
+                    </div>
+                </div>
+                <!-- Logout Button -->
+                <div class="hidden sm:ml-6 sm:flex sm:items-center">
+                    <a href="{% url 'logout' %}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Logout
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
     {% block scripts %}{% endblock %}
 </body>
 </html>

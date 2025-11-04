@@ -1,0 +1,28 @@
+{% extends 'glidepath_app/base.html' %}
+{% block title %}Glidepath - Logout{% endblock %}
+{% block content %}
+<div class="bg-white shadow rounded-lg p-8 max-w-md mx-auto mt-12">
+    <div class="text-center">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+        </svg>
+        <h1 class="mt-4 text-3xl font-bold text-gray-900 mb-4">Logout</h1>
+
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <p class="text-sm text-blue-700">
+                User authentication is not yet implemented. This is a placeholder for logout functionality.
+            </p>
+        </div>
+
+        <p class="text-gray-600 mb-6">
+            When authentication is enabled, you'll be able to securely log out of your Glidepath account here.
+        </p>
+
+        <div class="space-y-3">
+            <a href="{% url 'home' %}" class="block w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                Return to Home
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

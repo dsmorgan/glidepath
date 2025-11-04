@@ -129,7 +129,13 @@ def _build_chart_data(rules):
     return class_chart, category_chart, pie_data
 
 
-def upload_rules(request):
+def home(request):
+    """Home page view - provides overview and navigation."""
+    return render(request, "glidepath_app/home.html")
+
+
+def rules_view(request):
+    """Rules management view - upload, manage, and visualize glidepath rules."""
     error = None
     new_set = None
     if request.method == "POST":
@@ -180,6 +186,36 @@ def upload_rules(request):
     if request.headers.get("HX-Request"):
         template = "glidepath_app/rules.html"
     return render(request, template, context)
+
+
+def funds_view(request):
+    """Funds management view - manage investment funds."""
+    return render(request, "glidepath_app/funds.html")
+
+
+def accounts_view(request):
+    """Accounts management view - manage investment accounts."""
+    return render(request, "glidepath_app/accounts.html")
+
+
+def portfolios_view(request):
+    """Portfolios management view - manage investment portfolios."""
+    return render(request, "glidepath_app/portfolios.html")
+
+
+def modeling_view(request):
+    """Modeling view - run investment simulations and modeling."""
+    return render(request, "glidepath_app/modeling.html")
+
+
+def logout_view(request):
+    """Logout view - handle user logout."""
+    # Placeholder for logout functionality
+    return render(request, "glidepath_app/logout.html")
+
+
+# Keep backward compatibility alias
+upload_rules = rules_view
 
 
 def export_rules(request):
