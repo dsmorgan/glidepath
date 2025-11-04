@@ -161,15 +161,18 @@ def rules_view(request):
     selected_set = None
     if selected_id:
         selected_set = RuleSet.objects.filter(id=selected_id).first()
-    if not selected_set:
-        selected_set = rule_sets.first()
 
-    rules = GlidepathRule.objects.filter(ruleset=selected_set).prefetch_related(
-        "class_allocations__asset_class",
-        "category_allocations__asset_category__asset_class",
-    )
+    rules = []
+    class_chart = {"labels": [], "datasets": []}
+    category_chart = {"labels": [], "datasets": []}
+    pie_chart = {"labels": [], "datasets": [{"data": [], "backgroundColor": []}]}
 
-    class_chart, category_chart, pie_chart = _build_chart_data(list(rules))
+    if selected_set:
+        rules = GlidepathRule.objects.filter(ruleset=selected_set).prefetch_related(
+            "class_allocations__asset_class",
+            "category_allocations__asset_category__asset_class",
+        )
+        class_chart, category_chart, pie_chart = _build_chart_data(list(rules))
 
     context = {
         "form": form,
