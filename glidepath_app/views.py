@@ -43,14 +43,46 @@ def _lighten(color: str, factor: float) -> str:
 
 def _build_chart_data(rules):
     rules_sorted = sorted(rules, key=lambda r: r.gt_retire_age)
+    if not rules_sorted:
+        return {"labels": [], "datasets": []}, {"labels": [], "datasets": []}, {"labels": [], "datasets": [{"data": [], "backgroundColor": []}]}
+
+    # Build a mapping of age -> rule for all ages from -100 to 100
+    # Each rule covers [gt_retire_age, lt_retire_age)
+    age_to_rule = {}
+    for rule in rules_sorted:
+        for age in range(rule.gt_retire_age, rule.lt_retire_age):
+            age_to_rule[age] = rule
+
+    # Build chart_rules with labels for every age
     chart_rules: list[tuple[str, GlidepathRule]] = []
-    without_placeholder = [r for r in rules_sorted if r.gt_retire_age != -100]
-    if rules_sorted and rules_sorted[0].gt_retire_age == -100:
-        chart_rules.append(("earlier", rules_sorted[0]))
-    for r in without_placeholder:
-        chart_rules.append((str(r.gt_retire_age), r))
-    if without_placeholder:
-        chart_rules.append(("later", without_placeholder[-1]))
+
+    # Add "earlier" for age -100
+    if -100 in age_to_rule:
+        chart_rules.append(("earlier", age_to_rule[-100]))
+
+    # Determine the range of individual ages to show
+    # Start from: lt_retire_age of the rule with gt=-100, OR the first gt value
+    # End at: 99 (the last age before "later" which represents age 100)
+    first_rule = rules_sorted[0]
+    last_rule = rules_sorted[-1]
+
+    if first_rule.gt_retire_age == -100:
+        start_age = first_rule.lt_retire_age
+    else:
+        start_age = first_rule.gt_retire_age
+
+    # Show all individual ages from start_age up to 99
+    end_age = 100
+
+    # Add individual age labels from start_age to end_age-1 (i.e., up to 99)
+    for age in range(start_age, end_age):
+        if age in age_to_rule:
+            chart_rules.append((str(age), age_to_rule[age]))
+
+    # Add "later" for age 100 (uses the last rule's allocations)
+    if last_rule.lt_retire_age == 100:
+        chart_rules.append(("later", last_rule))
+
     labels = [lbl for lbl, _ in chart_rules]
 
     class_names: list[str] = []
