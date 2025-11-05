@@ -115,6 +115,43 @@ function findRetirementLineIndex(transformedChartData) {
     return index !== -1 ? index : -1;
 }
 
+function findCurrentYearIndex(transformedLabels) {
+    // Find the index where current year appears in the transformed labels
+    if (!transformedLabels) {
+        return -1;
+    }
+
+    const currentYear = new Date().getFullYear();
+
+    // Look for exact match first
+    const exactIndex = transformedLabels.indexOf(currentYear.toString());
+    if (exactIndex !== -1) {
+        return exactIndex;
+    }
+
+    // Find closest year value to current year
+    let closestIndex = -1;
+    let closestDiff = Infinity;
+
+    for (let i = 0; i < transformedLabels.length; i++) {
+        const label = transformedLabels[i];
+        if (label === 'Earlier' || label === 'Later') {
+            continue;
+        }
+
+        const yearValue = parseInt(label);
+        if (!isNaN(yearValue)) {
+            const diff = Math.abs(yearValue - currentYear);
+            if (diff < closestDiff) {
+                closestDiff = diff;
+                closestIndex = i;
+            }
+        }
+    }
+
+    return closestIndex;
+}
+
 function findPieChartIndex() {
     if (!window.chartDataStaged || !window.chartDataStaged.classChart) {
         return -1;
@@ -228,19 +265,36 @@ function updateCharts() {
         classChartData = transformChartLabelsForDisplay(classChartData);
         categoryChartData = transformChartLabelsForDisplay(categoryChartData);
 
-        // Find the retirement line index
+        // Find the retirement line and current year line indices
         const retirementLineIndex = findRetirementLineIndex(classChartData);
+        const currentYearIndex = findCurrentYearIndex(classChartData.labels);
 
-        // Create retirement line plugin dynamically
+        // Create plugin to draw both retirement and current year lines
         const retirePlugin = {
             id: 'retireLine',
             afterDraw(chart) {
+                const ctx = chart.ctx;
+                ctx.save();
+
+                // Draw current year line (black dashed, no label)
+                if (currentYearIndex !== -1) {
+                    const x = chart.scales.x.getPixelForValue(currentYearIndex);
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]); // Dashed pattern
+                    ctx.beginPath();
+                    ctx.moveTo(x, chart.chartArea.top);
+                    ctx.lineTo(x, chart.chartArea.bottom);
+                    ctx.stroke();
+                    ctx.setLineDash([]); // Reset dash pattern
+                }
+
+                // Draw retirement line (red solid with label)
                 if (retirementLineIndex !== -1) {
                     const x = chart.scales.x.getPixelForValue(retirementLineIndex);
-                    const ctx = chart.ctx;
-                    ctx.save();
                     ctx.strokeStyle = 'red';
                     ctx.lineWidth = 2;
+                    ctx.setLineDash([]); // Ensure solid
                     ctx.beginPath();
                     ctx.moveTo(x, chart.chartArea.top);
                     ctx.lineTo(x, chart.chartArea.bottom);
@@ -248,9 +302,10 @@ function updateCharts() {
                     ctx.fillStyle = 'red';
                     ctx.font = '12px Arial';
                     ctx.textAlign = 'center';
-                    ctx.fillText('Retirement', x, chart.chartArea.top - 8);
-                    ctx.restore();
+                    ctx.fillText('Retirement', x, chart.chartArea.top - 15);
                 }
+
+                ctx.restore();
             }
         };
 
