@@ -64,4 +64,106 @@
         {% include 'glidepath_app/rules.html' %}
     </div>
 </div>
+
+<script>
+function initializeCharts() {
+    // Destroy existing charts
+    if (window.classChart) {
+        chartAdapter.destroy(window.classChart);
+        window.classChart = null;
+    }
+    if (window.categoryChart) {
+        chartAdapter.destroy(window.categoryChart);
+        window.categoryChart = null;
+    }
+    if (window.classPieChart) {
+        chartAdapter.destroy(window.classPieChart);
+        window.classPieChart = null;
+    }
+
+    const classCanvas = document.getElementById('classChart');
+    const categoryCanvas = document.getElementById('categoryChart');
+    const pieCanvas = document.getElementById('classPieChart');
+
+    if (!classCanvas || !categoryCanvas || !pieCanvas) {
+        return;
+    }
+
+    const retirePlugin = {
+        id: 'retireLine',
+        afterDraw(chart) {
+            const index = chart.data.labels.indexOf('0');
+            if (index !== -1) {
+                const x = chart.scales.x.getPixelForValue(index);
+                const ctx = chart.ctx;
+                ctx.save();
+                ctx.strokeStyle = 'red';
+                ctx.beginPath();
+                ctx.moveTo(x, chart.chartArea.top);
+                ctx.lineTo(x, chart.chartArea.bottom);
+                ctx.stroke();
+                ctx.fillStyle = 'red';
+                ctx.textAlign = 'center';
+                ctx.fillText('Retirement', x, chart.chartArea.top - 5);
+                ctx.restore();
+            }
+        }
+    };
+
+    const tooltip = {
+        callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y}%`
+        }
+    };
+
+    const commonOpts = {
+        plugins: { legend: { position: 'bottom' }, tooltip },
+        scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => v + '%' } } },
+        responsive: true,
+        maintainAspectRatio: false
+    };
+
+    // Get the chart data from window variable set by the template
+    if (window.chartDataStaged) {
+        const { classChart: classChartData, categoryChart: categoryChartData, pieChart: pieChartData } = window.chartDataStaged;
+
+        // Create new charts with current data
+        window.classChart = chartAdapter.init(
+            classCanvas.getContext('2d'),
+            { type: 'line', data: classChartData, options: commonOpts, plugins:[retirePlugin] }
+        );
+
+        window.categoryChart = chartAdapter.init(
+            categoryCanvas.getContext('2d'),
+            { type: 'line', data: categoryChartData, options: commonOpts, plugins:[retirePlugin] }
+        );
+
+        const pieOpts = {
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => `${ctx.label}: ${ctx.parsed}%`
+                    }
+                }
+            },
+            responsive: true,
+            maintainAspectRatio: false
+        };
+
+        window.classPieChart = chartAdapter.init(
+            pieCanvas.getContext('2d'),
+            { type: 'pie', data: pieChartData, options: pieOpts }
+        );
+    }
+}
+
+// Initialize charts on first page load
+document.addEventListener('DOMContentLoaded', initializeCharts);
+
+// Re-initialize charts when HTMX swaps the rules content
+document.getElementById('rules').addEventListener('htmx:afterSwap', function() {
+    setTimeout(initializeCharts, 50);
+});
+</script>
 {% endblock %}

@@ -1,3 +1,12 @@
+<!-- Set chart data in window for access by initializeCharts() -->
+<script>
+window.chartDataStaged = {
+    classChart: {{ class_chart|safe }},
+    categoryChart: {{ category_chart|safe }},
+    pieChart: {{ class_pie_chart|safe }}
+};
+</script>
+
 <!-- Charts Section - Now at the top -->
 <div class="mb-8 flex flex-wrap justify-center gap-4">
     <div class="w-full lg:w-[32%] h-[40vh] min-w-[300px]">
@@ -46,91 +55,3 @@
         </tbody>
     </table>
 </div>
-<script>
-(function() {
-    // Destroy existing charts
-    if (window.classChart) {
-        chartAdapter.destroy(window.classChart);
-        window.classChart = null;
-    }
-    if (window.categoryChart) {
-        chartAdapter.destroy(window.categoryChart);
-        window.categoryChart = null;
-    }
-    if (window.classPieChart) {
-        chartAdapter.destroy(window.classPieChart);
-        window.classPieChart = null;
-    }
-
-    const classCanvas = document.getElementById('classChart');
-    const categoryCanvas = document.getElementById('categoryChart');
-    const pieCanvas = document.getElementById('classPieChart');
-
-    if (!classCanvas || !categoryCanvas || !pieCanvas) {
-        return;
-    }
-
-    const retirePlugin = {
-        id: 'retireLine',
-        afterDraw(chart) {
-            const index = chart.data.labels.indexOf('0');
-            if (index !== -1) {
-                const x = chart.scales.x.getPixelForValue(index);
-                const ctx = chart.ctx;
-                ctx.save();
-                ctx.strokeStyle = 'red';
-                ctx.beginPath();
-                ctx.moveTo(x, chart.chartArea.top);
-                ctx.lineTo(x, chart.chartArea.bottom);
-                ctx.stroke();
-                ctx.fillStyle = 'red';
-                ctx.textAlign = 'center';
-                ctx.fillText('Retirement', x, chart.chartArea.top - 5);
-                ctx.restore();
-            }
-        }
-    };
-
-    const tooltip = {
-        callbacks: {
-            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y}%`
-        }
-    };
-
-    const commonOpts = {
-        plugins: { legend: { position: 'bottom' }, tooltip },
-        scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => v + '%' } } },
-        responsive: true,
-        maintainAspectRatio: false
-    };
-
-    // Create new charts with current data
-    window.classChart = chartAdapter.init(
-        classCanvas.getContext('2d'),
-        { type: 'line', data: {{ class_chart|safe }}, options: commonOpts, plugins:[retirePlugin] }
-    );
-
-    window.categoryChart = chartAdapter.init(
-        categoryCanvas.getContext('2d'),
-        { type: 'line', data: {{ category_chart|safe }}, options: commonOpts, plugins:[retirePlugin] }
-    );
-
-    const pieOpts = {
-        plugins: {
-            legend: { position: 'bottom' },
-            tooltip: {
-                callbacks: {
-                    label: ctx => `${ctx.label}: ${ctx.parsed}%`
-                }
-            }
-        },
-        responsive: true,
-        maintainAspectRatio: false
-    };
-
-    window.classPieChart = chartAdapter.init(
-        pieCanvas.getContext('2d'),
-        { type: 'pie', data: {{ class_pie_chart|safe }}, options: pieOpts }
-    );
-})();
-</script>
