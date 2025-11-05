@@ -142,6 +142,17 @@ def rules_view(request):
         if "delete" in request.POST:
             RuleSet.objects.filter(id=request.POST["delete"]).delete()
             form = GlidepathRuleUploadForm()
+        elif "rename" in request.POST:
+            ruleset_id = request.POST["rename"]
+            new_name = request.POST.get("new_name", "").strip()
+            if new_name:
+                try:
+                    ruleset = RuleSet.objects.get(id=ruleset_id)
+                    ruleset.name = new_name
+                    ruleset.save()
+                except RuleSet.DoesNotExist:
+                    error = "Ruleset not found"
+            form = GlidepathRuleUploadForm()
         else:
             form = GlidepathRuleUploadForm(request.POST, request.FILES)
             if form.is_valid():
