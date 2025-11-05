@@ -221,6 +221,15 @@ function findPieChartIndex() {
     return bestIndex;
 }
 
+function updateCurrentYearDisplay() {
+    // Update the Current Year read-only dropdown
+    const currentYear = new Date().getFullYear();
+    const currentYearOption = document.getElementById('currentYearOption');
+    if (currentYearOption) {
+        currentYearOption.textContent = currentYear;
+    }
+}
+
 function updateTableYearAndAge() {
     // Calculate Year and Age for all table rows
     const yearBorn = parseInt(document.getElementById('yearBornSelect')?.value || 1973);
@@ -437,15 +446,17 @@ function updateCharts() {
     }
 }
 
-// Initialize charts and table on first page load
+// Initialize charts, table, and current year display on first page load
 document.addEventListener('DOMContentLoaded', function() {
+    updateCurrentYearDisplay();
     initializeCharts();
     updateActions();
     updateTableYearAndAge();
 });
 
-// Re-initialize charts and table when HTMX swaps the rules content
+// Re-initialize charts, table, and current year display when HTMX swaps the rules content
 document.getElementById('rules').addEventListener('htmx:afterSwap', function() {
+    setTimeout(updateCurrentYearDisplay, 50);
     setTimeout(initializeCharts, 50);
     setTimeout(updateTableYearAndAge, 50);
 });

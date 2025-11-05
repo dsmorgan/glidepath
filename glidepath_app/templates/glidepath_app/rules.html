@@ -17,24 +17,34 @@ window.chartDataStaged = {
     </div>
     <div class="w-full lg:w-[32%] h-[40vh] min-w-[300px] flex flex-col">
         <!-- Pie Chart Controls -->
-        <div class="mb-4 space-y-2">
-            <!-- Year Born Dropdown -->
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Year Born</label>
-                <select id="yearBornSelect" class="w-full border border-gray-300 rounded-md p-2 text-sm" onchange="updatePieChartSelection()">
-                    {% for year in years_born %}
-                        <option value="{{ year }}">{{ year }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <!-- Retirement Age Dropdown -->
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Retirement Age</label>
-                <select id="retirementAgeSelect" class="w-full border border-gray-300 rounded-md p-2 text-sm" onchange="updatePieChartSelection()">
-                    {% for age in retirement_ages %}
-                        <option value="{{ age }}">{{ age }}</option>
-                    {% endfor %}
-                </select>
+        <div class="mb-4">
+            <!-- 3 Dropdowns in a single row -->
+            <div class="grid grid-cols-3 gap-2">
+                <!-- Current Year Dropdown (Read-only) -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Current Year</label>
+                    <select id="currentYearSelect" class="w-full border border-gray-300 rounded-md p-2 text-sm bg-gray-100 text-gray-500 cursor-not-allowed" disabled>
+                        <option id="currentYearOption">-</option>
+                    </select>
+                </div>
+                <!-- Year Born Dropdown -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Year Born</label>
+                    <select id="yearBornSelect" class="w-full border border-gray-300 rounded-md p-2 text-sm" onchange="updatePieChartSelection()">
+                        {% for year in years_born %}
+                            <option value="{{ year }}">{{ year }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <!-- Retirement Age Dropdown -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Retirement Age</label>
+                    <select id="retirementAgeSelect" class="w-full border border-gray-300 rounded-md p-2 text-sm" onchange="updatePieChartSelection()">
+                        {% for age in retirement_ages %}
+                            <option value="{{ age }}">{{ age }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
         </div>
         <!-- Pie Chart -->
