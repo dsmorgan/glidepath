@@ -69,6 +69,91 @@
 </div>
 
 <script>
+function getYearOfRetirement() {
+    const yearBorn = parseInt(document.getElementById('yearBornSelect')?.value || 1973);
+    const retirementAge = parseInt(document.getElementById('retirementAgeSelect')?.value || 58);
+    return yearBorn + retirementAge;
+}
+
+function transformChartLabelsForDisplay(chartData) {
+    if (!chartData || !chartData.labels) {
+        return chartData;
+    }
+
+    const yearOfRetirement = getYearOfRetirement();
+    const ageToYearMap = {
+        'earlier': 'Earlier',
+        'later': 'Later'
+    };
+
+    const transformedLabels = chartData.labels.map(label => {
+        if (ageToYearMap[label]) {
+            return ageToYearMap[label];
+        }
+        // Convert age offset to year
+        const ageOffset = parseInt(label);
+        if (!isNaN(ageOffset)) {
+            return yearOfRetirement - ageOffset;
+        }
+        return label;
+    });
+
+    return {
+        ...chartData,
+        labels: transformedLabels
+    };
+}
+
+function findPieChartIndex() {
+    if (!window.chartDataStaged || !window.chartDataStaged.classChart) {
+        return -1;
+    }
+
+    const yearOfRetirement = getYearOfRetirement();
+    const currentYear = new Date().getFullYear();
+    const currentAgeOffset = currentYear - yearOfRetirement;
+
+    const labels = window.chartDataStaged.classChart.labels;
+
+    // Find the appropriate age offset
+    let bestIndex = -1;
+    let bestAgeOffset = null;
+
+    labels.forEach((label, idx) => {
+        if (label === 'earlier') return;
+        if (label === 'later') {
+            // Use 'later' as fallback if current year is beyond all defined ages
+            if (bestIndex === -1) {
+                bestIndex = idx;
+                bestAgeOffset = Infinity;
+            }
+            return;
+        }
+
+        const ageOffset = parseInt(label);
+        if (!isNaN(ageOffset)) {
+            // Find the highest age offset that is <= currentAgeOffset
+            if (ageOffset <= currentAgeOffset) {
+                if (bestAgeOffset === null || ageOffset > bestAgeOffset) {
+                    bestIndex = idx;
+                    bestAgeOffset = ageOffset;
+                }
+            }
+        }
+    });
+
+    return bestIndex;
+}
+
+function updatePieChartSelection() {
+    // Save to sessionStorage
+    sessionStorage.setItem('yearBorn', document.getElementById('yearBornSelect').value);
+    sessionStorage.setItem('retirementAge', document.getElementById('retirementAgeSelect').value);
+
+    // Update charts
+    updateCharts();
+}
+
 function initializeCharts() {
     // Destroy existing charts
     if (window.classChart) {
@@ -84,6 +169,22 @@ function initializeCharts() {
         window.classPieChart = null;
     }
 
+    // Load or initialize dropdown values from sessionStorage
+    const yearBornSelect = document.getElementById('yearBornSelect');
+    const retirementAgeSelect = document.getElementById('retirementAgeSelect');
+
+    if (yearBornSelect && retirementAgeSelect) {
+        const savedYearBorn = sessionStorage.getItem('yearBorn') || '1973';
+        const savedRetirementAge = sessionStorage.getItem('retirementAge') || '58';
+
+        yearBornSelect.value = savedYearBorn;
+        retirementAgeSelect.value = savedRetirementAge;
+    }
+
+    updateCharts();
+}
+
+function updateCharts() {
     const classCanvas = document.getElementById('classChart');
     const categoryCanvas = document.getElementById('categoryChart');
     const pieCanvas = document.getElementById('classPieChart');
@@ -95,7 +196,10 @@ function initializeCharts() {
     const retirePlugin = {
         id: 'retireLine',
         afterDraw(chart) {
-            const index = chart.data.labels.indexOf('0');
+            const yearOfRetirement = getYearOfRetirement();
+            // Find the retirement year in the labels
+            const retirementYearLabel = yearOfRetirement.toString();
+            const index = chart.data.labels.indexOf(retirementYearLabel);
             if (index !== -1) {
                 const x = chart.scales.x.getPixelForValue(index);
                 const ctx = chart.ctx;
@@ -128,7 +232,11 @@ function initializeCharts() {
 
     // Get the chart data from window variable set by the template
     if (window.chartDataStaged) {
-        const { classChart: classChartData, categoryChart: categoryChartData, pieChart: pieChartData } = window.chartDataStaged;
+        let { classChart: classChartData, categoryChart: categoryChartData, pieChart: pieChartData } = window.chartDataStaged;
+
+        // Transform labels for area charts (age offset to year display)
+        classChartData = transformChartLabelsForDisplay(classChartData);
+        categoryChartData = transformChartLabelsForDisplay(categoryChartData);
 
         // Create new charts with current data
         window.classChart = chartAdapter.init(
@@ -140,6 +248,16 @@ function initializeCharts() {
             categoryCanvas.getContext('2d'),
             { type: 'line', data: categoryChartData, options: commonOpts, plugins:[retirePlugin] }
         );
+
+        // Build dynamic pie chart data based on current year
+        const pieIndex = findPieChartIndex();
+        let dynamicPieData = { labels: [], datasets: [{ data: [], backgroundColor: [] }] };
+
+        if (pieIndex !== -1 && window.chartDataStaged.classChart.datasets.length > 0) {
+            dynamicPieData.labels = window.chartDataStaged.classChart.datasets.map(ds => ds.label);
+            dynamicPieData.datasets[0].data = window.chartDataStaged.classChart.datasets.map(ds => ds.data[pieIndex]);
+            dynamicPieData.datasets[0].backgroundColor = window.chartDataStaged.classChart.datasets.map(ds => ds.backgroundColor);
+        }
 
         const pieOpts = {
             plugins: {
@@ -156,7 +274,7 @@ function initializeCharts() {
 
         window.classPieChart = chartAdapter.init(
             pieCanvas.getContext('2d'),
-            { type: 'pie', data: pieChartData, options: pieOpts }
+            { type: 'pie', data: dynamicPieData, options: pieOpts }
         );
     }
 }

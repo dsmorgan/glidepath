@@ -185,6 +185,10 @@ def rules_view(request):
         )
         class_chart, category_chart, pie_chart = _build_chart_data(list(rules))
 
+    # Generate year and retirement age options
+    years_born = list(range(1940, 2021))
+    retirement_ages = list(range(40, 81))
+
     context = {
         "form": form,
         "error": error,
@@ -194,6 +198,8 @@ def rules_view(request):
         "class_chart": json.dumps(class_chart),
         "category_chart": json.dumps(category_chart),
         "class_pie_chart": json.dumps(pie_chart),
+        "years_born": years_born,
+        "retirement_ages": retirement_ages,
     }
 
     template = "glidepath_app/upload.html"
