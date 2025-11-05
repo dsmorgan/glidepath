@@ -129,23 +129,51 @@ function findCurrentYearIndex(transformedLabels) {
         return exactIndex;
     }
 
-    // Find closest year value to current year
-    let closestIndex = -1;
-    let closestDiff = Infinity;
+    // Get indices and values for comparison
+    let earlierIndex = -1;
+    let laterIndex = -1;
+    const yearData = []; // Array of {index, value}
 
     for (let i = 0; i < transformedLabels.length; i++) {
         const label = transformedLabels[i];
-        if (label === 'Earlier' || label === 'Later') {
-            continue;
-        }
-
-        const yearValue = parseInt(label);
-        if (!isNaN(yearValue)) {
-            const diff = Math.abs(yearValue - currentYear);
-            if (diff < closestDiff) {
-                closestDiff = diff;
-                closestIndex = i;
+        if (label === 'Earlier') {
+            earlierIndex = i;
+        } else if (label === 'Later') {
+            laterIndex = i;
+        } else {
+            const yearValue = parseInt(label);
+            if (!isNaN(yearValue)) {
+                yearData.push({ index: i, value: yearValue });
             }
+        }
+    }
+
+    // If no year data exists, return -1
+    if (yearData.length === 0) {
+        return -1;
+    }
+
+    // Sort by year value
+    yearData.sort((a, b) => a.value - b.value);
+
+    // Check if current year is outside the range
+    if (currentYear < yearData[0].value) {
+        // Current year is before all years - use "Earlier"
+        return earlierIndex !== -1 ? earlierIndex : yearData[0].index;
+    } else if (currentYear > yearData[yearData.length - 1].value) {
+        // Current year is after all years - use "Later"
+        return laterIndex !== -1 ? laterIndex : yearData[yearData.length - 1].index;
+    }
+
+    // Current year is within range - find closest match
+    let closestIndex = yearData[0].index;
+    let closestDiff = Math.abs(yearData[0].value - currentYear);
+
+    for (let i = 1; i < yearData.length; i++) {
+        const diff = Math.abs(yearData[i].value - currentYear);
+        if (diff < closestDiff) {
+            closestDiff = diff;
+            closestIndex = yearData[i].index;
         }
     }
 
@@ -277,8 +305,10 @@ function updateCharts() {
 
                 // Draw retirement line FIRST (red solid with label)
                 if (retirementLineIndex !== -1) {
-                    ctx.save();
                     const x = chart.scales.x.getPixelForValue(retirementLineIndex);
+
+                    // Draw line
+                    ctx.save();
                     ctx.strokeStyle = 'red';
                     ctx.lineWidth = 2;
                     ctx.setLineDash([]); // Ensure solid
@@ -288,12 +318,14 @@ function updateCharts() {
                     ctx.stroke();
                     ctx.restore();
 
-                    // Draw label above the chart area
+                    // Draw label INSIDE the top of the chart area where it's guaranteed to be visible
                     ctx.save();
                     ctx.fillStyle = 'red';
-                    ctx.font = '12px Arial';
+                    ctx.font = 'bold 12px Arial';
                     ctx.textAlign = 'center';
-                    ctx.fillText('Retirement', x, chart.chartArea.top - 15);
+                    ctx.textBaseline = 'top';
+                    // Draw at the top inside the chart area with small padding
+                    ctx.fillText('Retirement', x, chart.chartArea.top + 5);
                     ctx.restore();
                 }
 
