@@ -100,8 +100,19 @@ function transformChartLabelsForDisplay(chartData) {
 
     return {
         ...chartData,
-        labels: transformedLabels
+        labels: transformedLabels,
+        originalLabels: chartData.labels  // Store original labels for reference
     };
+}
+
+function findRetirementLineIndex(transformedChartData) {
+    // Find the index where the original label was "0" (the retirement year)
+    if (!transformedChartData || !transformedChartData.originalLabels) {
+        return -1;
+    }
+
+    const index = transformedChartData.originalLabels.indexOf('0');
+    return index !== -1 ? index : -1;
 }
 
 function findPieChartIndex() {
@@ -193,30 +204,6 @@ function updateCharts() {
         return;
     }
 
-    const retirePlugin = {
-        id: 'retireLine',
-        afterDraw(chart) {
-            const yearOfRetirement = getYearOfRetirement();
-            // Find the retirement year in the labels
-            const retirementYearLabel = yearOfRetirement.toString();
-            const index = chart.data.labels.indexOf(retirementYearLabel);
-            if (index !== -1) {
-                const x = chart.scales.x.getPixelForValue(index);
-                const ctx = chart.ctx;
-                ctx.save();
-                ctx.strokeStyle = 'red';
-                ctx.beginPath();
-                ctx.moveTo(x, chart.chartArea.top);
-                ctx.lineTo(x, chart.chartArea.bottom);
-                ctx.stroke();
-                ctx.fillStyle = 'red';
-                ctx.textAlign = 'center';
-                ctx.fillText('Retirement', x, chart.chartArea.top - 5);
-                ctx.restore();
-            }
-        }
-    };
-
     const tooltip = {
         callbacks: {
             label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y}%`
@@ -227,23 +214,58 @@ function updateCharts() {
         plugins: { legend: { position: 'bottom' }, tooltip },
         scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => v + '%' } } },
         responsive: true,
-        maintainAspectRatio: false
+        maintainAspectRatio: false,
+        animation: {
+            duration: 750  // Smooth animation
+        }
     };
 
     // Get the chart data from window variable set by the template
     if (window.chartDataStaged) {
-        let { classChart: classChartData, categoryChart: categoryChartData, pieChart: pieChartData } = window.chartDataStaged;
+        let { classChart: classChartData, categoryChart: categoryChartData } = window.chartDataStaged;
 
         // Transform labels for area charts (age offset to year display)
         classChartData = transformChartLabelsForDisplay(classChartData);
         categoryChartData = transformChartLabelsForDisplay(categoryChartData);
 
-        // Create new charts with current data
+        // Find the retirement line index
+        const retirementLineIndex = findRetirementLineIndex(classChartData);
+
+        // Create retirement line plugin dynamically
+        const retirePlugin = {
+            id: 'retireLine',
+            afterDraw(chart) {
+                if (retirementLineIndex !== -1) {
+                    const x = chart.scales.x.getPixelForValue(retirementLineIndex);
+                    const ctx = chart.ctx;
+                    ctx.save();
+                    ctx.strokeStyle = 'red';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(x, chart.chartArea.top);
+                    ctx.lineTo(x, chart.chartArea.bottom);
+                    ctx.stroke();
+                    ctx.fillStyle = 'red';
+                    ctx.font = '12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Retirement', x, chart.chartArea.top - 8);
+                    ctx.restore();
+                }
+            }
+        };
+
+        // Destroy and recreate charts with smooth animation
+        if (window.classChart) {
+            chartAdapter.destroy(window.classChart);
+        }
         window.classChart = chartAdapter.init(
             classCanvas.getContext('2d'),
             { type: 'line', data: classChartData, options: commonOpts, plugins:[retirePlugin] }
         );
 
+        if (window.categoryChart) {
+            chartAdapter.destroy(window.categoryChart);
+        }
         window.categoryChart = chartAdapter.init(
             categoryCanvas.getContext('2d'),
             { type: 'line', data: categoryChartData, options: commonOpts, plugins:[retirePlugin] }
@@ -269,9 +291,15 @@ function updateCharts() {
                 }
             },
             responsive: true,
-            maintainAspectRatio: false
+            maintainAspectRatio: false,
+            animation: {
+                duration: 750  // Smooth animation
+            }
         };
 
+        if (window.classPieChart) {
+            chartAdapter.destroy(window.classPieChart);
+        }
         window.classPieChart = chartAdapter.init(
             pieCanvas.getContext('2d'),
             { type: 'pie', data: dynamicPieData, options: pieOpts }
