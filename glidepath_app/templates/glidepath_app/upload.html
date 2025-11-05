@@ -93,7 +93,7 @@ function transformChartLabelsForDisplay(chartData) {
         // Convert age offset to year
         const ageOffset = parseInt(label);
         if (!isNaN(ageOffset)) {
-            return yearOfRetirement - ageOffset;
+            return yearOfRetirement + ageOffset;
         }
         return label;
     });
