@@ -274,23 +274,10 @@ function updateCharts() {
             id: 'retireLine',
             afterDraw(chart) {
                 const ctx = chart.ctx;
-                ctx.save();
 
-                // Draw current year line (black dashed, no label)
-                if (currentYearIndex !== -1) {
-                    const x = chart.scales.x.getPixelForValue(currentYearIndex);
-                    ctx.strokeStyle = 'black';
-                    ctx.lineWidth = 2;
-                    ctx.setLineDash([5, 5]); // Dashed pattern
-                    ctx.beginPath();
-                    ctx.moveTo(x, chart.chartArea.top);
-                    ctx.lineTo(x, chart.chartArea.bottom);
-                    ctx.stroke();
-                    ctx.setLineDash([]); // Reset dash pattern
-                }
-
-                // Draw retirement line (red solid with label)
+                // Draw retirement line FIRST (red solid with label)
                 if (retirementLineIndex !== -1) {
+                    ctx.save();
                     const x = chart.scales.x.getPixelForValue(retirementLineIndex);
                     ctx.strokeStyle = 'red';
                     ctx.lineWidth = 2;
@@ -299,13 +286,30 @@ function updateCharts() {
                     ctx.moveTo(x, chart.chartArea.top);
                     ctx.lineTo(x, chart.chartArea.bottom);
                     ctx.stroke();
+                    ctx.restore();
+
+                    // Draw label above the chart area
+                    ctx.save();
                     ctx.fillStyle = 'red';
                     ctx.font = '12px Arial';
                     ctx.textAlign = 'center';
                     ctx.fillText('Retirement', x, chart.chartArea.top - 15);
+                    ctx.restore();
                 }
 
-                ctx.restore();
+                // Draw current year line SECOND (black dashed, no label) - appears ON TOP
+                if (currentYearIndex !== -1) {
+                    ctx.save();
+                    const x = chart.scales.x.getPixelForValue(currentYearIndex);
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]); // Dashed pattern
+                    ctx.beginPath();
+                    ctx.moveTo(x, chart.chartArea.top);
+                    ctx.lineTo(x, chart.chartArea.bottom);
+                    ctx.stroke();
+                    ctx.restore();
+                }
             }
         };
 
