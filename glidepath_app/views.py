@@ -62,7 +62,7 @@ def _build_chart_data(rules):
 
     # Determine the range of individual ages to show
     # Start from: lt_retire_age of the rule with gt=-100, OR the first gt value
-    # End at: 99 (the last age before "later" which represents age 100)
+    # End at: gt_retire_age of the rule with lt=100, OR the last lt value
     first_rule = rules_sorted[0]
     last_rule = rules_sorted[-1]
 
@@ -71,10 +71,13 @@ def _build_chart_data(rules):
     else:
         start_age = first_rule.gt_retire_age
 
-    # Show all individual ages from start_age up to 99
-    end_age = 100
+    # End age depends on whether the last rule ends at 100
+    if last_rule.lt_retire_age == 100:
+        end_age = last_rule.gt_retire_age + 1  # +1 because range() is exclusive
+    else:
+        end_age = last_rule.lt_retire_age
 
-    # Add individual age labels from start_age to end_age-1 (i.e., up to 99)
+    # Add individual age labels from start_age to end_age-1
     for age in range(start_age, end_age):
         if age in age_to_rule:
             chart_rules.append((str(age), age_to_rule[age]))
