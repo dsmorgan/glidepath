@@ -49,6 +49,8 @@ window.chartDataStaged = {
     <table class="min-w-full border">
         <thead class="bg-gray-100">
             <tr>
+                <th class="px-2 py-1 border">Year</th>
+                <th class="px-2 py-1 border">Age</th>
                 <th class="px-2 py-1 border">gt-retire-age</th>
                 <th class="px-2 py-1 border">lt-retire-age</th>
                 <th class="px-2 py-1 border">Classes</th>
@@ -57,7 +59,9 @@ window.chartDataStaged = {
         </thead>
         <tbody>
         {% for rule in rules %}
-            <tr class="odd:bg-white even:bg-gray-50">
+            <tr class="odd:bg-white even:bg-gray-50" data-gt-retire-age="{{ rule.gt_retire_age }}" data-lt-retire-age="{{ rule.lt_retire_age }}">
+                <td class="px-2 py-1 border align-top year-cell">-</td>
+                <td class="px-2 py-1 border align-top age-cell">-</td>
                 <td class="px-2 py-1 border align-top">{{ rule.gt_retire_age }}</td>
                 <td class="px-2 py-1 border align-top">{{ rule.lt_retire_age }}</td>
                 <td class="px-2 py-1 border align-top">

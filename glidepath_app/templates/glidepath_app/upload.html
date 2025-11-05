@@ -221,13 +221,52 @@ function findPieChartIndex() {
     return bestIndex;
 }
 
+function updateTableYearAndAge() {
+    // Calculate Year and Age for all table rows
+    const yearBorn = parseInt(document.getElementById('yearBornSelect')?.value || 1973);
+    const retirementAge = parseInt(document.getElementById('retirementAgeSelect')?.value || 58);
+    const yearOfRetirement = yearBorn + retirementAge;
+
+    // Get all table rows with age data
+    const rows = document.querySelectorAll('table tbody tr[data-gt-retire-age]');
+
+    rows.forEach(row => {
+        const gtRetireAge = parseInt(row.getAttribute('data-gt-retire-age'));
+        const ltRetireAge = parseInt(row.getAttribute('data-lt-retire-age'));
+
+        // Find Year and Age cells
+        const yearCell = row.querySelector('.year-cell');
+        const ageCell = row.querySelector('.age-cell');
+
+        let yearValue, ageValue;
+
+        // Check for special cases
+        if (gtRetireAge === -100) {
+            yearValue = 'Earlier';
+            ageValue = 'Younger';
+        } else if (ltRetireAge === 100) {
+            yearValue = 'Later';
+            ageValue = 'Older';
+        } else {
+            // Calculate normal values
+            yearValue = yearOfRetirement + gtRetireAge;
+            ageValue = retirementAge + gtRetireAge;
+        }
+
+        // Update cells
+        if (yearCell) yearCell.textContent = yearValue;
+        if (ageCell) ageCell.textContent = ageValue;
+    });
+}
+
 function updatePieChartSelection() {
     // Save to sessionStorage
     sessionStorage.setItem('yearBorn', document.getElementById('yearBornSelect').value);
     sessionStorage.setItem('retirementAge', document.getElementById('retirementAgeSelect').value);
 
-    // Update charts
+    // Update charts and table
     updateCharts();
+    updateTableYearAndAge();
 }
 
 function initializeCharts() {
@@ -398,15 +437,17 @@ function updateCharts() {
     }
 }
 
-// Initialize charts on first page load
+// Initialize charts and table on first page load
 document.addEventListener('DOMContentLoaded', function() {
     initializeCharts();
     updateActions();
+    updateTableYearAndAge();
 });
 
-// Re-initialize charts when HTMX swaps the rules content
+// Re-initialize charts and table when HTMX swaps the rules content
 document.getElementById('rules').addEventListener('htmx:afterSwap', function() {
     setTimeout(initializeCharts, 50);
+    setTimeout(updateTableYearAndAge, 50);
 });
 
 // Update button states based on selected ruleset
