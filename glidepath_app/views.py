@@ -114,6 +114,9 @@ def _build_chart_data(rules):
                 "borderColor": color,
                 "fill": True,
                 "stack": "class",
+                "tension": 0.4,
+                "pointRadius": 0,
+                "pointHoverRadius": 0,
             }
         )
 
@@ -149,6 +152,9 @@ def _build_chart_data(rules):
                     "borderColor": color,
                     "fill": True,
                     "stack": "category",
+                    "tension": 0.4,
+                    "pointRadius": 0,
+                    "pointHoverRadius": 0,
                 }
             )
 
