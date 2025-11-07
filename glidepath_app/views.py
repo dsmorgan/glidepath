@@ -1,11 +1,13 @@
 import json
 
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.views.decorators.http import require_POST
 
-from .forms import GlidepathRuleUploadForm
-from .models import GlidepathRule, RuleSet
+from .forms import GlidepathRuleUploadForm, APISettingsForm
+from .models import GlidepathRule, RuleSet, APISettings
 from .services import export_glidepath_rules, import_glidepath_rules
+from .ticker_service import query_ticker as query_ticker_service
 
 DEFAULT_COLORS = [
     "#4dc9f6",
@@ -175,6 +177,27 @@ def home(request):
     return render(request, "glidepath_app/home.html")
 
 
+def settings_view(request):
+    """Settings page view - manage API keys and configuration."""
+    settings = APISettings.get_settings()
+    success_message = None
+
+    if request.method == "POST":
+        form = APISettingsForm(request.POST, instance=settings)
+        if form.is_valid():
+            form.save()
+            success_message = "Settings saved successfully!"
+    else:
+        form = APISettingsForm(instance=settings)
+
+    context = {
+        "form": form,
+        "success_message": success_message,
+    }
+
+    return render(request, "glidepath_app/settings.html", context)
+
+
 def rules_view(request):
     """Rules management view - upload, manage, and visualize glidepath rules."""
     error = None
@@ -291,3 +314,24 @@ def export_rules(request):
     filename = f"{ruleset.name}.csv"
     response["Content-Disposition"] = f"attachment; filename={filename}"
     return response
+
+
+@require_POST
+def query_ticker(request):
+    """Handle AJAX requests to query ticker information."""
+    ticker = request.POST.get('ticker', '').strip()
+    source = request.POST.get('source', '').strip()
+
+    if not ticker:
+        return JsonResponse({'error': 'Ticker symbol is required'}, status=400)
+
+    if not source:
+        return JsonResponse({'error': 'Data source is required'}, status=400)
+
+    # Get API settings
+    api_settings = APISettings.get_settings()
+
+    # Query the ticker
+    result = query_ticker_service(ticker, source, api_settings)
+
+    return JsonResponse(result)

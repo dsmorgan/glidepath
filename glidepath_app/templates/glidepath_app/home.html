@@ -22,7 +22,7 @@
         <a href="{% url 'funds' %}" class="block p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-50 transition">
             <h2 class="text-2xl font-semibold text-indigo-600 mb-3">Funds</h2>
             <p class="text-gray-600">
-                Manage your investment funds, track performance, and analyze fund allocations.
+                Query ticker information from multiple financial data sources including yfinance, Alpha Vantage, Finnhub, and more.
             </p>
         </a>
 
@@ -49,6 +49,14 @@
                 Run simulations and model different retirement scenarios and allocation strategies.
             </p>
         </a>
+
+        <!-- Settings Card -->
+        <a href="{% url 'settings' %}" class="block p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-50 transition">
+            <h2 class="text-2xl font-semibold text-indigo-600 mb-3">Settings</h2>
+            <p class="text-gray-600">
+                Configure API keys for financial data sources used in the Funds page.
+            </p>
+        </a>
     </div>
 
     <div class="mt-8 p-6 bg-blue-50 border border-blue-200 rounded-lg">
@@ -56,6 +64,8 @@
         <p class="text-blue-800">
             Begin by importing your glidepath rules in the <a href="{% url 'rules' %}" class="underline font-medium">Rules</a> section.
             You can upload CSV files containing allocation rules by retirement age bands.
+            To query ticker information, configure your API keys in <a href="{% url 'settings' %}" class="underline font-medium">Settings</a>
+            and then use the <a href="{% url 'funds' %}" class="underline font-medium">Funds</a> page to search.
         </p>
     </div>
 </div>

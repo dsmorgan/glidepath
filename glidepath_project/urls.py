@@ -6,8 +6,10 @@ from glidepath_app.views import (
     accounts_view,
     portfolios_view,
     modeling_view,
+    settings_view,
     logout_view,
     export_rules,
+    query_ticker,
 )
 
 urlpatterns = [
@@ -17,6 +19,8 @@ urlpatterns = [
     path('accounts/', accounts_view, name='accounts'),
     path('portfolios/', portfolios_view, name='portfolios'),
     path('modeling/', modeling_view, name='modeling'),
+    path('settings/', settings_view, name='settings'),
     path('logout/', logout_view, name='logout'),
     path('export/', export_rules, name='export_rules'),
+    path('api/query-ticker/', query_ticker, name='query_ticker'),
 ]
