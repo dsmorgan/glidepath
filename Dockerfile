@@ -5,10 +5,15 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Install system dependencies needed for lxml (required by pandas-datareader)
+# Install system dependencies needed for lxml and pandas-datareader
+# Build tools are needed to compile lxml from source
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    make \
     libxml2-dev \
     libxslt1-dev \
+    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
