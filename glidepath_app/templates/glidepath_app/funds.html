@@ -1,42 +1,254 @@
 {% extends 'glidepath_app/base.html' %}
 {% block title %}Glidepath - Funds{% endblock %}
 {% block content %}
-<div class="bg-white shadow rounded-lg p-8">
-    <h1 class="text-3xl font-bold text-gray-900 mb-6">Funds Management</h1>
+<div class="bg-white shadow rounded-lg p-6">
+    <h1 class="text-3xl font-bold text-gray-900 mb-6">Ticker Information Query</h1>
 
-    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
-        <div class="flex">
-            <div class="flex-shrink-0">
-                <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                </svg>
+    <p class="text-gray-700 mb-6">
+        Query ticker information from multiple financial data sources. Configure your API keys in
+        <a href="{% url 'settings' %}" class="text-indigo-600 hover:text-indigo-800 underline">Settings</a>
+        to enable additional data sources.
+    </p>
+
+    <!-- Query Form -->
+    <div class="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <div class="flex flex-wrap gap-4 items-end">
+            <!-- Ticker Input -->
+            <div class="flex-1 min-w-[200px]">
+                <label for="tickerInput" class="block text-sm font-medium text-gray-700 mb-1">
+                    Ticker Symbol
+                </label>
+                <input
+                    type="text"
+                    id="tickerInput"
+                    name="ticker"
+                    placeholder="Enter ticker (e.g., AAPL, MSFT)"
+                    class="w-full border border-gray-300 rounded-md p-2 uppercase"
+                    onkeyup="this.value = this.value.toUpperCase()"
+                />
             </div>
-            <div class="ml-3">
-                <p class="text-sm text-yellow-700">
-                    This section is under development. Funds management features will be available soon.
-                </p>
+
+            <!-- Source Dropdown -->
+            <div class="flex-1 min-w-[200px]">
+                <label for="sourceSelect" class="block text-sm font-medium text-gray-700 mb-1">
+                    Data Source
+                </label>
+                <select
+                    id="sourceSelect"
+                    name="source"
+                    class="w-full border border-gray-300 rounded-md p-2"
+                >
+                    <option value="yfinance">yfinance (No API Key)</option>
+                    <option value="pandas_datareader">pandas_datareader (No API Key)</option>
+                    <option value="alpha_vantage">Alpha Vantage (API Key Required)</option>
+                    <option value="finnhub">Finnhub (API Key Required)</option>
+                    <option value="polygon">Polygon.io (API Key Required)</option>
+                    <option value="eodhd">EODHD (API Key Required)</option>
+                </select>
+            </div>
+
+            <!-- Buttons -->
+            <div class="flex gap-2">
+                <button
+                    id="queryBtn"
+                    type="button"
+                    class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onclick="queryTicker()"
+                >
+                    Query
+                </button>
+                <button
+                    id="resetBtn"
+                    type="button"
+                    class="px-6 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                    onclick="resetQuery()"
+                >
+                    Reset
+                </button>
             </div>
         </div>
     </div>
 
-    <div class="prose max-w-none">
-        <h2 class="text-xl font-semibold text-gray-800 mb-4">Planned Features</h2>
-        <ul class="list-disc list-inside space-y-2 text-gray-700">
-            <li>Add and manage investment funds</li>
-            <li>Track fund performance and returns</li>
-            <li>Analyze fund allocations by asset class</li>
-            <li>Compare fund characteristics and expenses</li>
-            <li>Link funds to asset classes in glidepath rules</li>
-        </ul>
-    </div>
-
-    <div class="mt-8">
-        <a href="{% url 'home' %}" class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-            <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+    <!-- Output Area -->
+    <div id="outputArea" class="min-h-[300px] p-6 bg-white border border-gray-300 rounded-lg">
+        <div class="text-gray-400 text-center py-12">
+            <svg class="mx-auto h-12 w-12 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
             </svg>
-            Back to Home
-        </a>
+            <p>Enter a ticker symbol and select a data source to begin querying.</p>
+        </div>
     </div>
 </div>
+
+<script>
+let currentRequest = null;
+
+function queryTicker() {
+    const ticker = document.getElementById('tickerInput').value.trim();
+    const source = document.getElementById('sourceSelect').value;
+    const queryBtn = document.getElementById('queryBtn');
+    const outputArea = document.getElementById('outputArea');
+
+    if (!ticker) {
+        outputArea.innerHTML = `
+            <div class="bg-red-50 border-l-4 border-red-400 p-4">
+                <p class="text-red-700">Please enter a ticker symbol.</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Disable query button
+    queryBtn.disabled = true;
+    queryBtn.textContent = 'Querying...';
+
+    // Show loading state
+    outputArea.innerHTML = `
+        <div class="text-center py-12">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+            <p class="mt-4 text-gray-600">Querying ${source} for ${ticker}...</p>
+        </div>
+    `;
+
+    // Cancel previous request if exists
+    if (currentRequest) {
+        currentRequest.abort();
+    }
+
+    // Create new request
+    currentRequest = new XMLHttpRequest();
+    currentRequest.open('POST', '{% url "query_ticker" %}', true);
+    currentRequest.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    currentRequest.setRequestHeader('X-CSRFToken', '{{ csrf_token }}');
+
+    currentRequest.onload = function() {
+        queryBtn.disabled = false;
+        queryBtn.textContent = 'Query';
+        currentRequest = null;
+
+        if (this.status === 200) {
+            const response = JSON.parse(this.responseText);
+            if (response.error) {
+                outputArea.innerHTML = `
+                    <div class="bg-red-50 border-l-4 border-red-400 p-4">
+                        <p class="text-red-700"><strong>Error:</strong> ${response.error}</p>
+                    </div>
+                `;
+            } else {
+                displayResults(response);
+            }
+        } else {
+            outputArea.innerHTML = `
+                <div class="bg-red-50 border-l-4 border-red-400 p-4">
+                    <p class="text-red-700">An error occurred while querying the data source.</p>
+                </div>
+            `;
+        }
+    };
+
+    currentRequest.onerror = function() {
+        queryBtn.disabled = false;
+        queryBtn.textContent = 'Query';
+        currentRequest = null;
+        outputArea.innerHTML = `
+            <div class="bg-red-50 border-l-4 border-red-400 p-4">
+                <p class="text-red-700">Network error occurred. Please try again.</p>
+            </div>
+        `;
+    };
+
+    currentRequest.onabort = function() {
+        queryBtn.disabled = false;
+        queryBtn.textContent = 'Query';
+        currentRequest = null;
+    };
+
+    currentRequest.send(`ticker=${encodeURIComponent(ticker)}&source=${encodeURIComponent(source)}`);
+}
+
+function displayResults(data) {
+    const outputArea = document.getElementById('outputArea');
+
+    let html = `
+        <div class="space-y-4">
+            <div class="border-b border-gray-200 pb-4">
+                <h2 class="text-2xl font-bold text-gray-900">${data.ticker || 'N/A'}</h2>
+                <p class="text-sm text-gray-500">Source: ${data.source}</p>
+            </div>
+    `;
+
+    if (data.data && Object.keys(data.data).length > 0) {
+        html += '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
+
+        for (const [key, value] of Object.entries(data.data)) {
+            const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            const displayValue = value !== null && value !== undefined ? value : 'N/A';
+
+            html += `
+                <div class="bg-gray-50 p-3 rounded border border-gray-200">
+                    <dt class="text-sm font-medium text-gray-500">${displayKey}</dt>
+                    <dd class="mt-1 text-sm text-gray-900">${displayValue}</dd>
+                </div>
+            `;
+        }
+
+        html += '</div>';
+    } else {
+        html += `
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                <p class="text-yellow-700">No data available for this ticker from the selected source.</p>
+            </div>
+        `;
+    }
+
+    if (data.warnings && data.warnings.length > 0) {
+        html += `
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mt-4">
+                <p class="text-yellow-700"><strong>Warnings:</strong></p>
+                <ul class="list-disc list-inside mt-2">
+                    ${data.warnings.map(w => `<li>${w}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    }
+
+    html += '</div>';
+    outputArea.innerHTML = html;
+}
+
+function resetQuery() {
+    // Cancel any pending request
+    if (currentRequest) {
+        currentRequest.abort();
+        currentRequest = null;
+    }
+
+    // Reset form
+    document.getElementById('tickerInput').value = '';
+    document.getElementById('sourceSelect').selectedIndex = 0;
+
+    // Reset output area
+    document.getElementById('outputArea').innerHTML = `
+        <div class="text-gray-400 text-center py-12">
+            <svg class="mx-auto h-12 w-12 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <p>Enter a ticker symbol and select a data source to begin querying.</p>
+        </div>
+    `;
+
+    // Re-enable query button
+    document.getElementById('queryBtn').disabled = false;
+    document.getElementById('queryBtn').textContent = 'Query';
+}
+
+// Allow Enter key to trigger query
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('tickerInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            queryTicker();
+        }
+    });
+});
+</script>
 {% endblock %}

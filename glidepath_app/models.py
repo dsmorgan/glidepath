@@ -75,3 +75,36 @@ class CategoryAllocation(models.Model):
 
     def __str__(self) -> str:
         return f"{self.asset_category}: {self.percentage}%"
+
+
+class APISettings(models.Model):
+    """Stores API keys and settings for financial data sources."""
+    # Only one row should exist in this table
+    id = models.AutoField(primary_key=True)
+
+    # Alpha Vantage
+    alpha_vantage_api_key = models.CharField(max_length=100, blank=True, default='')
+
+    # Finnhub
+    finnhub_api_key = models.CharField(max_length=100, blank=True, default='')
+
+    # Polygon.io
+    polygon_api_key = models.CharField(max_length=100, blank=True, default='')
+
+    # EODHD
+    eodhd_api_key = models.CharField(max_length=100, blank=True, default='')
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "API Settings"
+        verbose_name_plural = "API Settings"
+
+    def __str__(self) -> str:
+        return "API Settings"
+
+    @classmethod
+    def get_settings(cls):
+        """Get or create the singleton settings instance."""
+        settings, created = cls.objects.get_or_create(pk=1)
+        return settings

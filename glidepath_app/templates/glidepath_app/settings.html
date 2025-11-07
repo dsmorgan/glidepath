@@ -1,0 +1,96 @@
+{% extends 'glidepath_app/base.html' %}
+{% block title %}Glidepath - Settings{% endblock %}
+{% block content %}
+<div class="bg-white shadow rounded-lg p-6">
+    <h1 class="text-3xl font-bold text-gray-900 mb-6">API Settings</h1>
+
+    <p class="text-gray-700 mb-6">
+        Configure API keys for financial data sources. These keys are required to query ticker information from external services.
+        API keys are stored securely and can be left blank if you don't plan to use a particular service.
+    </p>
+
+    {% if success_message %}
+    <div class="bg-green-50 border-l-4 border-green-400 p-4 mb-6">
+        <p class="text-green-700">{{ success_message }}</p>
+    </div>
+    {% endif %}
+
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+
+        <!-- Alpha Vantage -->
+        <div class="border border-gray-200 rounded-lg p-6 bg-gray-50">
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">Alpha Vantage</h2>
+            <p class="text-sm text-gray-600 mb-4">
+                Official NASDAQ vendor with 500 free API calls per day. Supports historical data, fundamentals, technical indicators, forex, and crypto.
+                <a href="https://www.alphavantage.co/support/#api-key" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline">Get your free API key here</a>
+            </p>
+            <div>
+                <label for="{{ form.alpha_vantage_api_key.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                    {{ form.alpha_vantage_api_key.label }}
+                </label>
+                {{ form.alpha_vantage_api_key }}
+            </div>
+        </div>
+
+        <!-- Finnhub -->
+        <div class="border border-gray-200 rounded-lg p-6 bg-gray-50">
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">Finnhub</h2>
+            <p class="text-sm text-gray-600 mb-4">
+                Institutional-grade financial data including real-time stock prices, global fundamentals, and ETF holdings.
+                <a href="https://finnhub.io/register" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline">Sign up for a free API key</a>
+            </p>
+            <div>
+                <label for="{{ form.finnhub_api_key.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                    {{ form.finnhub_api_key.label }}
+                </label>
+                {{ form.finnhub_api_key }}
+            </div>
+        </div>
+
+        <!-- Polygon.io -->
+        <div class="border border-gray-200 rounded-lg p-6 bg-gray-50">
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">Polygon.io</h2>
+            <p class="text-sm text-gray-600 mb-4">
+                Real-time and historical market data with low latency (20ms avg). Unlimited usage on premium subscriptions.
+                <a href="https://polygon.io/dashboard/signup" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline">Sign up for an API key</a>
+            </p>
+            <div>
+                <label for="{{ form.polygon_api_key.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                    {{ form.polygon_api_key.label }}
+                </label>
+                {{ form.polygon_api_key }}
+            </div>
+        </div>
+
+        <!-- EODHD -->
+        <div class="border border-gray-200 rounded-lg p-6 bg-gray-50">
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">EODHD</h2>
+            <p class="text-sm text-gray-600 mb-4">
+                Historical and fundamental financial data. Use "DEMO" as the API key to test with limited tickers (AAPL.US, TSLA.US, VTI.US, AMZN.US, BTC-USD, EUR-USD).
+                <a href="https://eodhd.com/register" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline">Register for a full API key</a>
+            </p>
+            <div>
+                <label for="{{ form.eodhd_api_key.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                    {{ form.eodhd_api_key.label }}
+                </label>
+                {{ form.eodhd_api_key }}
+            </div>
+        </div>
+
+        <div class="flex justify-end">
+            <button type="submit" class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                Save Settings
+            </button>
+        </div>
+    </form>
+
+    <div class="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <h3 class="text-lg font-semibold text-blue-900 mb-2">About API Keys</h3>
+        <p class="text-sm text-blue-800">
+            API keys are used to authenticate requests to external financial data providers. Each service has different rate limits and feature sets.
+            Your API keys are stored locally and never shared with third parties. Visit the <a href="{% url 'funds' %}" class="underline font-medium">Funds</a> page to query ticker information using these services.
+        </p>
+    </div>
+</div>
+{% endblock %}
