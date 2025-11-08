@@ -5,7 +5,7 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Install system dependencies needed for lxml and pandas-datareader
+# Install system dependencies needed for lxml (used by beautifulsoup4/yfinance)
 # Build tools are needed to compile lxml from source
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
