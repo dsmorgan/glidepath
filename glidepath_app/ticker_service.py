@@ -39,46 +39,6 @@ def query_yfinance(ticker: str) -> Dict[str, Any]:
         return {'success': False, 'error': f'Error querying yfinance: {str(e)}'}
 
 
-def query_pandas_datareader(ticker: str) -> Dict[str, Any]:
-    """Query ticker information using pandas_datareader library."""
-    try:
-        import pandas_datareader.data as web
-        from datetime import datetime, timedelta
-
-        # Get recent data (last 5 days) to get current price
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=5)
-
-        df = web.DataReader(ticker, 'yahoo', start_date, end_date)
-
-        if df.empty:
-            return {'success': False, 'error': 'No data found for this ticker'}
-
-        # Get most recent data
-        latest = df.iloc[-1]
-        previous = df.iloc[-2] if len(df) > 1 else None
-
-        data = {
-            'current_price': float(latest['Close']) if 'Close' in latest else None,
-            'open': float(latest['Open']) if 'Open' in latest else None,
-            'high': float(latest['High']) if 'High' in latest else None,
-            'low': float(latest['Low']) if 'Low' in latest else None,
-            'volume': int(latest['Volume']) if 'Volume' in latest else None,
-            'previous_close': float(previous['Close']) if previous is not None and 'Close' in previous else None,
-        }
-
-        # Remove None values
-        data = {k: v for k, v in data.items() if v is not None}
-
-        warnings = ['pandas_datareader provides limited metadata. Use other sources for company information.']
-
-        return {'success': True, 'data': data, 'warnings': warnings}
-    except ImportError:
-        return {'success': False, 'error': 'pandas_datareader library is not installed. Please install it to use this source.'}
-    except Exception as e:
-        return {'success': False, 'error': f'Error querying pandas_datareader: {str(e)}'}
-
-
 def query_alpha_vantage(ticker: str, api_key: str) -> Dict[str, Any]:
     """Query ticker information using Alpha Vantage API."""
     if not api_key:
@@ -321,8 +281,6 @@ def query_ticker(ticker: str, source: str, api_settings) -> Dict[str, Any]:
 
     if source == 'yfinance':
         result = query_yfinance(ticker)
-    elif source == 'pandas_datareader':
-        result = query_pandas_datareader(ticker)
     elif source == 'alpha_vantage':
         result = query_alpha_vantage(ticker, api_settings.alpha_vantage_api_key)
     elif source == 'finnhub':
