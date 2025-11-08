@@ -78,6 +78,64 @@
             <p>Enter a ticker symbol and select a data source to begin querying.</p>
         </div>
     </div>
+
+    <!-- Funds List Section -->
+    <div class="mt-8 bg-white shadow rounded-lg p-6">
+        <h2 class="text-2xl font-bold text-gray-900 mb-4">Saved Funds</h2>
+
+        {% if funds %}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Ticker Symbol
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Name
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Class / Category
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Actions
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for fund in funds %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {{ fund.ticker }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                {{ fund.name }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                {{ fund.category.asset_class.name }}: {{ fund.category.name }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                                <a href="{% url 'fund_detail' %}?ticker={{ fund.ticker }}" class="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                    Edit
+                                </a>
+                                <button onclick="confirmDelete('{{ fund.ticker }}', {{ fund.id }})" class="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                                    Delete
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="text-center py-12">
+                <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+                </svg>
+                <p class="text-gray-500">No funds saved yet. Query a ticker and click "Add" to get started.</p>
+            </div>
+        {% endif %}
+    </div>
 </div>
 
 <script>
@@ -174,7 +232,7 @@ function displayResults(data) {
     const name = data.data?.name || data.data?.long_name || data.data?.longName || '';
 
     // Build the Add button URL with query parameters
-    const addUrl = `{% url 'add_fund' %}?ticker=${encodeURIComponent(ticker)}&name=${encodeURIComponent(name)}`;
+    const addUrl = `{% url 'fund_detail' %}?ticker=${encodeURIComponent(ticker)}&name=${encodeURIComponent(name)}`;
 
     let html = `
         <div class="space-y-4">
@@ -262,5 +320,26 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+// Confirm delete with popup
+function confirmDelete(ticker, fundId) {
+    if (confirm(`Are you sure you want to delete ${ticker} from your saved funds?`)) {
+        // Create a form and submit it
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/funds/delete/${fundId}/`;
+
+        // Add CSRF token
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = '{{ csrf_token }}';
+        form.appendChild(csrfInput);
+
+        // Submit the form
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
 </script>
 {% endblock %}

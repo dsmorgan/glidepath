@@ -274,7 +274,8 @@ def rules_view(request):
 
 def funds_view(request):
     """Funds management view - manage investment funds."""
-    return render(request, "glidepath_app/funds.html")
+    funds = Fund.objects.select_related('category', 'category__asset_class').all()
+    return render(request, "glidepath_app/funds.html", {'funds': funds})
 
 
 def accounts_view(request):
@@ -337,14 +338,25 @@ def query_ticker(request):
     return JsonResponse(result)
 
 
-def add_fund(request):
-    """Add a new fund with ticker, name, and category."""
+def fund_detail(request):
+    """Add or edit a fund with ticker, name, and category."""
     # Get ticker and name from query parameters (passed from funds page)
     ticker = request.GET.get('ticker', '').strip().upper()
     name = request.GET.get('name', '').strip()
 
+    # Check if fund already exists
+    existing_fund = None
+    if ticker:
+        existing_fund = Fund.objects.filter(ticker=ticker).first()
+
     if request.method == 'POST':
-        form = FundForm(request.POST)
+        if existing_fund:
+            # Update existing fund
+            form = FundForm(request.POST, instance=existing_fund)
+        else:
+            # Create new fund
+            form = FundForm(request.POST)
+
         if form.is_valid():
             try:
                 form.save()
@@ -352,12 +364,32 @@ def add_fund(request):
             except Exception as e:
                 form.add_error(None, f"Error saving fund: {str(e)}")
     else:
-        # Pre-populate the form with ticker and name from query params
-        initial_data = {}
-        if ticker:
-            initial_data['ticker'] = ticker
-        if name:
-            initial_data['name'] = name
-        form = FundForm(initial=initial_data)
+        if existing_fund:
+            # Load existing fund for editing
+            form = FundForm(instance=existing_fund)
+        else:
+            # Pre-populate the form with ticker and name from query params
+            initial_data = {}
+            if ticker:
+                initial_data['ticker'] = ticker
+            if name:
+                initial_data['name'] = name
+            form = FundForm(initial=initial_data)
 
-    return render(request, 'glidepath_app/add_fund.html', {'form': form})
+    context = {
+        'form': form,
+        'is_edit': existing_fund is not None,
+        'fund': existing_fund
+    }
+    return render(request, 'glidepath_app/fund_detail.html', context)
+
+
+@require_POST
+def delete_fund(request, fund_id):
+    """Delete a fund from the database."""
+    try:
+        fund = Fund.objects.get(id=fund_id)
+        fund.delete()
+        return redirect('funds')
+    except Fund.DoesNotExist:
+        return redirect('funds')
