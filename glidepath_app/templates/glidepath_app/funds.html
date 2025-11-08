@@ -169,11 +169,23 @@ function queryTicker() {
 function displayResults(data) {
     const outputArea = document.getElementById('outputArea');
 
+    // Extract ticker and name from the data
+    const ticker = data.ticker || '';
+    const name = data.data?.name || data.data?.long_name || data.data?.longName || '';
+
+    // Build the Add button URL with query parameters
+    const addUrl = `{% url 'add_fund' %}?ticker=${encodeURIComponent(ticker)}&name=${encodeURIComponent(name)}`;
+
     let html = `
         <div class="space-y-4">
-            <div class="border-b border-gray-200 pb-4">
-                <h2 class="text-2xl font-bold text-gray-900">${data.ticker || 'N/A'}</h2>
-                <p class="text-sm text-gray-500">Source: ${data.source}</p>
+            <div class="border-b border-gray-200 pb-4 flex justify-between items-start">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">${ticker || 'N/A'}</h2>
+                    <p class="text-sm text-gray-500">Source: ${data.source}</p>
+                </div>
+                <a href="${addUrl}" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                    Add
+                </a>
             </div>
     `;
 

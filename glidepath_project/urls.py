@@ -10,12 +10,14 @@ from glidepath_app.views import (
     logout_view,
     export_rules,
     query_ticker,
+    add_fund,
 )
 
 urlpatterns = [
     path('', home, name='home'),
     path('rules/', rules_view, name='rules'),
     path('funds/', funds_view, name='funds'),
+    path('funds/add/', add_fund, name='add_fund'),
     path('accounts/', accounts_view, name='accounts'),
     path('portfolios/', portfolios_view, name='portfolios'),
     path('modeling/', modeling_view, name='modeling'),

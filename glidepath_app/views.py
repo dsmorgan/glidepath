@@ -1,11 +1,11 @@
 import json
 
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.views.decorators.http import require_POST
 
-from .forms import GlidepathRuleUploadForm, APISettingsForm
-from .models import GlidepathRule, RuleSet, APISettings
+from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm
+from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory
 from .services import export_glidepath_rules, import_glidepath_rules
 from .ticker_service import query_ticker as query_ticker_service
 
@@ -335,3 +335,29 @@ def query_ticker(request):
     result = query_ticker_service(ticker, source, api_settings)
 
     return JsonResponse(result)
+
+
+def add_fund(request):
+    """Add a new fund with ticker, name, and category."""
+    # Get ticker and name from query parameters (passed from funds page)
+    ticker = request.GET.get('ticker', '').strip().upper()
+    name = request.GET.get('name', '').strip()
+
+    if request.method == 'POST':
+        form = FundForm(request.POST)
+        if form.is_valid():
+            try:
+                form.save()
+                return redirect('funds')
+            except Exception as e:
+                form.add_error(None, f"Error saving fund: {str(e)}")
+    else:
+        # Pre-populate the form with ticker and name from query params
+        initial_data = {}
+        if ticker:
+            initial_data['ticker'] = ticker
+        if name:
+            initial_data['name'] = name
+        form = FundForm(initial=initial_data)
+
+    return render(request, 'glidepath_app/add_fund.html', {'form': form})
