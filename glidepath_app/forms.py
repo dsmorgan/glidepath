@@ -1,5 +1,5 @@
 from django import forms
-from .models import APISettings
+from .models import APISettings, Fund, AssetCategory
 
 
 class GlidepathRuleUploadForm(forms.Form):
@@ -40,4 +40,30 @@ class APISettingsForm(forms.ModelForm):
             'finnhub_api_key': 'API Key',
             'polygon_api_key': 'API Key',
             'eodhd_api_key': 'API Key',
+        }
+
+
+class FundForm(forms.ModelForm):
+    """Form for adding a new fund with ticker, name, and category."""
+
+    class Meta:
+        model = Fund
+        fields = ['ticker', 'name', 'category']
+        widgets = {
+            'ticker': forms.TextInput(attrs={
+                'class': 'w-full border border-gray-300 rounded-md p-2 bg-gray-100',
+                'readonly': 'readonly',
+            }),
+            'name': forms.TextInput(attrs={
+                'class': 'w-full border border-gray-300 rounded-md p-2',
+                'placeholder': 'Enter fund name'
+            }),
+            'category': forms.Select(attrs={
+                'class': 'w-full border border-gray-300 rounded-md p-2'
+            }),
+        }
+        labels = {
+            'ticker': 'Ticker Symbol',
+            'name': 'Fund Name',
+            'category': 'Asset Category',
         }

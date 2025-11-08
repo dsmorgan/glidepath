@@ -108,3 +108,19 @@ class APISettings(models.Model):
         """Get or create the singleton settings instance."""
         settings, created = cls.objects.get_or_create(pk=1)
         return settings
+
+
+class Fund(models.Model):
+    """Stores investment fund information including ticker, name, and category."""
+    ticker = models.CharField(max_length=20, unique=True)
+    name = models.CharField(max_length=200)
+    category = models.ForeignKey(
+        AssetCategory, on_delete=models.CASCADE, related_name="funds"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["ticker"]
+
+    def __str__(self) -> str:
+        return f"{self.ticker} - {self.name}"
