@@ -4,6 +4,7 @@ Django>=4.2,<5.0
 yfinance>=0.2.40
 pandas>=2.0.0
 pandas-datareader>=0.10.0
+setuptools>=69.0.0  # Required for pandas-datareader on Python 3.12+ (provides distutils compatibility)
 lxml[html_clean]>=4.9.0
 html5lib>=1.1
 beautifulsoup4>=4.12.0
