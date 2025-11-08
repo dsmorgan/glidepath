@@ -3,6 +3,7 @@ import json
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect
 from django.views.decorators.http import require_POST
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm
 from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory
@@ -274,8 +275,45 @@ def rules_view(request):
 
 def funds_view(request):
     """Funds management view - manage investment funds."""
-    funds = Fund.objects.select_related('category', 'category__asset_class').all()
-    return render(request, "glidepath_app/funds.html", {'funds': funds})
+    # Get sorting parameters
+    sort_by = request.GET.get('sort', 'ticker')
+    order = request.GET.get('order', 'asc')
+
+    # Map sort parameters to model fields
+    sort_fields = {
+        'ticker': 'ticker',
+        'name': 'name',
+        'category': 'category__name',
+    }
+
+    # Get the sort field, default to ticker if invalid
+    sort_field = sort_fields.get(sort_by, 'ticker')
+
+    # Apply ordering (prefix with - for descending)
+    if order == 'desc':
+        sort_field = f'-{sort_field}'
+
+    # Get all funds with sorting
+    funds_list = Fund.objects.select_related('category', 'category__asset_class').order_by(sort_field)
+
+    # Pagination - 10 funds per page
+    paginator = Paginator(funds_list, 10)
+    page = request.GET.get('page', 1)
+
+    try:
+        funds = paginator.page(page)
+    except PageNotAnInteger:
+        funds = paginator.page(1)
+    except EmptyPage:
+        funds = paginator.page(paginator.num_pages)
+
+    context = {
+        'funds': funds,
+        'sort_by': sort_by,
+        'order': order,
+    }
+
+    return render(request, "glidepath_app/funds.html", context)
 
 
 def accounts_view(request):
