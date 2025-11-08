@@ -67,3 +67,9 @@ class FundForm(forms.ModelForm):
             'name': 'Fund Name',
             'category': 'Asset Category',
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Add "Other" as the first option in the category choices
+        self.fields['category'].empty_label = "Other (no category)"
+        self.fields['category'].required = False
