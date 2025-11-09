@@ -219,9 +219,9 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
 
     # Build breakdowns by looking up fund information
     class_breakdown = {}  # class_name -> total value
-    category_breakdown = {}  # category_name -> total value
+    category_breakdown = {}  # class_name:category_name -> total value
     ticker_breakdown = {}  # ticker -> total value
-    category_details = {}  # category_name -> {'total': value, 'symbols': {...}}
+    category_details = {}  # class_name:category_name -> {'total': value, 'symbols': {...}}
 
     for symbol, value in symbol_totals.items():
         ticker_breakdown[symbol] = value
@@ -233,35 +233,41 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
             category = fund.category
             asset_class = category.asset_class
 
+            # Create composite key: AssetClass:Category (e.g., "Stocks:International Market")
+            category_key = f"{asset_class.name}:{category.name}"
+
             # Track class breakdown
             if asset_class.name not in class_breakdown:
                 class_breakdown[asset_class.name] = Decimal('0')
             class_breakdown[asset_class.name] += value
 
-            # Track category breakdown
-            if category.name not in category_breakdown:
-                category_breakdown[category.name] = Decimal('0')
-            category_breakdown[category.name] += value
+            # Track category breakdown (using composite key to distinguish same-named categories)
+            if category_key not in category_breakdown:
+                category_breakdown[category_key] = Decimal('0')
+            category_breakdown[category_key] += value
 
-            # Track category details
-            if category.name not in category_details:
-                category_details[category.name] = {
+            # Track category details (using composite key to distinguish same-named categories)
+            if category_key not in category_details:
+                category_details[category_key] = {
                     'asset_class': asset_class.name,
+                    'category_name': category.name,  # Store original category name separately
                     'total': Decimal('0'),
                     'symbols': {}
                 }
-            category_details[category.name]['total'] += value
-            category_details[category.name]['symbols'][symbol] = value
+            category_details[category_key]['total'] += value
+            category_details[category_key]['symbols'][symbol] = value
         else:
             # Unknown category
-            if 'Unknown' not in category_details:
-                category_details['Unknown'] = {
+            category_key = 'Unknown'
+            if category_key not in category_details:
+                category_details[category_key] = {
                     'asset_class': 'Unknown',
+                    'category_name': 'Unknown',
                     'total': Decimal('0'),
                     'symbols': {}
                 }
-            category_details['Unknown']['total'] += value
-            category_details['Unknown']['symbols'][symbol] = value
+            category_details[category_key]['total'] += value
+            category_details[category_key]['symbols'][symbol] = value
             if 'Unknown' not in class_breakdown:
                 class_breakdown['Unknown'] = Decimal('0')
             class_breakdown['Unknown'] += value
@@ -274,10 +280,10 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
 
     # Format category details for template
     formatted_category_details = []
-    for category_name in sorted(category_details.keys()):
-        details = category_details[category_name]
+    for category_key in sorted(category_details.keys()):
+        details = category_details[category_key]
         formatted_category_details.append({
-            'category': category_name,
+            'category': details.get('category_name', category_key),  # Use category_name for display
             'asset_class': details['asset_class'],
             'subtotal': details['total'],
             'symbols': [
@@ -316,7 +322,9 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
 
             # Get category allocations
             for cat_alloc in matching_rule.category_allocations.all():
-                target_category_breakdown[cat_alloc.asset_category.name] = float(cat_alloc.percentage)
+                # Use composite key to distinguish categories with same name in different asset classes
+                category_key = f"{cat_alloc.asset_category.asset_class.name}:{cat_alloc.asset_category.name}"
+                target_category_breakdown[category_key] = float(cat_alloc.percentage)
 
             # Add target and difference information to category details
             # Convert total_value to float for calculations to avoid Decimal/float type issues
@@ -324,7 +332,10 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
 
             for category_item in formatted_category_details:
                 category_name = category_item['category']
-                target_pct = target_category_breakdown.get(category_name, 0)
+                asset_class_name = category_item['asset_class']
+                # Use composite key to look up target percentage
+                category_key = f"{asset_class_name}:{category_name}"
+                target_pct = target_category_breakdown.get(category_key, 0)
                 current_value = float(category_item['subtotal'])
 
                 # Calculate current percentage
