@@ -437,6 +437,9 @@ def portfolios_view(request):
         # Get portfolio analysis if a portfolio is selected
         if selected_portfolio:
             analysis_data = get_portfolio_analysis(selected_portfolio)
+            # Serialize category_details to JSON for JavaScript consumption
+            if analysis_data and 'category_details' in analysis_data:
+                analysis_data['category_details_json'] = json.dumps(analysis_data['category_details'])
     else:
         portfolios = Portfolio.objects.none()
         selected_portfolio = None
