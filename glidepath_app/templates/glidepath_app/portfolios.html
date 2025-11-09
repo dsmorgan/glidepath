@@ -249,15 +249,15 @@
                             diffSpan.textContent = `Diff: ${diffText}`;
                             diffSpan.className = `text-sm font-mono ${diffClass} min-w-[120px]`;
                         }
+                    });
 
-                        // Format symbol values in table
-                        const tableRows = document.querySelectorAll(`[data-value]`);
-                        tableRows.forEach(cell => {
-                            const value = parseFloat(cell.dataset.value);
-                            if (!isNaN(value)) {
-                                cell.textContent = '$' + formatNumber(value);
-                            }
-                        });
+                    // Format symbol values in table (run once after all categories are processed)
+                    const tableRows = document.querySelectorAll(`[data-value]`);
+                    tableRows.forEach(cell => {
+                        const value = parseFloat(cell.dataset.value);
+                        if (!isNaN(value)) {
+                            cell.textContent = '$' + formatNumber(value);
+                        }
                     });
                 });
             </script>
