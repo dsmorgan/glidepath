@@ -4,31 +4,123 @@
 <div class="bg-white shadow rounded-lg p-8">
     <h1 class="text-3xl font-bold text-gray-900 mb-6">Portfolios Management</h1>
 
-    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+    <!-- Error/Success Messages -->
+    {% if error %}
+    <div class="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
         <div class="flex">
             <div class="flex-shrink-0">
-                <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
                 </svg>
             </div>
             <div class="ml-3">
-                <p class="text-sm text-yellow-700">
-                    This section is under development. Portfolios management features will be available soon.
-                </p>
+                <p class="text-sm text-red-700">{{ error }}</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if success %}
+    <div class="bg-green-50 border-l-4 border-green-400 p-4 mb-6">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                </svg>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-green-700">{{ success }}</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Portfolio Controls -->
+    <div class="bg-gray-50 p-6 rounded-lg mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Create Portfolio Section -->
+            <div>
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">Create Portfolio</h2>
+                <form method="post" class="flex gap-2">
+                    {% csrf_token %}
+                    <input type="text" name="portfolio_name" placeholder="Portfolio Name" required
+                           class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    <button type="submit" name="create_portfolio"
+                            class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 whitespace-nowrap">
+                        Add Portfolio
+                    </button>
+                </form>
+            </div>
+
+            <!-- Portfolio Selection and Actions -->
+            <div>
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">Manage Portfolio</h2>
+                {% if portfolios %}
+                <form method="get" class="space-y-2">
+                    <div class="flex gap-2">
+                        <select name="portfolio" onchange="this.form.submit()"
+                                class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="">Select Portfolio</option>
+                            {% for portfolio in portfolios %}
+                            <option value="{{ portfolio.id }}" {% if selected_portfolio and selected_portfolio.id == portfolio.id %}selected{% endif %}>
+                                {{ portfolio.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </form>
+
+                {% if selected_portfolio %}
+                <div class="flex gap-2 mt-2">
+                    <a href="{% url 'edit_portfolio' selected_portfolio.id %}"
+                       class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 text-center flex-1">
+                        Edit
+                    </a>
+                    <form method="post" action="{% url 'delete_portfolio' selected_portfolio.id %}" class="flex-1"
+                          onsubmit="return confirm('Are you sure you want to delete this portfolio?');">
+                        {% csrf_token %}
+                        <button type="submit" class="w-full px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">
+                            Delete
+                        </button>
+                    </form>
+                    <a href="{% url 'download_portfolio_csv' selected_portfolio.id %}"
+                       class="px-4 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 text-center flex-1">
+                        Download CSV
+                    </a>
+                </div>
+                {% endif %}
+                {% else %}
+                <p class="text-gray-500">No portfolios created yet. Create one above to get started.</p>
+                {% endif %}
             </div>
         </div>
     </div>
 
-    <div class="prose max-w-none">
-        <h2 class="text-xl font-semibold text-gray-800 mb-4">Planned Features</h2>
-        <ul class="list-disc list-inside space-y-2 text-gray-700">
-            <li>Create comprehensive portfolios combining multiple accounts</li>
-            <li>Apply glidepath rules to portfolio allocations</li>
-            <li>View aggregated portfolio performance</li>
-            <li>Rebalance portfolios according to target allocations</li>
-            <li>Generate portfolio reports and analytics</li>
-        </ul>
+    <!-- Portfolio Summary -->
+    {% if selected_portfolio %}
+    <div class="mt-8">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Portfolio: {{ selected_portfolio.name }}</h2>
+        {% with item_count=selected_portfolio.items.count %}
+        <div class="bg-blue-50 border-l-4 border-blue-400 p-4">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm text-blue-700">
+                        This portfolio contains {{ item_count }} account+symbol combination{{ item_count|pluralize }}.
+                        {% if item_count == 0 %}
+                        Click "Edit" to add positions to this portfolio.
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+        {% endwith %}
     </div>
+    {% endif %}
 
     <div class="mt-8">
         <a href="{% url 'home' %}" class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">

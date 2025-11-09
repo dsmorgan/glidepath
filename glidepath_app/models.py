@@ -244,3 +244,36 @@ class AccountPosition(models.Model):
 
     def __str__(self) -> str:
         return f"{self.symbol} - {self.account_number}"
+
+
+class Portfolio(models.Model):
+    """Stores portfolio configurations for grouping account positions."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="portfolios")
+    name = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("user", "name")
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return f"{self.user.username} - {self.name}"
+
+
+class PortfolioItem(models.Model):
+    """Stores which account+symbol combinations are included in a portfolio."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    portfolio = models.ForeignKey(Portfolio, on_delete=models.CASCADE, related_name="items")
+    account_number = models.CharField(max_length=50)
+    symbol = models.CharField(max_length=50)
+
+    class Meta:
+        unique_together = ("portfolio", "account_number", "symbol")
+        ordering = ["account_number", "symbol"]
+
+    def __str__(self) -> str:
+        return f"{self.portfolio.name} - {self.account_number} - {self.symbol}"
