@@ -186,7 +186,7 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
             latest_upload = AccountUpload.objects.filter(
                 user=portfolio.user,
                 positions__account_number=account_number
-            ).order_by('-created_at').first()
+            ).order_by('-upload_datetime').first()
             if latest_upload:
                 latest_uploads[account_number] = latest_upload
 
