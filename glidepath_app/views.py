@@ -5,10 +5,11 @@ from django.shortcuts import render, redirect
 from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
-from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm, IdentityProviderForm
-from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory, User, IdentityProvider
+from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm, IdentityProviderForm, AccountUploadForm
+from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, AccountPosition
 from .services import export_glidepath_rules, import_glidepath_rules
 from .ticker_service import query_ticker as query_ticker_service
+from .account_services import import_fidelity_csv
 
 DEFAULT_COLORS = [
     "#4dc9f6",
@@ -324,7 +325,84 @@ def funds_view(request):
 
 def accounts_view(request):
     """Accounts management view - manage investment accounts."""
-    return render(request, "glidepath_app/accounts.html")
+    error = None
+    success = None
+
+    # Determine which user's data to show
+    selected_user_id = request.session.get('selected_user_id')
+    if selected_user_id:
+        try:
+            current_user = User.objects.get(id=selected_user_id)
+        except User.DoesNotExist:
+            # Fall back to first user if selected user doesn't exist
+            current_user = User.objects.first()
+    else:
+        # Default to first user
+        current_user = User.objects.first()
+
+    if request.method == "POST":
+        form = AccountUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            try:
+                upload_type = form.cleaned_data['upload_type']
+                file_obj = form.cleaned_data['file']
+                filename = file_obj.name
+
+                # Import based on type
+                if upload_type == 'fidelity':
+                    upload = import_fidelity_csv(file_obj, current_user, filename)
+                    success = f"Successfully uploaded {upload.entry_count} positions from {filename}"
+                else:
+                    error = f"Unsupported upload type: {upload_type}"
+
+            except ValueError as exc:
+                error = str(exc)
+            except Exception as exc:
+                error = f"Error uploading file: {str(exc)}"
+    else:
+        form = AccountUploadForm()
+
+    # Get all uploads for the current user
+    if current_user:
+        uploads = AccountUpload.objects.filter(user=current_user).order_by('-upload_datetime')
+    else:
+        uploads = AccountUpload.objects.none()
+
+    context = {
+        'form': form,
+        'error': error,
+        'success': success,
+        'uploads': uploads,
+        'current_user': current_user,
+    }
+
+    return render(request, "glidepath_app/accounts.html", context)
+
+
+def view_account_upload(request, upload_id):
+    """View details of a specific account upload."""
+    try:
+        upload = AccountUpload.objects.get(id=upload_id)
+        positions = AccountPosition.objects.filter(upload=upload).order_by('account_number', 'symbol')
+
+        context = {
+            'upload': upload,
+            'positions': positions,
+        }
+        return render(request, "glidepath_app/account_upload_detail.html", context)
+    except AccountUpload.DoesNotExist:
+        return redirect('accounts')
+
+
+@require_POST
+def delete_account_upload(request, upload_id):
+    """Delete an account upload and all its positions."""
+    try:
+        upload = AccountUpload.objects.get(id=upload_id)
+        upload.delete()
+    except AccountUpload.DoesNotExist:
+        pass
+    return redirect('accounts')
 
 
 def portfolios_view(request):

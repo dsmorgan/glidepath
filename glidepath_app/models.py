@@ -193,3 +193,54 @@ class User(models.Model):
     def is_internal_user(self) -> bool:
         """Check if user is an internal (non-identity provider) user."""
         return self.identity_provider is None
+
+
+class AccountUpload(models.Model):
+    """Stores metadata about uploaded account position CSV files."""
+
+    UPLOAD_TYPE_CHOICES = [
+        ('fidelity', 'Fidelity'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="account_uploads")
+    upload_datetime = models.DateTimeField(auto_now_add=True)
+    file_datetime = models.CharField(max_length=200, help_text="Raw date/time string from CSV file")
+    upload_type = models.CharField(max_length=50, choices=UPLOAD_TYPE_CHOICES)
+    filename = models.CharField(max_length=255)
+    entry_count = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ["-upload_datetime"]
+
+    def __str__(self) -> str:
+        return f"{self.user.username} - {self.filename} ({self.upload_datetime})"
+
+
+class AccountPosition(models.Model):
+    """Stores individual position records from account CSV uploads."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    upload = models.ForeignKey(AccountUpload, on_delete=models.CASCADE, related_name="positions")
+    account_number = models.CharField(max_length=50)
+    account_name = models.CharField(max_length=200)
+    symbol = models.CharField(max_length=50)  # Normalized symbol
+    description = models.CharField(max_length=500)
+    quantity = models.CharField(max_length=50, blank=True)
+    last_price = models.CharField(max_length=50, blank=True)
+    last_price_change = models.CharField(max_length=50, blank=True)
+    current_value = models.CharField(max_length=50, blank=True)
+    todays_gain_loss_dollar = models.CharField(max_length=50, blank=True)
+    todays_gain_loss_percent = models.CharField(max_length=50, blank=True)
+    total_gain_loss_dollar = models.CharField(max_length=50, blank=True)
+    total_gain_loss_percent = models.CharField(max_length=50, blank=True)
+    percent_of_account = models.CharField(max_length=50, blank=True)
+    cost_basis_total = models.CharField(max_length=50, blank=True)
+    average_cost_basis = models.CharField(max_length=50, blank=True)
+    type = models.CharField(max_length=50, blank=True)
+
+    class Meta:
+        ordering = ["upload", "account_number", "symbol"]
+
+    def __str__(self) -> str:
+        return f"{self.symbol} - {self.account_number}"

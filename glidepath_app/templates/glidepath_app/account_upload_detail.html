@@ -1,0 +1,96 @@
+{% extends 'glidepath_app/base.html' %}
+{% block title %}Glidepath - Upload Details{% endblock %}
+{% block content %}
+<div class="bg-white shadow rounded-lg p-8">
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">Upload Details</h1>
+        <div class="text-sm text-gray-600">
+            <p><strong>Uploaded:</strong> <span class="upload-datetime" data-utc="{{ upload.upload_datetime.isoformat }}">{{ upload.upload_datetime|date:"Y-m-d H:i:s" }} UTC</span></p>
+            <p><strong>File Date:</strong> {{ upload.file_datetime }}</p>
+            <p><strong>Type:</strong> {{ upload.get_upload_type_display }}</p>
+            <p><strong>Filename:</strong> {{ upload.filename }}</p>
+            <p><strong>Number of Entries:</strong> {{ upload.entry_count }}</p>
+        </div>
+    </div>
+
+    <div class="mb-6">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Positions</h2>
+        {% if positions %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 border text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Account Number</th>
+                        <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Account Name</th>
+                        <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Symbol</th>
+                        <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                        <th scope="col" class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                        <th scope="col" class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Last Price</th>
+                        <th scope="col" class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Last Price Change</th>
+                        <th scope="col" class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Current Value</th>
+                        <th scope="col" class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Today's G/L $</th>
+                        <th scope="col" class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Today's G/L %</th>
+                        <th scope="col" class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total G/L $</th>
+                        <th scope="col" class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total G/L %</th>
+                        <th scope="col" class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">% of Account</th>
+                        <th scope="col" class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Cost Basis Total</th>
+                        <th scope="col" class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Cost Basis</th>
+                        <th scope="col" class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for position in positions %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-3 py-2 whitespace-nowrap">{{ position.account_number }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap">{{ position.account_name }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap font-semibold">{{ position.symbol }}</td>
+                        <td class="px-3 py-2">{{ position.description }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-right">{{ position.quantity }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-right">{{ position.last_price }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-right">{{ position.last_price_change }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-right">{{ position.current_value }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-right">{{ position.todays_gain_loss_dollar }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-right">{{ position.todays_gain_loss_percent }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-right">{{ position.total_gain_loss_dollar }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-right">{{ position.total_gain_loss_percent }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-right">{{ position.percent_of_account }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-right">{{ position.cost_basis_total }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-right">{{ position.average_cost_basis }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap">{{ position.type }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-8 text-gray-500">
+            No positions found in this upload.
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="mt-8">
+        <a href="{% url 'accounts' %}" class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+            </svg>
+            Back to Accounts
+        </a>
+    </div>
+</div>
+
+<!-- JavaScript to convert UTC to local time -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const datetimeElements = document.querySelectorAll('.upload-datetime');
+    datetimeElements.forEach(function(element) {
+        const utcDateStr = element.getAttribute('data-utc');
+        if (utcDateStr) {
+            const date = new Date(utcDateStr);
+            const localDateStr = date.toLocaleString();
+            element.textContent = localDateStr;
+        }
+    });
+});
+</script>
+{% endblock %}
