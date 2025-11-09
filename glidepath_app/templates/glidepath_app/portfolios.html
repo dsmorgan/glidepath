@@ -226,29 +226,18 @@
                 // Initialize accordion header metrics and table values
                 document.addEventListener('DOMContentLoaded', function() {
                     const categoryData = {{ analysis_data.category_details_json|safe }};
-                    console.log('Category Data:', categoryData);
-                    console.log('Category Data length:', categoryData.length);
                     categoryData.forEach((category, index) => {
-                        console.log(`Processing category ${index}:`, category);
                         const idx = index + 1;
                         const currentSpan = document.getElementById(`current-${idx}`);
                         const currentPctSpan = document.getElementById(`current-pct-${idx}`);
                         const targetSpan = document.getElementById(`target-${idx}`);
                         const diffSpan = document.getElementById(`diff-${idx}`);
 
-                        console.log(`Elements found for ${idx}:`, {currentSpan, currentPctSpan, targetSpan, diffSpan});
-
                         if (currentSpan) {
                             currentSpan.textContent = `$${formatNumber(category.subtotal)}`;
-                            console.log(`Set current-${idx} to:`, currentSpan.textContent);
-                        } else {
-                            console.error(`Element current-${idx} not found!`);
                         }
                         if (currentPctSpan) {
                             currentPctSpan.textContent = `Actual: ${parseFloat(category.current_pct || 0).toFixed(2)}%`;
-                            console.log(`Set current-pct-${idx} to:`, currentPctSpan.textContent);
-                        } else {
-                            console.error(`Element current-pct-${idx} not found!`);
                         }
                         if (targetSpan) {
                             targetSpan.textContent = `Target: ${parseFloat(category.target_pct || 0).toFixed(2)}%`;
