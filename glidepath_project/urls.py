@@ -14,6 +14,7 @@ from glidepath_app.views import (
     delete_fund,
     user_detail,
     delete_user,
+    select_user,
     identity_provider_detail,
     delete_identity_provider,
 )
@@ -31,6 +32,7 @@ urlpatterns = [
     path('settings/users/add/', user_detail, name='user_add'),
     path('settings/users/<uuid:user_id>/edit/', user_detail, name='user_edit'),
     path('settings/users/<uuid:user_id>/delete/', delete_user, name='user_delete'),
+    path('settings/users/<uuid:user_id>/select/', select_user, name='select_user'),
     path('settings/identity-providers/add/', identity_provider_detail, name='identity_provider_add'),
     path('settings/identity-providers/<uuid:provider_id>/edit/', identity_provider_detail, name='identity_provider_edit'),
     path('settings/identity-providers/<uuid:provider_id>/delete/', delete_identity_provider, name='identity_provider_delete'),

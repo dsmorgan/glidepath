@@ -16,7 +16,6 @@
         <table class="w-full border-collapse">
             <thead>
                 <tr class="bg-gray-100 border-b">
-                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-900">ID</th>
                     <th class="px-4 py-3 text-left text-sm font-semibold text-gray-900">Username</th>
                     <th class="px-4 py-3 text-left text-sm font-semibold text-gray-900">Email</th>
                     <th class="px-4 py-3 text-left text-sm font-semibold text-gray-900">Name</th>
@@ -29,7 +28,6 @@
             <tbody>
                 {% for user in users %}
                 <tr class="border-b hover:bg-gray-50">
-                    <td class="px-4 py-3 text-sm text-gray-700">{{ user.id|truncatewords:2 }}</td>
                     <td class="px-4 py-3 text-sm text-gray-700">{{ user.username }}</td>
                     <td class="px-4 py-3 text-sm text-gray-700">{{ user.email }}</td>
                     <td class="px-4 py-3 text-sm text-gray-700">{{ user.name|default:"—" }}</td>
