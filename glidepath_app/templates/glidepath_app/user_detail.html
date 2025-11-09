@@ -6,6 +6,14 @@
         {% if is_edit %}Edit User{% else %}Add New User{% endif %}
     </h1>
 
+    {% if is_edit and user %}
+    <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+        <label class="block text-sm font-medium text-gray-700 mb-1">User ID</label>
+        <div class="text-sm text-gray-600 font-mono">{{ user.id }}</div>
+        <p class="text-xs text-gray-500 mt-1">This is the unique identifier for this user and cannot be changed.</p>
+    </div>
+    {% endif %}
+
     <form method="post" class="space-y-6">
         {% csrf_token %}
 

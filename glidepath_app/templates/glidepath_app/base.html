@@ -50,21 +50,33 @@
                     {% if all_users %}
                     <div class="relative group">
                         <button class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                            Users
+                            {% if selected_user %}
+                                <span class="font-semibold">{{ selected_user.username }}</span>
+                            {% else %}
+                                Select User
+                            {% endif %}
                             <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
                             </svg>
                         </button>
                         <div class="hidden group-hover:block absolute right-0 mt-0 w-64 bg-white rounded-md shadow-lg z-50 py-2">
                             {% for user in all_users %}
-                            <div class="px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm text-gray-700 border-b">
-                                <div class="font-medium">{{ user.username }}</div>
-                                <div class="text-xs text-gray-500">{{ user.email }}</div>
-                                <div class="text-xs text-gray-500">
-                                    {% if user.is_admin %}Admin{% else %}User{% endif %}
-                                    {% if user.disabled %} • <span class="text-red-600">Disabled</span>{% endif %}
-                                </div>
-                            </div>
+                            <form method="post" action="{% url 'select_user' user.id %}" class="m-0">
+                                {% csrf_token %}
+                                <button type="submit" class="w-full text-left px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm text-gray-700 border-b {% if selected_user and selected_user.id == user.id %}bg-indigo-50{% endif %}">
+                                    <div class="font-medium">
+                                        {{ user.username }}
+                                        {% if selected_user and selected_user.id == user.id %}
+                                        <span class="ml-2 text-indigo-600">✓</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="text-xs text-gray-500">{{ user.email }}</div>
+                                    <div class="text-xs text-gray-500">
+                                        {% if user.is_admin %}Admin{% else %}User{% endif %}
+                                        {% if user.disabled %} • <span class="text-red-600">Disabled</span>{% endif %}
+                                    </div>
+                                </button>
+                            </form>
                             {% endfor %}
                         </div>
                     </div>

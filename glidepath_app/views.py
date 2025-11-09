@@ -509,3 +509,17 @@ def delete_identity_provider(request, provider_id):
     except IdentityProvider.DoesNotExist:
         pass
     return redirect('settings')
+
+
+@require_POST
+def select_user(request, user_id):
+    """Select a user for filtering accounts, portfolios, and models."""
+    try:
+        user = User.objects.get(id=user_id)
+        request.session['selected_user_id'] = str(user.id)
+    except User.DoesNotExist:
+        pass
+
+    # Get the referer URL or default to home
+    referer = request.META.get('HTTP_REFERER', '/')
+    return redirect(referer)
