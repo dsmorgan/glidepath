@@ -23,7 +23,11 @@ TEMPLATES: list[dict] = [
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [],
         'APP_DIRS': True,
-        'OPTIONS': {'context_processors': []},
+        'OPTIONS': {
+            'context_processors': [
+                'glidepath_app.context_processors.users_context',
+            ],
+        },
     }
 ]
 
