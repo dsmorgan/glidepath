@@ -310,14 +310,20 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
     formatted_category_details = []
     for category_key in sorted(category_details.keys()):
         details = category_details[category_key]
+        subtotal_float = float(details['total'])
+
+        # Calculate current percentage (always, even without glidepath rule)
+        current_pct = (subtotal_float / float(total_value) * 100) if total_value > 0 else 0
+
         formatted_category_details.append({
             'category': details.get('category_name', category_key),  # Use category_name for display
             'asset_class': details['asset_class'],
-            'subtotal': details['total'],
+            'subtotal': subtotal_float,  # Convert Decimal to float for JSON serialization
+            'current_pct': round(current_pct, 2),  # Always include current percentage
             'symbols': [
                 {
                     'ticker': ticker,
-                    'value': symbol_data['value'] if isinstance(symbol_data, dict) else symbol_data,
+                    'value': float(symbol_data['value']) if isinstance(symbol_data, dict) else float(symbol_data),  # Convert to float
                     'fund_name': symbol_data.get('fund_name') if isinstance(symbol_data, dict) else None
                 }
                 for ticker, symbol_data in sorted(details['symbols'].items())
@@ -370,9 +376,6 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
                 target_pct = target_category_breakdown.get(category_key, 0)
                 current_value = float(category_item['subtotal'])
 
-                # Calculate current percentage
-                current_pct = (current_value / total_value_float * 100) if total_value_float > 0 else 0
-
                 # Calculate target dollar amount
                 target_dollar = (total_value_float * target_pct / 100) if target_pct > 0 else 0
 
@@ -380,7 +383,7 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
                 difference = target_dollar - current_value
 
                 category_item['target_pct'] = round(target_pct, 2)
-                category_item['current_pct'] = round(current_pct, 2)
+                # current_pct is already calculated above, no need to recalculate
                 category_item['target_dollar'] = round(target_dollar, 2)
                 category_item['difference'] = round(difference, 2)
 
