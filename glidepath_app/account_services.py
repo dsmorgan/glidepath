@@ -317,16 +317,19 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
                 target_category_breakdown[cat_alloc.asset_category.name] = float(cat_alloc.percentage)
 
             # Add target and difference information to category details
+            # Convert total_value to float for calculations to avoid Decimal/float type issues
+            total_value_float = float(total_value)
+
             for category_item in formatted_category_details:
                 category_name = category_item['category']
                 target_pct = target_category_breakdown.get(category_name, 0)
-                current_value = category_item['subtotal']
+                current_value = float(category_item['subtotal'])
 
                 # Calculate current percentage
-                current_pct = (current_value / total_value * 100) if total_value > 0 else 0
+                current_pct = (current_value / total_value_float * 100) if total_value_float > 0 else 0
 
                 # Calculate target dollar amount
-                target_dollar = (total_value * target_pct / 100) if target_pct > 0 else 0
+                target_dollar = (total_value_float * target_pct / 100) if target_pct > 0 else 0
 
                 # Calculate difference (positive = under target, negative = over target)
                 difference = target_dollar - current_value
