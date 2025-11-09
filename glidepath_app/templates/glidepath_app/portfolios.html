@@ -169,23 +169,14 @@
                         <div class="accordion-content hidden bg-white border-t border-gray-200">
                             <div class="overflow-x-auto">
                                 <table class="w-full text-sm">
-                                    <thead class="bg-gray-100 border-b border-gray-300">
-                                        <tr>
-                                            <th class="px-6 py-3 text-left font-medium text-gray-700">Ticker</th>
-                                            <th class="px-6 py-3 text-right font-medium text-gray-700">Value</th>
-                                            <th class="px-6 py-3 text-right font-medium text-gray-700">Current %</th>
-                                            <th class="px-6 py-3 text-right font-medium text-gray-700">Target %</th>
-                                            <th class="px-6 py-3 text-right font-medium text-gray-700">Difference</th>
-                                        </tr>
-                                    </thead>
                                     <tbody>
-                                        {% for symbol_item in category_group.symbols %}
-                                        <tr class="border-b border-gray-200 hover:bg-gray-50">
-                                            <td class="px-6 py-3 text-gray-700">{{ symbol_item.ticker }}</td>
-                                            <td class="px-6 py-3 text-right text-gray-700 font-mono">${{ symbol_item.value|floatformat:2 }}</td>
-                                            <td class="px-6 py-3 text-right text-gray-700">{{ category_group.current_pct|floatformat:2 }}%</td>
-                                            <td class="px-6 py-3 text-right text-gray-700">{{ category_group.target_pct|floatformat:2 }}%</td>
-                                            <td class="px-6 py-3 text-right text-gray-700 font-mono">
+                                        <!-- Category Summary Row -->
+                                        <tr class="bg-blue-50 border-b border-gray-300 font-semibold">
+                                            <td class="px-6 py-3 text-gray-900">Category Total</td>
+                                            <td class="px-6 py-3 text-right text-gray-900 font-mono">${{ category_group.subtotal|floatformat:2 }}</td>
+                                            <td class="px-6 py-3 text-right text-gray-900">{{ category_group.current_pct|floatformat:2 }}%</td>
+                                            <td class="px-6 py-3 text-right text-gray-900">{{ category_group.target_pct|floatformat:2 }}%</td>
+                                            <td class="px-6 py-3 text-right text-gray-900 font-mono">
                                                 {% if category_group.difference > 0 %}
                                                 <span class="text-green-600">+${{ category_group.difference|floatformat:2 }}</span>
                                                 {% elif category_group.difference < 0 %}
@@ -194,6 +185,13 @@
                                                 <span class="text-gray-600">$0.00</span>
                                                 {% endif %}
                                             </td>
+                                        </tr>
+                                        <!-- Symbol Rows -->
+                                        {% for symbol_item in category_group.symbols %}
+                                        <tr class="border-b border-gray-200 hover:bg-gray-50">
+                                            <td class="px-6 py-3 text-gray-700 pl-12">{{ symbol_item.ticker }}</td>
+                                            <td class="px-6 py-3 text-right text-gray-700 font-mono">${{ symbol_item.value|floatformat:2 }}</td>
+                                            <td colspan="3"></td>
                                         </tr>
                                         {% endfor %}
                                     </tbody>

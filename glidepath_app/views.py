@@ -638,7 +638,7 @@ def edit_portfolio(request, portfolio_id):
 
 
 def download_portfolio_csv(request, portfolio_id):
-    """Download a CSV of all positions in the portfolio."""
+    """Download a CSV of portfolio analysis data (category breakdown)."""
     import csv
     from io import StringIO
 
@@ -647,35 +647,8 @@ def download_portfolio_csv(request, portfolio_id):
     except Portfolio.DoesNotExist:
         return redirect('portfolios')
 
-    # Get all portfolio items
-    portfolio_items = PortfolioItem.objects.filter(portfolio=portfolio).values_list(
-        'account_number', 'symbol'
-    )
-
-    # Get the current user
-    selected_user_id = request.session.get('selected_user_id')
-    if selected_user_id:
-        try:
-            current_user = User.objects.get(id=selected_user_id)
-        except User.DoesNotExist:
-            current_user = User.objects.first()
-    else:
-        current_user = User.objects.first()
-
-    if not current_user:
-        return HttpResponse("No user selected", content_type="text/csv")
-
-    # Get the most recent positions for each account+symbol combination in the portfolio
-    positions = []
-    for account_number, symbol in portfolio_items:
-        position = AccountPosition.objects.filter(
-            upload__user=current_user,
-            account_number=account_number,
-            symbol=symbol
-        ).order_by('-upload__upload_datetime').first()
-
-        if position:
-            positions.append(position)
+    # Get portfolio analysis data
+    analysis_data = get_portfolio_analysis(portfolio)
 
     # Create CSV
     output = StringIO()
@@ -683,25 +656,42 @@ def download_portfolio_csv(request, portfolio_id):
 
     # Write header
     writer.writerow([
-        'Account Number', 'Account Name', 'Symbol', 'Description',
-        'Quantity', 'Last Price', 'Last Price Change', 'Current Value',
-        "Today's Gain/Loss $", "Today's Gain/Loss %",
-        'Total Gain/Loss $', 'Total Gain/Loss %',
-        '% of Account', 'Cost Basis Total', 'Average Cost Basis', 'Type'
+        'Category', 'Asset Class', 'Current Value', 'Current %', 'Target %', 'Difference'
     ])
 
-    # Write data
-    for pos in positions:
+    # Write category data
+    total_current = 0
+    total_target_pct = 0
+    total_difference = 0
+
+    for category_item in analysis_data.get('category_details', []):
         writer.writerow([
-            pos.account_number, pos.account_name, pos.symbol, pos.description,
-            pos.quantity, pos.last_price, pos.last_price_change, pos.current_value,
-            pos.todays_gain_loss_dollar, pos.todays_gain_loss_percent,
-            pos.total_gain_loss_dollar, pos.total_gain_loss_percent,
-            pos.percent_of_account, pos.cost_basis_total, pos.average_cost_basis, pos.type
+            category_item.get('category', ''),
+            category_item.get('asset_class', ''),
+            f"${category_item.get('subtotal', 0):.2f}",
+            f"{category_item.get('current_pct', 0):.2f}%",
+            f"{category_item.get('target_pct', 0):.2f}%",
+            f"${category_item.get('difference', 0):.2f}" if category_item.get('difference', 0) >= 0 else f"-${abs(category_item.get('difference', 0)):.2f}"
         ])
+        total_current += category_item.get('subtotal', 0)
+        total_target_pct += category_item.get('target_pct', 0)
+        total_difference += category_item.get('difference', 0)
+
+    # Write empty row before total
+    writer.writerow([])
+
+    # Write total row
+    writer.writerow([
+        'Total Portfolio',
+        '',
+        f"${total_current:.2f}",
+        '100.00%',
+        f"{total_target_pct:.2f}%",
+        f"${total_difference:.2f}" if total_difference >= 0 else f"-${abs(total_difference):.2f}"
+    ])
 
     response = HttpResponse(output.getvalue(), content_type='text/csv')
-    filename = f"{portfolio.name}.csv"
+    filename = f"{portfolio.name}_analysis.csv"
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
 

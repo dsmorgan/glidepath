@@ -297,7 +297,9 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
 
     if portfolio.ruleset and portfolio.year_born and portfolio.retirement_age:
         # Calculate years to retirement based on current year
-        years_to_retirement = portfolio.retirement_age - (current_year - portfolio.year_born)
+        # Formula: current_year - year_born - retirement_age
+        # Negative value = before retirement, Positive = after retirement
+        years_to_retirement = current_year - portfolio.year_born - portfolio.retirement_age
 
         # Find the glidepath rule for this retirement age
         from .models import GlidepathRule
