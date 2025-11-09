@@ -252,6 +252,9 @@ class Portfolio(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="portfolios")
     name = models.CharField(max_length=200)
+    ruleset = models.ForeignKey(
+        RuleSet, on_delete=models.SET_NULL, null=True, blank=True, related_name="portfolios"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

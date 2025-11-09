@@ -5,11 +5,11 @@ from django.shortcuts import render, redirect
 from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
-from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm, IdentityProviderForm, AccountUploadForm
+from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm, IdentityProviderForm, AccountUploadForm, PortfolioForm
 from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, AccountPosition, Portfolio, PortfolioItem
 from .services import export_glidepath_rules, import_glidepath_rules
 from .ticker_service import query_ticker as query_ticker_service
-from .account_services import import_fidelity_csv
+from .account_services import import_fidelity_csv, get_portfolio_analysis
 
 DEFAULT_COLORS = [
     "#4dc9f6",
@@ -433,6 +433,7 @@ def portfolios_view(request):
             error = "Portfolio name is required"
 
     # Get all portfolios for the current user
+    analysis_data = None
     if current_user:
         portfolios = Portfolio.objects.filter(user=current_user)
         selected_portfolio_id = request.GET.get('portfolio') or request.POST.get('selected_portfolio')
@@ -447,6 +448,10 @@ def portfolios_view(request):
         # Default to first portfolio if none selected
         if not selected_portfolio and portfolios.exists():
             selected_portfolio = portfolios.first()
+
+        # Get portfolio analysis if a portfolio is selected
+        if selected_portfolio:
+            analysis_data = get_portfolio_analysis(selected_portfolio)
     else:
         portfolios = Portfolio.objects.none()
         selected_portfolio = None
@@ -457,6 +462,7 @@ def portfolios_view(request):
         'portfolios': portfolios,
         'selected_portfolio': selected_portfolio,
         'current_user': current_user,
+        'analysis_data': analysis_data,
     }
 
     return render(request, "glidepath_app/portfolios.html", context)
@@ -474,7 +480,7 @@ def delete_portfolio(request, portfolio_id):
 
 
 def edit_portfolio(request, portfolio_id):
-    """Edit portfolio to select which account+symbol combinations to include."""
+    """Edit portfolio to select which account+symbol combinations to include and configure ruleset."""
     try:
         portfolio = Portfolio.objects.get(id=portfolio_id)
     except Portfolio.DoesNotExist:
@@ -491,6 +497,11 @@ def edit_portfolio(request, portfolio_id):
         current_user = User.objects.first()
 
     if request.method == "POST":
+        # Handle portfolio configuration (name and ruleset)
+        form = PortfolioForm(request.POST, instance=portfolio)
+        if form.is_valid():
+            form.save()
+
         # Clear existing items
         PortfolioItem.objects.filter(portfolio=portfolio).delete()
 
@@ -511,6 +522,9 @@ def edit_portfolio(request, portfolio_id):
                 continue
 
         return redirect('portfolios')
+
+    # Initialize form with current portfolio data
+    form = PortfolioForm(instance=portfolio)
 
     # Get all unique account+symbol combinations from the user's account positions
     if current_user:
@@ -549,6 +563,7 @@ def edit_portfolio(request, portfolio_id):
         'accounts_data': accounts_data,
         'selected_items': selected_items,
         'current_user': current_user,
+        'form': form,
     }
 
     return render(request, "glidepath_app/portfolio_edit.html", context)

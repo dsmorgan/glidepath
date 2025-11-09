@@ -1,10 +1,13 @@
-"""Service functions for importing and managing account position CSV uploads."""
+"""Service functions for importing and managing account position CSV uploads and portfolio analysis."""
 
 import csv
 import re
 from io import StringIO
+from decimal import Decimal
 from django.db import transaction
-from .models import AccountUpload, AccountPosition, User
+from django.db.models import Sum, DecimalField
+from django.db.models.functions import Coalesce
+from .models import AccountUpload, AccountPosition, User, Portfolio, Fund
 
 
 def normalize_symbol(symbol: str) -> str:
@@ -147,3 +150,144 @@ def import_fidelity_csv(file_obj, user: User, filename: str) -> AccountUpload:
         )
 
     return upload
+
+
+def get_portfolio_analysis(portfolio: Portfolio) -> dict:
+    """
+    Analyze a portfolio and generate breakdown data for charts and tables.
+
+    Returns a dict with:
+    - class_breakdown: Class-level allocation
+    - category_breakdown: Category-level allocation
+    - ticker_breakdown: Ticker-level allocation
+    - category_details: Detailed breakdown by category with symbols and subtotals
+    - total_value: Total portfolio value
+    """
+    from decimal import Decimal, ROUND_HALF_UP
+
+    # Get portfolio items
+    portfolio_items = portfolio.items.all()
+    if not portfolio_items:
+        return {
+            'class_breakdown': {},
+            'category_breakdown': {},
+            'ticker_breakdown': {},
+            'category_details': [],
+            'total_value': Decimal('0.00'),
+        }
+
+    # Get account numbers and symbols from portfolio
+    account_symbols = list(portfolio_items.values_list('account_number', 'symbol'))
+
+    # Get the most recent account upload for each account number
+    latest_uploads = {}
+    for account_number, symbol in account_symbols:
+        if account_number not in latest_uploads:
+            latest_upload = AccountUpload.objects.filter(
+                user=portfolio.user,
+                accountposition__account_number=account_number
+            ).order_by('-created_at').first()
+            if latest_upload:
+                latest_uploads[account_number] = latest_upload
+
+    # Aggregate positions by symbol
+    symbol_totals = {}  # symbol -> total current value (as Decimal)
+    for account_number, symbol in account_symbols:
+        upload = latest_uploads.get(account_number)
+        if not upload:
+            continue
+
+        positions = AccountPosition.objects.filter(
+            upload=upload,
+            account_number=account_number,
+            symbol=symbol
+        )
+
+        for position in positions:
+            # Parse current value, handling $ and commas
+            current_value_str = position.current_value.replace('$', '').replace(',', '').strip()
+            try:
+                current_value = Decimal(current_value_str) if current_value_str else Decimal('0')
+            except:
+                current_value = Decimal('0')
+
+            if symbol not in symbol_totals:
+                symbol_totals[symbol] = Decimal('0')
+            symbol_totals[symbol] += current_value
+
+    # Build breakdowns by looking up fund information
+    class_breakdown = {}  # class_name -> total value
+    category_breakdown = {}  # category_name -> total value
+    ticker_breakdown = {}  # ticker -> total value
+    category_details = {}  # category_name -> {'total': value, 'symbols': {...}}
+
+    for symbol, value in symbol_totals.items():
+        ticker_breakdown[symbol] = value
+
+        # Look up fund to get class and category
+        fund = Fund.objects.filter(ticker=symbol).first()
+
+        if fund and fund.category:
+            category = fund.category
+            asset_class = category.asset_class
+
+            # Track class breakdown
+            if asset_class.name not in class_breakdown:
+                class_breakdown[asset_class.name] = Decimal('0')
+            class_breakdown[asset_class.name] += value
+
+            # Track category breakdown
+            if category.name not in category_breakdown:
+                category_breakdown[category.name] = Decimal('0')
+            category_breakdown[category.name] += value
+
+            # Track category details
+            if category.name not in category_details:
+                category_details[category.name] = {
+                    'asset_class': asset_class.name,
+                    'total': Decimal('0'),
+                    'symbols': {}
+                }
+            category_details[category.name]['total'] += value
+            category_details[category.name]['symbols'][symbol] = value
+        else:
+            # Unknown category
+            if 'Unknown' not in category_details:
+                category_details['Unknown'] = {
+                    'asset_class': 'Unknown',
+                    'total': Decimal('0'),
+                    'symbols': {}
+                }
+            category_details['Unknown']['total'] += value
+            category_details['Unknown']['symbols'][symbol] = value
+            if 'Unknown' not in class_breakdown:
+                class_breakdown['Unknown'] = Decimal('0')
+            class_breakdown['Unknown'] += value
+            if 'Unknown' not in category_breakdown:
+                category_breakdown['Unknown'] = Decimal('0')
+            category_breakdown['Unknown'] += value
+
+    # Calculate total value
+    total_value = sum(symbol_totals.values()) if symbol_totals else Decimal('0')
+
+    # Format category details for template
+    formatted_category_details = []
+    for category_name in sorted(category_details.keys()):
+        details = category_details[category_name]
+        formatted_category_details.append({
+            'category': category_name,
+            'asset_class': details['asset_class'],
+            'subtotal': details['total'],
+            'symbols': [
+                {'ticker': ticker, 'value': value}
+                for ticker, value in sorted(details['symbols'].items())
+            ]
+        })
+
+    return {
+        'class_breakdown': {k: float(v) for k, v in class_breakdown.items()},
+        'category_breakdown': {k: float(v) for k, v in category_breakdown.items()},
+        'ticker_breakdown': {k: float(v) for k, v in ticker_breakdown.items()},
+        'category_details': formatted_category_details,
+        'total_value': float(total_value),
+    }

@@ -96,29 +96,193 @@
         </div>
     </div>
 
-    <!-- Portfolio Summary -->
+    <!-- Portfolio Output -->
     {% if selected_portfolio %}
-    <div class="mt-8">
-        <h2 class="text-xl font-semibold text-gray-800 mb-4">Portfolio: {{ selected_portfolio.name }}</h2>
-        {% with item_count=selected_portfolio.items.count %}
-        <div class="bg-blue-50 border-l-4 border-blue-400 p-4">
-            <div class="flex">
-                <div class="flex-shrink-0">
-                    <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
-                    </svg>
-                </div>
-                <div class="ml-3">
-                    <p class="text-sm text-blue-700">
-                        This portfolio contains {{ item_count }} account+symbol combination{{ item_count|pluralize }}.
-                        {% if item_count == 0 %}
-                        Click "Edit" to add positions to this portfolio.
-                        {% endif %}
-                    </p>
+    <div class="mt-8 bg-white shadow rounded-lg p-8">
+        <!-- Portfolio Header -->
+        <div class="mb-8 pb-6 border-b border-gray-200">
+            <h2 class="text-3xl font-bold text-gray-900 mb-2">{{ selected_portfolio.name }}</h2>
+            <p class="text-gray-600">
+                Glidepath Rule:
+                {% if selected_portfolio.ruleset %}
+                    <span class="font-semibold">{{ selected_portfolio.ruleset.name }}</span>
+                {% else %}
+                    <span class="italic text-gray-500">No glidepath rule assigned</span>
+                {% endif %}
+            </p>
+        </div>
+
+        {% if selected_portfolio.items.count > 0 %}
+            {% if analysis_data.total_value > 0 %}
+            <!-- Charts Section -->
+            <div class="mb-8">
+                <h3 class="text-2xl font-semibold text-gray-900 mb-6">Allocation Breakdown</h3>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                    <!-- Class Breakdown Pie Chart -->
+                    <div class="bg-gray-50 rounded-lg p-6 shadow">
+                        <h4 class="text-lg font-semibold text-gray-900 mb-4">Asset Class</h4>
+                        <canvas id="classChart" height="200"></canvas>
+                    </div>
+
+                    <!-- Category Breakdown Pie Chart -->
+                    <div class="bg-gray-50 rounded-lg p-6 shadow">
+                        <h4 class="text-lg font-semibold text-gray-900 mb-4">Asset Category</h4>
+                        <canvas id="categoryChart" height="200"></canvas>
+                    </div>
+
+                    <!-- Ticker Breakdown Pie Chart -->
+                    <div class="bg-gray-50 rounded-lg p-6 shadow">
+                        <h4 class="text-lg font-semibold text-gray-900 mb-4">Ticker Symbols</h4>
+                        <canvas id="tickerChart" height="200"></canvas>
+                    </div>
                 </div>
             </div>
+
+            <!-- Breakdown Table -->
+            <div class="mb-8">
+                <h3 class="text-2xl font-semibold text-gray-900 mb-6">Detailed Breakdown by Category</h3>
+
+                <div class="overflow-x-auto">
+                    <table class="min-w-full border-collapse">
+                        <thead>
+                            <tr class="bg-gray-100 border-b-2 border-gray-300">
+                                <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900">Category</th>
+                                <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900">Ticker</th>
+                                <th class="px-6 py-3 text-right text-sm font-semibold text-gray-900">Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for category_group in analysis_data.category_details %}
+                            <tr class="border-b border-gray-200 bg-blue-50">
+                                <td colspan="3" class="px-6 py-3">
+                                    <span class="font-semibold text-gray-900">{{ category_group.category }}</span>
+                                    {% if category_group.asset_class != 'Unknown' %}
+                                    <span class="text-sm text-gray-600 ml-2">({{ category_group.asset_class }})</span>
+                                    {% else %}
+                                    <span class="text-sm text-red-600 ml-2">(No fund mapping)</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% for symbol_item in category_group.symbols %}
+                            <tr class="border-b border-gray-200">
+                                <td class="px-6 py-3"></td>
+                                <td class="px-6 py-3 text-gray-700">{{ symbol_item.ticker }}</td>
+                                <td class="px-6 py-3 text-right text-gray-700 font-mono">${{ symbol_item.value|floatformat:2 }}</td>
+                            </tr>
+                            {% endfor %}
+                            <tr class="border-b-2 border-gray-300 bg-gray-50">
+                                <td colspan="2" class="px-6 py-3 text-right font-semibold text-gray-900">{{ category_group.category }} Subtotal:</td>
+                                <td class="px-6 py-3 text-right font-semibold text-gray-900 font-mono">${{ category_group.subtotal|floatformat:2 }}</td>
+                            </tr>
+                            {% endfor %}
+
+                            <!-- Total Row -->
+                            <tr class="bg-indigo-50">
+                                <td colspan="2" class="px-6 py-4 text-right text-lg font-bold text-gray-900">Total Portfolio Value:</td>
+                                <td class="px-6 py-4 text-right text-lg font-bold text-indigo-600 font-mono">${{ analysis_data.total_value|floatformat:2 }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Chart.js Scripts -->
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <script>
+                // Define colors for pie charts
+                const classColors = [
+                    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                    '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF9F40'
+                ];
+
+                // Class Breakdown Chart
+                const classCtx = document.getElementById('classChart').getContext('2d');
+                const classData = {{ analysis_data.class_breakdown|safe }};
+                new Chart(classCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: Object.keys(classData),
+                        datasets: [{
+                            data: Object.values(classData),
+                            backgroundColor: classColors.slice(0, Object.keys(classData).length),
+                            borderColor: '#fff',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+
+                // Category Breakdown Chart
+                const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+                const categoryData = {{ analysis_data.category_breakdown|safe }};
+                new Chart(categoryCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: Object.keys(categoryData),
+                        datasets: [{
+                            data: Object.values(categoryData),
+                            backgroundColor: classColors.slice(0, Object.keys(categoryData).length),
+                            borderColor: '#fff',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+
+                // Ticker Breakdown Chart
+                const tickerCtx = document.getElementById('tickerChart').getContext('2d');
+                const tickerData = {{ analysis_data.ticker_breakdown|safe }};
+                new Chart(tickerCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: Object.keys(tickerData),
+                        datasets: [{
+                            data: Object.values(tickerData),
+                            backgroundColor: classColors.slice(0, Object.keys(tickerData).length),
+                            borderColor: '#fff',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    font: {
+                                        size: 10
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            </script>
+            {% else %}
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                <p class="text-yellow-700">Portfolio has no positions or all positions lack value information.</p>
+            </div>
+            {% endif %}
+        {% else %}
+        <div class="bg-blue-50 border-l-4 border-blue-400 p-4">
+            <p class="text-blue-700">No positions added to this portfolio yet. Click "Edit" to add account+symbol combinations.</p>
         </div>
-        {% endwith %}
+        {% endif %}
     </div>
     {% endif %}
 

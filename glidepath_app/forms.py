@@ -1,5 +1,5 @@
 from django import forms
-from .models import APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload
+from .models import APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, Portfolio, RuleSet
 from django.contrib.auth.hashers import make_password
 
 
@@ -260,3 +260,29 @@ class IdentityProviderForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['name_path'].required = False
         self.fields['redirect_url'].required = False
+
+
+class PortfolioForm(forms.ModelForm):
+    """Form for creating and editing portfolios."""
+
+    class Meta:
+        model = Portfolio
+        fields = ['name', 'ruleset']
+        widgets = {
+            'name': forms.TextInput(attrs={
+                'class': 'w-full border border-gray-300 rounded-md p-2',
+                'placeholder': 'Enter portfolio name'
+            }),
+            'ruleset': forms.Select(attrs={
+                'class': 'w-full border border-gray-300 rounded-md p-2'
+            }),
+        }
+        labels = {
+            'name': 'Portfolio Name',
+            'ruleset': 'Glidepath Rule',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['ruleset'].empty_label = "None (No glidepath rule)"
+        self.fields['ruleset'].required = False
