@@ -5,8 +5,8 @@ from django.shortcuts import render, redirect
 from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
-from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm
-from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory
+from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm, IdentityProviderForm
+from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory, User, IdentityProvider
 from .services import export_glidepath_rules, import_glidepath_rules
 from .ticker_service import query_ticker as query_ticker_service
 
@@ -179,7 +179,7 @@ def home(request):
 
 
 def settings_view(request):
-    """Settings page view - manage API keys and configuration."""
+    """Settings page view - manage API keys, users, and identity providers."""
     settings = APISettings.get_settings()
     success_message = None
 
@@ -191,9 +191,15 @@ def settings_view(request):
     else:
         form = APISettingsForm(instance=settings)
 
+    # Get all users and identity providers
+    users = User.objects.all().order_by('username')
+    identity_providers = IdentityProvider.objects.all().order_by('name')
+
     context = {
         "form": form,
         "success_message": success_message,
+        "users": users,
+        "identity_providers": identity_providers,
     }
 
     return render(request, "glidepath_app/settings.html", context)
@@ -431,3 +437,75 @@ def delete_fund(request, fund_id):
         return redirect('funds')
     except Fund.DoesNotExist:
         return redirect('funds')
+
+
+def user_detail(request, user_id=None):
+    """Add or edit a user account."""
+    user = None
+    if user_id:
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return redirect('settings')
+
+    if request.method == 'POST':
+        form = UserForm(request.POST, instance=user)
+        if form.is_valid():
+            form.save()
+            return redirect('settings')
+    else:
+        form = UserForm(instance=user)
+
+    context = {
+        'form': form,
+        'is_edit': user is not None,
+        'user': user,
+    }
+    return render(request, 'glidepath_app/user_detail.html', context)
+
+
+@require_POST
+def delete_user(request, user_id):
+    """Delete a user account."""
+    try:
+        user = User.objects.get(id=user_id)
+        user.delete()
+    except User.DoesNotExist:
+        pass
+    return redirect('settings')
+
+
+def identity_provider_detail(request, provider_id=None):
+    """Add or edit an identity provider configuration."""
+    provider = None
+    if provider_id:
+        try:
+            provider = IdentityProvider.objects.get(id=provider_id)
+        except IdentityProvider.DoesNotExist:
+            return redirect('settings')
+
+    if request.method == 'POST':
+        form = IdentityProviderForm(request.POST, instance=provider)
+        if form.is_valid():
+            form.save()
+            return redirect('settings')
+    else:
+        form = IdentityProviderForm(instance=provider)
+
+    context = {
+        'form': form,
+        'is_edit': provider is not None,
+        'provider': provider,
+    }
+    return render(request, 'glidepath_app/identity_provider_detail.html', context)
+
+
+@require_POST
+def delete_identity_provider(request, provider_id):
+    """Delete an identity provider configuration."""
+    try:
+        provider = IdentityProvider.objects.get(id=provider_id)
+        provider.delete()
+    except IdentityProvider.DoesNotExist:
+        pass
+    return redirect('settings')

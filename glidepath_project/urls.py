@@ -12,6 +12,10 @@ from glidepath_app.views import (
     query_ticker,
     fund_detail,
     delete_fund,
+    user_detail,
+    delete_user,
+    identity_provider_detail,
+    delete_identity_provider,
 )
 
 urlpatterns = [
@@ -24,6 +28,12 @@ urlpatterns = [
     path('portfolios/', portfolios_view, name='portfolios'),
     path('modeling/', modeling_view, name='modeling'),
     path('settings/', settings_view, name='settings'),
+    path('settings/users/add/', user_detail, name='user_add'),
+    path('settings/users/<uuid:user_id>/edit/', user_detail, name='user_edit'),
+    path('settings/users/<uuid:user_id>/delete/', delete_user, name='user_delete'),
+    path('settings/identity-providers/add/', identity_provider_detail, name='identity_provider_add'),
+    path('settings/identity-providers/<uuid:provider_id>/edit/', identity_provider_detail, name='identity_provider_edit'),
+    path('settings/identity-providers/<uuid:provider_id>/delete/', delete_identity_provider, name='identity_provider_delete'),
     path('logout/', logout_view, name='logout'),
     path('export/', export_rules, name='export_rules'),
     path('api/query-ticker/', query_ticker, name='query_ticker'),
