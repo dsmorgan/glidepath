@@ -287,13 +287,16 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
         })
 
     # Calculate target allocations from glidepath rule if available
+    from datetime import datetime
+    current_year = datetime.now().year
+
     target_class_breakdown = {}
     target_category_breakdown = {}
+    years_to_retirement = None
+    matching_rule = None
 
     if portfolio.ruleset and portfolio.year_born and portfolio.retirement_age:
-        from datetime import datetime
-        # Calculate years to retirement
-        current_year = datetime.now().year
+        # Calculate years to retirement based on current year
         years_to_retirement = portfolio.retirement_age - (current_year - portfolio.year_born)
 
         # Find the glidepath rule for this retirement age
@@ -313,6 +316,26 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
             for cat_alloc in matching_rule.category_allocations.all():
                 target_category_breakdown[cat_alloc.asset_category.name] = float(cat_alloc.percentage)
 
+            # Add target and difference information to category details
+            for category_item in formatted_category_details:
+                category_name = category_item['category']
+                target_pct = target_category_breakdown.get(category_name, 0)
+                current_value = category_item['subtotal']
+
+                # Calculate current percentage
+                current_pct = (current_value / total_value * 100) if total_value > 0 else 0
+
+                # Calculate target dollar amount
+                target_dollar = (total_value * target_pct / 100) if target_pct > 0 else 0
+
+                # Calculate difference (positive = under target, negative = over target)
+                difference = target_dollar - current_value
+
+                category_item['target_pct'] = round(target_pct, 2)
+                category_item['current_pct'] = round(current_pct, 2)
+                category_item['target_dollar'] = round(target_dollar, 2)
+                category_item['difference'] = round(difference, 2)
+
     return {
         'class_breakdown': {k: float(v) for k, v in class_breakdown.items()},
         'category_breakdown': {k: float(v) for k, v in category_breakdown.items()},
@@ -320,4 +343,8 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
         'target_category_breakdown': target_category_breakdown,
         'category_details': formatted_category_details,
         'total_value': float(total_value),
+        'current_year': current_year,
+        'year_born': portfolio.year_born,
+        'retirement_age': portfolio.retirement_age,
+        'years_to_retirement': years_to_retirement,
     }

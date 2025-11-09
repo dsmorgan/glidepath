@@ -1,0 +1,207 @@
+{% extends 'glidepath_app/base.html' %}
+{% block title %}Glidepath - Create Portfolio{% endblock %}
+{% block content %}
+<div class="bg-white shadow rounded-lg p-8">
+    <h1 class="text-3xl font-bold text-gray-900 mb-6">Create New Portfolio</h1>
+
+    <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                </svg>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-blue-700">
+                    Create a new portfolio by selecting a name, optional glidepath rule, and which account/symbol combinations to include.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <form method="post" id="portfolio-form">
+        {% csrf_token %}
+
+        <!-- Portfolio Configuration Section -->
+        <div class="bg-gray-50 border border-gray-300 rounded-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Portfolio Configuration</h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <!-- Portfolio Name -->
+                <div>
+                    <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                        {{ form.name.label }} <span class="text-red-600">*</span>
+                    </label>
+                    {{ form.name }}
+                    {% if form.name.errors %}
+                    <p class="text-red-600 text-sm mt-1">{{ form.name.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Glidepath Ruleset -->
+                <div>
+                    <label for="{{ form.ruleset.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                        {{ form.ruleset.label }}
+                    </label>
+                    {{ form.ruleset }}
+                    {% if form.ruleset.errors %}
+                    <p class="text-red-600 text-sm mt-1">{{ form.ruleset.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Year Born -->
+                <div>
+                    <label for="{{ form.year_born.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                        {{ form.year_born.label }}
+                    </label>
+                    {{ form.year_born }}
+                    {% if form.year_born.errors %}
+                    <p class="text-red-600 text-sm mt-1">{{ form.year_born.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Retirement Age -->
+                <div>
+                    <label for="{{ form.retirement_age.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                        {{ form.retirement_age.label }}
+                    </label>
+                    {{ form.retirement_age }}
+                    {% if form.retirement_age.errors %}
+                    <p class="text-red-600 text-sm mt-1">{{ form.retirement_age.errors.0 }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% if accounts_data %}
+        <div class="space-y-4">
+            {% for account_number, account_info in accounts_data.items %}
+            <div class="border border-gray-200 rounded-lg overflow-hidden">
+                <!-- Account Header -->
+                <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                    <div class="flex items-center">
+                        <input type="checkbox"
+                               id="account_{{ account_number }}"
+                               class="account-checkbox h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                               data-account="{{ account_number }}"
+                               onchange="toggleAccount(this)">
+                        <label for="account_{{ account_number }}" class="ml-3 flex-1 cursor-pointer">
+                            <span class="font-semibold text-gray-900">{{ account_info.account_name }}</span>
+                            <span class="text-sm text-gray-500 ml-2">(Account #{{ account_number }})</span>
+                        </label>
+                        <button type="button"
+                                onclick="toggleSymbols('{{ account_number }}')"
+                                class="text-indigo-600 hover:text-indigo-900 text-sm font-medium">
+                            <span id="toggle-text-{{ account_number }}">Show Symbols</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Symbols List (initially hidden) -->
+                <div id="symbols-{{ account_number }}" class="hidden bg-white px-6 py-4">
+                    <div class="space-y-2">
+                        {% for symbol_info in account_info.symbols %}
+                        <div class="flex items-start pl-6">
+                            <input type="checkbox"
+                                   id="symbol_{{ account_number }}_{{ symbol_info.symbol }}"
+                                   name="selected_items"
+                                   value="{{ account_number }}|{{ symbol_info.symbol }}"
+                                   class="symbol-checkbox h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded mt-1"
+                                   data-account="{{ account_number }}"
+                                   onchange="updateAccountCheckbox('{{ account_number }}')">
+                            <label for="symbol_{{ account_number }}_{{ symbol_info.symbol }}" class="ml-3 flex-1 cursor-pointer">
+                                <span class="font-medium text-gray-700">{{ symbol_info.symbol }}</span>
+                                {% if symbol_info.description %}
+                                <span class="text-sm text-gray-500 block">{{ symbol_info.description }}</span>
+                                {% endif %}
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="mt-8 flex gap-4">
+            <button type="submit"
+                    class="px-6 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 font-medium">
+                Create Portfolio
+            </button>
+            <a href="{% url 'portfolios' %}"
+               class="px-6 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 font-medium">
+                Cancel
+            </a>
+        </div>
+        {% else %}
+        <div class="text-center py-8 text-gray-500">
+            No account positions found. Please upload account data first.
+        </div>
+        <div class="mt-4">
+            <a href="{% url 'accounts' %}"
+               class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                Go to Accounts
+            </a>
+        </div>
+        {% endif %}
+    </form>
+</div>
+
+<script>
+// Toggle symbols visibility
+function toggleSymbols(accountNumber) {
+    const symbolsDiv = document.getElementById('symbols-' + accountNumber);
+    const toggleText = document.getElementById('toggle-text-' + accountNumber);
+
+    if (symbolsDiv.classList.contains('hidden')) {
+        symbolsDiv.classList.remove('hidden');
+        toggleText.textContent = 'Hide Symbols';
+    } else {
+        symbolsDiv.classList.add('hidden');
+        toggleText.textContent = 'Show Symbols';
+    }
+}
+
+// Toggle all symbols in an account
+function toggleAccount(checkbox) {
+    const accountNumber = checkbox.dataset.account;
+    const symbolCheckboxes = document.querySelectorAll(`input.symbol-checkbox[data-account="${accountNumber}"]`);
+
+    symbolCheckboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+    });
+}
+
+// Update account checkbox based on symbol selections
+function updateAccountCheckbox(accountNumber) {
+    const accountCheckbox = document.getElementById('account_' + accountNumber);
+    const symbolCheckboxes = document.querySelectorAll(`input.symbol-checkbox[data-account="${accountNumber}"]`);
+
+    const total = symbolCheckboxes.length;
+    const checked = Array.from(symbolCheckboxes).filter(cb => cb.checked).length;
+
+    if (checked === 0) {
+        accountCheckbox.checked = false;
+        accountCheckbox.indeterminate = false;
+    } else if (checked === total) {
+        accountCheckbox.checked = true;
+        accountCheckbox.indeterminate = false;
+    } else {
+        accountCheckbox.checked = false;
+        accountCheckbox.indeterminate = true;
+    }
+}
+
+// Initialize account checkboxes on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const accounts = new Set();
+    document.querySelectorAll('input.symbol-checkbox').forEach(cb => {
+        accounts.add(cb.dataset.account);
+    });
+
+    accounts.forEach(accountNumber => {
+        updateAccountCheckbox(accountNumber);
+    });
+});
+</script>
+{% endblock %}

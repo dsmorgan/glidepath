@@ -407,9 +407,6 @@ def delete_account_upload(request, upload_id):
 
 def portfolios_view(request):
     """Portfolios management view - manage investment portfolios."""
-    error = None
-    success = None
-
     # Determine which user's data to show
     selected_user_id = request.session.get('selected_user_id')
     if selected_user_id:
@@ -419,18 +416,6 @@ def portfolios_view(request):
             current_user = User.objects.first()
     else:
         current_user = User.objects.first()
-
-    # Handle portfolio creation
-    if request.method == "POST" and 'create_portfolio' in request.POST:
-        portfolio_name = request.POST.get('portfolio_name', '').strip()
-        if portfolio_name and current_user:
-            try:
-                Portfolio.objects.create(user=current_user, name=portfolio_name)
-                success = f"Portfolio '{portfolio_name}' created successfully"
-            except Exception as exc:
-                error = f"Error creating portfolio: {str(exc)}"
-        else:
-            error = "Portfolio name is required"
 
     # Get all portfolios for the current user
     analysis_data = None
@@ -457,8 +442,6 @@ def portfolios_view(request):
         selected_portfolio = None
 
     context = {
-        'error': error,
-        'success': success,
         'portfolios': portfolios,
         'selected_portfolio': selected_portfolio,
         'current_user': current_user,
@@ -466,6 +449,88 @@ def portfolios_view(request):
     }
 
     return render(request, "glidepath_app/portfolios.html", context)
+
+
+def create_portfolio(request):
+    """Create a new portfolio."""
+    # Determine which user to create the portfolio for
+    selected_user_id = request.session.get('selected_user_id')
+    if selected_user_id:
+        try:
+            current_user = User.objects.get(id=selected_user_id)
+        except User.DoesNotExist:
+            current_user = User.objects.first()
+    else:
+        current_user = User.objects.first()
+
+    if not current_user:
+        return redirect('portfolios')
+
+    if request.method == "POST":
+        # Handle portfolio configuration (name and ruleset)
+        form = PortfolioForm(request.POST, user=current_user)
+        if form.is_valid():
+            # Create the portfolio with the current user
+            portfolio = form.save(commit=False)
+            portfolio.user = current_user
+            portfolio.save()
+
+            # Get selected items from POST data
+            selected_items = request.POST.getlist('selected_items')
+
+            # Create portfolio items
+            for item in selected_items:
+                # Parse the item format: "account_number|symbol"
+                try:
+                    account_number, symbol = item.split('|', 1)
+                    PortfolioItem.objects.create(
+                        portfolio=portfolio,
+                        account_number=account_number,
+                        symbol=symbol
+                    )
+                except ValueError:
+                    continue
+
+            # Redirect to portfolios page with the new portfolio selected
+            return redirect(f'{"/portfolios/"}?portfolio={portfolio.id}')
+        else:
+            # Form had errors, continue to re-render with errors
+            pass
+
+    # Initialize empty form for new portfolio
+    form = PortfolioForm(user=current_user)
+
+    # Get all unique account+symbol combinations from the user's account positions
+    if current_user:
+        positions = AccountPosition.objects.filter(upload__user=current_user).values(
+            'account_number', 'account_name', 'symbol', 'description'
+        ).distinct().order_by('account_number', 'symbol')
+
+        # Group by account for display
+        accounts_data = {}
+        for pos in positions:
+            acc_num = pos['account_number']
+            if acc_num not in accounts_data:
+                accounts_data[acc_num] = {
+                    'account_number': acc_num,
+                    'account_name': pos['account_name'],
+                    'symbols': []
+                }
+            accounts_data[acc_num]['symbols'].append({
+                'symbol': pos['symbol'],
+                'description': pos['description']
+            })
+    else:
+        accounts_data = {}
+
+    context = {
+        'accounts_data': accounts_data,
+        'current_user': current_user,
+        'form': form,
+        'is_create': True,
+    }
+
+    return render(request, "glidepath_app/portfolio_create.html", context)
 
 
 @require_POST
