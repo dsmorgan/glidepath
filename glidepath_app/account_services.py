@@ -185,7 +185,7 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
         if account_number not in latest_uploads:
             latest_upload = AccountUpload.objects.filter(
                 user=portfolio.user,
-                accountposition__account_number=account_number
+                positions__account_number=account_number
             ).order_by('-created_at').first()
             if latest_upload:
                 latest_uploads[account_number] = latest_upload
