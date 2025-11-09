@@ -50,14 +50,14 @@ def is_valid_position_row(row: dict) -> bool:
     - Rows with blank Symbol field
     - Informational/footer rows
     """
-    symbol = row.get('Symbol', '').strip()
+    symbol = (row.get('Symbol') or '').strip()
 
     # Must have a symbol
     if not symbol:
         return False
 
     # Must have account number
-    if not row.get('Account Number', '').strip():
+    if not (row.get('Account Number') or '').strip():
         return False
 
     return True
@@ -128,22 +128,22 @@ def import_fidelity_csv(file_obj, user: User, filename: str) -> AccountUpload:
     for row in valid_rows:
         AccountPosition.objects.create(
             upload=upload,
-            account_number=row.get('Account Number', '').strip(),
-            account_name=row.get('Account Name', '').strip(),
-            symbol=normalize_symbol(row.get('Symbol', '')),
-            description=row.get('Description', '').strip(),
-            quantity=row.get('Quantity', '').strip(),
-            last_price=row.get('Last Price', '').strip(),
-            last_price_change=row.get('Last Price Change', '').strip(),
-            current_value=row.get('Current Value', '').strip(),
-            todays_gain_loss_dollar=row.get("Today's Gain/Loss Dollar", '').strip(),
-            todays_gain_loss_percent=row.get("Today's Gain/Loss Percent", '').strip(),
-            total_gain_loss_dollar=row.get('Total Gain/Loss Dollar', '').strip(),
-            total_gain_loss_percent=row.get('Total Gain/Loss Percent', '').strip(),
-            percent_of_account=row.get('Percent Of Account', '').strip(),
-            cost_basis_total=row.get('Cost Basis Total', '').strip(),
-            average_cost_basis=row.get('Average Cost Basis', '').strip(),
-            type=row.get('Type', '').strip(),
+            account_number=(row.get('Account Number') or '').strip(),
+            account_name=(row.get('Account Name') or '').strip(),
+            symbol=normalize_symbol(row.get('Symbol') or ''),
+            description=(row.get('Description') or '').strip(),
+            quantity=(row.get('Quantity') or '').strip(),
+            last_price=(row.get('Last Price') or '').strip(),
+            last_price_change=(row.get('Last Price Change') or '').strip(),
+            current_value=(row.get('Current Value') or '').strip(),
+            todays_gain_loss_dollar=(row.get("Today's Gain/Loss Dollar") or '').strip(),
+            todays_gain_loss_percent=(row.get("Today's Gain/Loss Percent") or '').strip(),
+            total_gain_loss_dollar=(row.get('Total Gain/Loss Dollar') or '').strip(),
+            total_gain_loss_percent=(row.get('Total Gain/Loss Percent') or '').strip(),
+            percent_of_account=(row.get('Percent Of Account') or '').strip(),
+            cost_basis_total=(row.get('Cost Basis Total') or '').strip(),
+            average_cost_basis=(row.get('Average Cost Basis') or '').strip(),
+            type=(row.get('Type') or '').strip(),
         )
 
     return upload
