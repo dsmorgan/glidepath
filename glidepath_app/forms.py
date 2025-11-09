@@ -1,10 +1,28 @@
 from django import forms
-from .models import APISettings, Fund, AssetCategory, User, IdentityProvider
+from .models import APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload
 from django.contrib.auth.hashers import make_password
 
 
 class GlidepathRuleUploadForm(forms.Form):
     file = forms.FileField(label="Glidepath CSV")
+
+
+class AccountUploadForm(forms.Form):
+    """Form for uploading account position CSV files."""
+    file = forms.FileField(
+        label="CSV File",
+        widget=forms.FileInput(attrs={
+            'class': 'block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none',
+            'accept': '.csv'
+        })
+    )
+    upload_type = forms.ChoiceField(
+        label="Type",
+        choices=AccountUpload.UPLOAD_TYPE_CHOICES,
+        widget=forms.Select(attrs={
+            'class': 'w-full border border-gray-300 rounded-md p-2'
+        })
+    )
 
 
 class APISettingsForm(forms.ModelForm):
