@@ -147,51 +147,48 @@
                 <div class="space-y-3">
                     {% for category_group in analysis_data.category_details %}
                     <div class="border border-gray-300 rounded-lg overflow-hidden">
-                        <!-- Accordion Header -->
+                        <!-- Accordion Header - shows all metrics when collapsed -->
                         <button type="button"
                                 class="accordion-btn w-full bg-blue-50 hover:bg-blue-100 px-6 py-4 text-left font-semibold text-gray-900 flex justify-between items-center"
                                 onclick="toggleAccordion(this)">
-                            <span>
-                                {{ category_group.category }}
-                                {% if category_group.asset_class != 'Unknown' %}
-                                <span class="text-sm text-gray-600 font-normal">({{ category_group.asset_class }})</span>
-                                {% else %}
-                                <span class="text-sm text-red-600 font-normal">(No fund mapping)</span>
-                                {% endif %}
-                                <span class="text-sm text-gray-700 font-normal ml-4">${{ category_group.subtotal|floatformat:2 }}</span>
-                            </span>
-                            <svg class="w-5 h-5 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div class="flex flex-1 gap-8 items-center">
+                                <span>
+                                    {{ category_group.category }}
+                                    {% if category_group.asset_class != 'Unknown' and category_group.asset_class != 'Other' %}
+                                    <span class="text-sm text-gray-600 font-normal">({{ category_group.asset_class }})</span>
+                                    {% elif category_group.asset_class == 'Unknown' %}
+                                    <span class="text-sm text-red-600 font-normal">(Symbol not found)</span>
+                                    {% elif category_group.asset_class == 'Other' %}
+                                    <span class="text-sm text-orange-600 font-normal">(No category assigned)</span>
+                                    {% endif %}
+                                </span>
+                                <span class="text-sm text-gray-700 font-mono" id="current-{{ forloop.counter }}"></span>
+                                <span class="text-sm text-gray-700 font-mono" id="target-{{ forloop.counter }}"></span>
+                                <span class="text-sm text-gray-700 font-mono" id="diff-{{ forloop.counter }}"></span>
+                            </div>
+                            <svg class="w-5 h-5 transform transition-transform flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
                             </svg>
                         </button>
 
-                        <!-- Accordion Content -->
+                        <!-- Accordion Content - shows symbols with fund names when expanded -->
                         <div class="accordion-content hidden bg-white border-t border-gray-200">
                             <div class="overflow-x-auto">
                                 <table class="w-full text-sm">
-                                    <tbody>
-                                        <!-- Category Summary Row -->
-                                        <tr class="bg-blue-50 border-b border-gray-300 font-semibold">
-                                            <td class="px-6 py-3 text-gray-900">Category Total</td>
-                                            <td class="px-6 py-3 text-right text-gray-900 font-mono">${{ category_group.subtotal|floatformat:2 }}</td>
-                                            <td class="px-6 py-3 text-right text-gray-900">{{ category_group.current_pct|floatformat:2 }}%</td>
-                                            <td class="px-6 py-3 text-right text-gray-900">{{ category_group.target_pct|floatformat:2 }}%</td>
-                                            <td class="px-6 py-3 text-right text-gray-900 font-mono">
-                                                {% if category_group.difference > 0 %}
-                                                <span class="text-green-600">+${{ category_group.difference|floatformat:2 }}</span>
-                                                {% elif category_group.difference < 0 %}
-                                                <span class="text-red-600">-${{ category_group.difference|floatformat:2|slice:"1:" }}</span>
-                                                {% else %}
-                                                <span class="text-gray-600">$0.00</span>
-                                                {% endif %}
-                                            </td>
+                                    <thead class="bg-gray-100 border-b border-gray-300">
+                                        <tr>
+                                            <th class="px-6 py-3 text-left font-medium text-gray-700">Symbol</th>
+                                            <th class="px-6 py-3 text-left font-medium text-gray-700">Fund Name</th>
+                                            <th class="px-6 py-3 text-right font-medium text-gray-700">Current Value</th>
                                         </tr>
+                                    </thead>
+                                    <tbody>
                                         <!-- Symbol Rows -->
                                         {% for symbol_item in category_group.symbols %}
                                         <tr class="border-b border-gray-200 hover:bg-gray-50">
-                                            <td class="px-6 py-3 text-gray-700 pl-12">{{ symbol_item.ticker }}</td>
-                                            <td class="px-6 py-3 text-right text-gray-700 font-mono">${{ symbol_item.value|floatformat:2 }}</td>
-                                            <td colspan="3"></td>
+                                            <td class="px-6 py-3 text-gray-700">{{ symbol_item.ticker }}</td>
+                                            <td class="px-6 py-3 text-gray-700">{{ symbol_item.fund_name|default:"No Fund Mapping" }}</td>
+                                            <td class="px-6 py-3 text-right text-gray-700 font-mono" data-value="{{ symbol_item.value }}"></td>
                                         </tr>
                                         {% endfor %}
                                     </tbody>
@@ -206,7 +203,7 @@
                 <div class="mt-6 bg-indigo-50 border-2 border-indigo-200 rounded-lg p-6">
                     <div class="flex justify-between items-center">
                         <span class="text-lg font-bold text-gray-900">Total Portfolio Value:</span>
-                        <span class="text-lg font-bold text-indigo-600 font-mono">${{ analysis_data.total_value|floatformat:2 }}</span>
+                        <span class="text-lg font-bold text-indigo-600 font-mono" id="totalValue"></span>
                     </div>
                 </div>
             </div>
@@ -214,10 +211,61 @@
             <!-- Chart.js Scripts -->
             <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
             <script>
-                // Define colors for pie charts
+                // Format large numbers with commas
+                function formatNumber(num) {
+                    return parseFloat(num).toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    });
+                }
+
+                // Initialize total value display
+                document.getElementById('totalValue').textContent = '$' + formatNumber({{ analysis_data.total_value|safe }});
+
+                // Initialize accordion header metrics and table values
+                document.addEventListener('DOMContentLoaded', function() {
+                    const categoryData = {{ analysis_data.category_details|safe }};
+                    categoryData.forEach((category, index) => {
+                        const idx = index + 1;
+                        const currentSpan = document.getElementById(`current-${idx}`);
+                        const targetSpan = document.getElementById(`target-${idx}`);
+                        const diffSpan = document.getElementById(`diff-${idx}`);
+
+                        if (currentSpan) {
+                            currentSpan.textContent = `Current: $${formatNumber(category.subtotal)}`;
+                        }
+                        if (targetSpan) {
+                            targetSpan.textContent = `Target %: ${parseFloat(category.target_pct || 0).toFixed(2)}%`;
+                        }
+                        if (diffSpan) {
+                            const diff = category.difference || 0;
+                            const diffText = diff > 0 ? `+$${formatNumber(diff)}` : `-$${formatNumber(Math.abs(diff))}`;
+                            const diffClass = diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-600' : 'text-gray-600';
+                            diffSpan.textContent = diffText;
+                            diffSpan.className = `text-sm font-mono ${diffClass}`;
+                        }
+
+                        // Format symbol values in table
+                        const tableRows = document.querySelectorAll(`[data-value]`);
+                        tableRows.forEach(cell => {
+                            const value = parseFloat(cell.dataset.value);
+                            if (!isNaN(value)) {
+                                cell.textContent = '$' + formatNumber(value);
+                            }
+                        });
+                    });
+                });
+            </script>
+            <script>
+                // Define colors for pie charts - shared across related charts
                 const classColors = [
                     '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
                     '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF9F40'
+                ];
+
+                const categoryColors = [
+                    '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
+                    '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B195', '#C7B3A3'
                 ];
 
                 // Accordion toggle function
@@ -230,15 +278,33 @@
                     arrow.classList.toggle('rotate-180');
                 }
 
-                // Current Asset Class Chart
+                // Format large numbers with commas
+                function formatNumber(num) {
+                    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                }
+
+                // Calculate percentages from dollar breakdown
+                function calculatePercentages(breakdown, total) {
+                    const result = {};
+                    for (const [key, value] of Object.entries(breakdown)) {
+                        result[key] = total > 0 ? (value / total * 100).toFixed(2) : 0;
+                    }
+                    return result;
+                }
+
+                // Get total value
+                const totalValue = {{ analysis_data.total_value|safe }};
+
+                // Current Asset Class Chart - using percentages
                 const currentClassCtx = document.getElementById('currentClassChart').getContext('2d');
                 const currentClassData = {{ analysis_data.class_breakdown|safe }};
+                const currentClassPercentages = calculatePercentages(currentClassData, totalValue);
                 new Chart(currentClassCtx, {
                     type: 'pie',
                     data: {
                         labels: Object.keys(currentClassData),
                         datasets: [{
-                            data: Object.values(currentClassData),
+                            data: Object.values(currentClassPercentages),
                             backgroundColor: classColors.slice(0, Object.keys(currentClassData).length),
                             borderColor: '#fff',
                             borderWidth: 2
@@ -248,23 +314,41 @@
                         responsive: true,
                         plugins: {
                             legend: {
-                                position: 'bottom'
+                                position: 'bottom',
+                                labels: {
+                                    usePointStyle: true,
+                                    padding: 15
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.label + ': ' + parseFloat(context.parsed).toFixed(2) + '%';
+                                    }
+                                }
                             }
                         }
                     }
                 });
 
-                // Target Asset Class Chart (if data exists)
+                // Target Asset Class Chart - using same percentages and legend
                 const targetClassData = {{ analysis_data.target_class_breakdown|safe }};
                 if (Object.keys(targetClassData).length > 0) {
                     const targetClassCtx = document.getElementById('targetClassChart').getContext('2d');
+                    // Get all unique class names from both current and target
+                    const allClassNames = Array.from(new Set([...Object.keys(currentClassData), ...Object.keys(targetClassData)]));
+                    const targetClassPercentages = {};
+                    allClassNames.forEach(name => {
+                        targetClassPercentages[name] = targetClassData[name] || 0;
+                    });
+
                     new Chart(targetClassCtx, {
                         type: 'pie',
                         data: {
-                            labels: Object.keys(targetClassData),
+                            labels: allClassNames,
                             datasets: [{
-                                data: Object.values(targetClassData),
-                                backgroundColor: classColors.slice(0, Object.keys(targetClassData).length),
+                                data: Object.values(targetClassPercentages),
+                                backgroundColor: classColors.slice(0, allClassNames.length),
                                 borderColor: '#fff',
                                 borderWidth: 2
                             }]
@@ -273,23 +357,35 @@
                             responsive: true,
                             plugins: {
                                 legend: {
-                                    position: 'bottom'
+                                    position: 'bottom',
+                                    labels: {
+                                        usePointStyle: true,
+                                        padding: 15
+                                    }
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            return context.label + ': ' + parseFloat(context.parsed).toFixed(2) + '%';
+                                        }
+                                    }
                                 }
                             }
                         }
                     });
                 }
 
-                // Current Asset Categories Chart
+                // Current Asset Categories Chart - using percentages
                 const currentCategoryCtx = document.getElementById('currentCategoryChart').getContext('2d');
                 const currentCategoryData = {{ analysis_data.category_breakdown|safe }};
+                const currentCategoryPercentages = calculatePercentages(currentCategoryData, totalValue);
                 new Chart(currentCategoryCtx, {
                     type: 'pie',
                     data: {
                         labels: Object.keys(currentCategoryData),
                         datasets: [{
-                            data: Object.values(currentCategoryData),
-                            backgroundColor: classColors.slice(0, Object.keys(currentCategoryData).length),
+                            data: Object.values(currentCategoryPercentages),
+                            backgroundColor: categoryColors.slice(0, Object.keys(currentCategoryData).length),
                             borderColor: '#fff',
                             borderWidth: 2
                         }]
@@ -298,23 +394,41 @@
                         responsive: true,
                         plugins: {
                             legend: {
-                                position: 'bottom'
+                                position: 'bottom',
+                                labels: {
+                                    usePointStyle: true,
+                                    padding: 15
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.label + ': ' + parseFloat(context.parsed).toFixed(2) + '%';
+                                    }
+                                }
                             }
                         }
                     }
                 });
 
-                // Target Asset Categories Chart (if data exists)
+                // Target Asset Categories Chart - using same percentages and legend
                 const targetCategoryData = {{ analysis_data.target_category_breakdown|safe }};
                 if (Object.keys(targetCategoryData).length > 0) {
                     const targetCategoryCtx = document.getElementById('targetCategoryChart').getContext('2d');
+                    // Get all unique category names from both current and target
+                    const allCategoryNames = Array.from(new Set([...Object.keys(currentCategoryData), ...Object.keys(targetCategoryData)]));
+                    const targetCategoryPercentages = {};
+                    allCategoryNames.forEach(name => {
+                        targetCategoryPercentages[name] = targetCategoryData[name] || 0;
+                    });
+
                     new Chart(targetCategoryCtx, {
                         type: 'pie',
                         data: {
-                            labels: Object.keys(targetCategoryData),
+                            labels: allCategoryNames,
                             datasets: [{
-                                data: Object.values(targetCategoryData),
-                                backgroundColor: classColors.slice(0, Object.keys(targetCategoryData).length),
+                                data: Object.values(targetCategoryPercentages),
+                                backgroundColor: categoryColors.slice(0, allCategoryNames.length),
                                 borderColor: '#fff',
                                 borderWidth: 2
                             }]
@@ -323,7 +437,18 @@
                             responsive: true,
                             plugins: {
                                 legend: {
-                                    position: 'bottom'
+                                    position: 'bottom',
+                                    labels: {
+                                        usePointStyle: true,
+                                        padding: 15
+                                    }
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            return context.label + ': ' + parseFloat(context.parsed).toFixed(2) + '%';
+                                        }
+                                    }
                                 }
                             }
                         }

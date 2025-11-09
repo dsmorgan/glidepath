@@ -230,6 +230,7 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
         fund = Fund.objects.filter(ticker=symbol).first()
 
         if fund and fund.category:
+            # Fund exists with a category assigned
             category = fund.category
             asset_class = category.asset_class
 
@@ -255,9 +256,33 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
                     'symbols': {}
                 }
             category_details[category_key]['total'] += value
-            category_details[category_key]['symbols'][symbol] = value
+            category_details[category_key]['symbols'][symbol] = {
+                'value': value,
+                'fund_name': fund.name if fund else None
+            }
+        elif fund:
+            # Fund exists but has no category assigned - treat as "Other"
+            category_key = 'Other'
+            if category_key not in category_details:
+                category_details[category_key] = {
+                    'asset_class': 'Other',
+                    'category_name': 'Other',
+                    'total': Decimal('0'),
+                    'symbols': {}
+                }
+            category_details[category_key]['total'] += value
+            category_details[category_key]['symbols'][symbol] = {
+                'value': value,
+                'fund_name': fund.name
+            }
+            if 'Other' not in class_breakdown:
+                class_breakdown['Other'] = Decimal('0')
+            class_breakdown['Other'] += value
+            if 'Other' not in category_breakdown:
+                category_breakdown['Other'] = Decimal('0')
+            category_breakdown['Other'] += value
         else:
-            # Unknown category
+            # Fund does not exist in database - treat as "Unknown"
             category_key = 'Unknown'
             if category_key not in category_details:
                 category_details[category_key] = {
@@ -267,7 +292,10 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
                     'symbols': {}
                 }
             category_details[category_key]['total'] += value
-            category_details[category_key]['symbols'][symbol] = value
+            category_details[category_key]['symbols'][symbol] = {
+                'value': value,
+                'fund_name': None
+            }
             if 'Unknown' not in class_breakdown:
                 class_breakdown['Unknown'] = Decimal('0')
             class_breakdown['Unknown'] += value
@@ -287,8 +315,12 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
             'asset_class': details['asset_class'],
             'subtotal': details['total'],
             'symbols': [
-                {'ticker': ticker, 'value': value}
-                for ticker, value in sorted(details['symbols'].items())
+                {
+                    'ticker': ticker,
+                    'value': symbol_data['value'] if isinstance(symbol_data, dict) else symbol_data,
+                    'fund_name': symbol_data.get('fund_name') if isinstance(symbol_data, dict) else None
+                }
+                for ticker, symbol_data in sorted(details['symbols'].items())
             ]
         })
 
