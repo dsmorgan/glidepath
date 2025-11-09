@@ -151,8 +151,8 @@
                         <button type="button"
                                 class="accordion-btn w-full bg-blue-50 hover:bg-blue-100 px-6 py-4 text-left font-semibold text-gray-900 flex justify-between items-center"
                                 onclick="toggleAccordion(this)">
-                            <div class="flex flex-1 gap-8 items-center">
-                                <span>
+                            <div class="flex flex-1 gap-6 items-center">
+                                <span class="min-w-[200px]">
                                     {{ category_group.category }}
                                     {% if category_group.asset_class != 'Unknown' and category_group.asset_class != 'Other' %}
                                     <span class="text-sm text-gray-600 font-normal">({{ category_group.asset_class }})</span>
@@ -162,9 +162,10 @@
                                     <span class="text-sm text-orange-600 font-normal">(No category assigned)</span>
                                     {% endif %}
                                 </span>
-                                <span class="text-sm text-gray-700 font-mono" id="current-{{ forloop.counter }}"></span>
-                                <span class="text-sm text-gray-700 font-mono" id="target-{{ forloop.counter }}"></span>
-                                <span class="text-sm text-gray-700 font-mono" id="diff-{{ forloop.counter }}"></span>
+                                <span class="text-sm text-gray-700 font-mono min-w-[140px]" id="current-{{ forloop.counter }}"></span>
+                                <span class="text-sm text-gray-700 font-mono min-w-[110px]" id="current-pct-{{ forloop.counter }}"></span>
+                                <span class="text-sm text-gray-700 font-mono min-w-[110px]" id="target-{{ forloop.counter }}"></span>
+                                <span class="text-sm text-gray-700 font-mono min-w-[120px]" id="diff-{{ forloop.counter }}"></span>
                             </div>
                             <svg class="w-5 h-5 transform transition-transform flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
@@ -228,21 +229,25 @@
                     categoryData.forEach((category, index) => {
                         const idx = index + 1;
                         const currentSpan = document.getElementById(`current-${idx}`);
+                        const currentPctSpan = document.getElementById(`current-pct-${idx}`);
                         const targetSpan = document.getElementById(`target-${idx}`);
                         const diffSpan = document.getElementById(`diff-${idx}`);
 
                         if (currentSpan) {
-                            currentSpan.textContent = `Current: $${formatNumber(category.subtotal)}`;
+                            currentSpan.textContent = `$${formatNumber(category.subtotal)}`;
+                        }
+                        if (currentPctSpan) {
+                            currentPctSpan.textContent = `Actual: ${parseFloat(category.current_pct || 0).toFixed(2)}%`;
                         }
                         if (targetSpan) {
-                            targetSpan.textContent = `Target %: ${parseFloat(category.target_pct || 0).toFixed(2)}%`;
+                            targetSpan.textContent = `Target: ${parseFloat(category.target_pct || 0).toFixed(2)}%`;
                         }
                         if (diffSpan) {
                             const diff = category.difference || 0;
                             const diffText = diff > 0 ? `+$${formatNumber(diff)}` : `-$${formatNumber(Math.abs(diff))}`;
                             const diffClass = diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-600' : 'text-gray-600';
-                            diffSpan.textContent = diffText;
-                            diffSpan.className = `text-sm font-mono ${diffClass}`;
+                            diffSpan.textContent = `Diff: ${diffText}`;
+                            diffSpan.className = `text-sm font-mono ${diffClass} min-w-[120px]`;
                         }
 
                         // Format symbol values in table
