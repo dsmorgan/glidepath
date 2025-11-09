@@ -118,72 +118,91 @@
             <div class="mb-8">
                 <h3 class="text-2xl font-semibold text-gray-900 mb-6">Allocation Breakdown</h3>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-                    <!-- Class Breakdown Pie Chart -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                    <!-- Current Asset Class Pie Chart -->
                     <div class="bg-gray-50 rounded-lg p-6 shadow">
-                        <h4 class="text-lg font-semibold text-gray-900 mb-4">Asset Class</h4>
-                        <canvas id="classChart" height="200"></canvas>
+                        <h4 class="text-lg font-semibold text-gray-900 mb-4">Current Asset Class</h4>
+                        <canvas id="currentClassChart" height="200"></canvas>
                     </div>
 
-                    <!-- Category Breakdown Pie Chart -->
+                    <!-- Target Asset Class Pie Chart -->
                     <div class="bg-gray-50 rounded-lg p-6 shadow">
-                        <h4 class="text-lg font-semibold text-gray-900 mb-4">Asset Category</h4>
-                        <canvas id="categoryChart" height="200"></canvas>
+                        <h4 class="text-lg font-semibold text-gray-900 mb-4">Target Asset Class</h4>
+                        {% if analysis_data.target_class_breakdown %}
+                        <canvas id="targetClassChart" height="200"></canvas>
+                        {% else %}
+                        <p class="text-gray-500 text-sm text-center py-8">No glidepath rule assigned or year/age not set</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                    <!-- Current Asset Categories Pie Chart -->
+                    <div class="bg-gray-50 rounded-lg p-6 shadow">
+                        <h4 class="text-lg font-semibold text-gray-900 mb-4">Current Asset Categories</h4>
+                        <canvas id="currentCategoryChart" height="200"></canvas>
                     </div>
 
-                    <!-- Ticker Breakdown Pie Chart -->
+                    <!-- Target Asset Categories Pie Chart -->
                     <div class="bg-gray-50 rounded-lg p-6 shadow">
-                        <h4 class="text-lg font-semibold text-gray-900 mb-4">Ticker Symbols</h4>
-                        <canvas id="tickerChart" height="200"></canvas>
+                        <h4 class="text-lg font-semibold text-gray-900 mb-4">Target Asset Categories</h4>
+                        {% if analysis_data.target_category_breakdown %}
+                        <canvas id="targetCategoryChart" height="200"></canvas>
+                        {% else %}
+                        <p class="text-gray-500 text-sm text-center py-8">No glidepath rule assigned or year/age not set</p>
+                        {% endif %}
                     </div>
                 </div>
             </div>
 
-            <!-- Breakdown Table -->
+            <!-- Breakdown Accordion -->
             <div class="mb-8">
                 <h3 class="text-2xl font-semibold text-gray-900 mb-6">Detailed Breakdown by Category</h3>
 
-                <div class="overflow-x-auto">
-                    <table class="min-w-full border-collapse">
-                        <thead>
-                            <tr class="bg-gray-100 border-b-2 border-gray-300">
-                                <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900">Category</th>
-                                <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900">Ticker</th>
-                                <th class="px-6 py-3 text-right text-sm font-semibold text-gray-900">Value</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for category_group in analysis_data.category_details %}
-                            <tr class="border-b border-gray-200 bg-blue-50">
-                                <td colspan="3" class="px-6 py-3">
-                                    <span class="font-semibold text-gray-900">{{ category_group.category }}</span>
-                                    {% if category_group.asset_class != 'Unknown' %}
-                                    <span class="text-sm text-gray-600 ml-2">({{ category_group.asset_class }})</span>
-                                    {% else %}
-                                    <span class="text-sm text-red-600 ml-2">(No fund mapping)</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% for symbol_item in category_group.symbols %}
-                            <tr class="border-b border-gray-200">
-                                <td class="px-6 py-3"></td>
-                                <td class="px-6 py-3 text-gray-700">{{ symbol_item.ticker }}</td>
-                                <td class="px-6 py-3 text-right text-gray-700 font-mono">${{ symbol_item.value|floatformat:2 }}</td>
-                            </tr>
-                            {% endfor %}
-                            <tr class="border-b-2 border-gray-300 bg-gray-50">
-                                <td colspan="2" class="px-6 py-3 text-right font-semibold text-gray-900">{{ category_group.category }} Subtotal:</td>
-                                <td class="px-6 py-3 text-right font-semibold text-gray-900 font-mono">${{ category_group.subtotal|floatformat:2 }}</td>
-                            </tr>
-                            {% endfor %}
+                <div class="space-y-3">
+                    {% for category_group in analysis_data.category_details %}
+                    <div class="border border-gray-300 rounded-lg overflow-hidden">
+                        <!-- Accordion Header -->
+                        <button type="button"
+                                class="accordion-btn w-full bg-blue-50 hover:bg-blue-100 px-6 py-4 text-left font-semibold text-gray-900 flex justify-between items-center"
+                                onclick="toggleAccordion(this)">
+                            <span>
+                                {{ category_group.category }}
+                                {% if category_group.asset_class != 'Unknown' %}
+                                <span class="text-sm text-gray-600 font-normal">({{ category_group.asset_class }})</span>
+                                {% else %}
+                                <span class="text-sm text-red-600 font-normal">(No fund mapping)</span>
+                                {% endif %}
+                                <span class="text-sm text-gray-700 font-normal ml-4">${{ category_group.subtotal|floatformat:2 }}</span>
+                            </span>
+                            <svg class="w-5 h-5 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+                            </svg>
+                        </button>
 
-                            <!-- Total Row -->
-                            <tr class="bg-indigo-50">
-                                <td colspan="2" class="px-6 py-4 text-right text-lg font-bold text-gray-900">Total Portfolio Value:</td>
-                                <td class="px-6 py-4 text-right text-lg font-bold text-indigo-600 font-mono">${{ analysis_data.total_value|floatformat:2 }}</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                        <!-- Accordion Content -->
+                        <div class="accordion-content hidden bg-white border-t border-gray-200">
+                            <table class="w-full">
+                                <tbody>
+                                    {% for symbol_item in category_group.symbols %}
+                                    <tr class="border-b border-gray-200 hover:bg-gray-50">
+                                        <td class="px-6 py-3 text-gray-700">{{ symbol_item.ticker }}</td>
+                                        <td class="px-6 py-3 text-right text-gray-700 font-mono">${{ symbol_item.value|floatformat:2 }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Total Summary -->
+                <div class="mt-6 bg-indigo-50 border-2 border-indigo-200 rounded-lg p-6">
+                    <div class="flex justify-between items-center">
+                        <span class="text-lg font-bold text-gray-900">Total Portfolio Value:</span>
+                        <span class="text-lg font-bold text-indigo-600 font-mono">${{ analysis_data.total_value|floatformat:2 }}</span>
+                    </div>
                 </div>
             </div>
 
@@ -196,16 +215,26 @@
                     '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF9F40'
                 ];
 
-                // Class Breakdown Chart
-                const classCtx = document.getElementById('classChart').getContext('2d');
-                const classData = {{ analysis_data.class_breakdown|safe }};
-                new Chart(classCtx, {
+                // Accordion toggle function
+                function toggleAccordion(button) {
+                    const content = button.nextElementSibling;
+                    content.classList.toggle('hidden');
+
+                    // Rotate arrow icon
+                    const arrow = button.querySelector('svg');
+                    arrow.classList.toggle('rotate-180');
+                }
+
+                // Current Asset Class Chart
+                const currentClassCtx = document.getElementById('currentClassChart').getContext('2d');
+                const currentClassData = {{ analysis_data.class_breakdown|safe }};
+                new Chart(currentClassCtx, {
                     type: 'pie',
                     data: {
-                        labels: Object.keys(classData),
+                        labels: Object.keys(currentClassData),
                         datasets: [{
-                            data: Object.values(classData),
-                            backgroundColor: classColors.slice(0, Object.keys(classData).length),
+                            data: Object.values(currentClassData),
+                            backgroundColor: classColors.slice(0, Object.keys(currentClassData).length),
                             borderColor: '#fff',
                             borderWidth: 2
                         }]
@@ -220,58 +249,81 @@
                     }
                 });
 
-                // Category Breakdown Chart
-                const categoryCtx = document.getElementById('categoryChart').getContext('2d');
-                const categoryData = {{ analysis_data.category_breakdown|safe }};
-                new Chart(categoryCtx, {
-                    type: 'pie',
-                    data: {
-                        labels: Object.keys(categoryData),
-                        datasets: [{
-                            data: Object.values(categoryData),
-                            backgroundColor: classColors.slice(0, Object.keys(categoryData).length),
-                            borderColor: '#fff',
-                            borderWidth: 2
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: {
-                                position: 'bottom'
-                            }
-                        }
-                    }
-                });
-
-                // Ticker Breakdown Chart
-                const tickerCtx = document.getElementById('tickerChart').getContext('2d');
-                const tickerData = {{ analysis_data.ticker_breakdown|safe }};
-                new Chart(tickerCtx, {
-                    type: 'pie',
-                    data: {
-                        labels: Object.keys(tickerData),
-                        datasets: [{
-                            data: Object.values(tickerData),
-                            backgroundColor: classColors.slice(0, Object.keys(tickerData).length),
-                            borderColor: '#fff',
-                            borderWidth: 2
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: {
-                                position: 'bottom',
-                                labels: {
-                                    font: {
-                                        size: 10
-                                    }
+                // Target Asset Class Chart (if data exists)
+                const targetClassData = {{ analysis_data.target_class_breakdown|safe }};
+                if (Object.keys(targetClassData).length > 0) {
+                    const targetClassCtx = document.getElementById('targetClassChart').getContext('2d');
+                    new Chart(targetClassCtx, {
+                        type: 'pie',
+                        data: {
+                            labels: Object.keys(targetClassData),
+                            datasets: [{
+                                data: Object.values(targetClassData),
+                                backgroundColor: classColors.slice(0, Object.keys(targetClassData).length),
+                                borderColor: '#fff',
+                                borderWidth: 2
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom'
                                 }
                             }
                         }
+                    });
+                }
+
+                // Current Asset Categories Chart
+                const currentCategoryCtx = document.getElementById('currentCategoryChart').getContext('2d');
+                const currentCategoryData = {{ analysis_data.category_breakdown|safe }};
+                new Chart(currentCategoryCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: Object.keys(currentCategoryData),
+                        datasets: [{
+                            data: Object.values(currentCategoryData),
+                            backgroundColor: classColors.slice(0, Object.keys(currentCategoryData).length),
+                            borderColor: '#fff',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
                     }
                 });
+
+                // Target Asset Categories Chart (if data exists)
+                const targetCategoryData = {{ analysis_data.target_category_breakdown|safe }};
+                if (Object.keys(targetCategoryData).length > 0) {
+                    const targetCategoryCtx = document.getElementById('targetCategoryChart').getContext('2d');
+                    new Chart(targetCategoryCtx, {
+                        type: 'pie',
+                        data: {
+                            labels: Object.keys(targetCategoryData),
+                            datasets: [{
+                                data: Object.values(targetCategoryData),
+                                backgroundColor: classColors.slice(0, Object.keys(targetCategoryData).length),
+                                borderColor: '#fff',
+                                borderWidth: 2
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom'
+                                }
+                            }
+                        }
+                    });
+                }
             </script>
             {% else %}
             <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">

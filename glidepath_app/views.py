@@ -498,33 +498,36 @@ def edit_portfolio(request, portfolio_id):
 
     if request.method == "POST":
         # Handle portfolio configuration (name and ruleset)
-        form = PortfolioForm(request.POST, instance=portfolio)
+        form = PortfolioForm(request.POST, instance=portfolio, user=current_user)
         if form.is_valid():
             form.save()
 
-        # Clear existing items
-        PortfolioItem.objects.filter(portfolio=portfolio).delete()
+            # Clear existing items
+            PortfolioItem.objects.filter(portfolio=portfolio).delete()
 
-        # Get selected items from POST data
-        selected_items = request.POST.getlist('selected_items')
+            # Get selected items from POST data
+            selected_items = request.POST.getlist('selected_items')
 
-        # Create new portfolio items
-        for item in selected_items:
-            # Parse the item format: "account_number|symbol"
-            try:
-                account_number, symbol = item.split('|', 1)
-                PortfolioItem.objects.create(
-                    portfolio=portfolio,
-                    account_number=account_number,
-                    symbol=symbol
-                )
-            except ValueError:
-                continue
+            # Create new portfolio items
+            for item in selected_items:
+                # Parse the item format: "account_number|symbol"
+                try:
+                    account_number, symbol = item.split('|', 1)
+                    PortfolioItem.objects.create(
+                        portfolio=portfolio,
+                        account_number=account_number,
+                        symbol=symbol
+                    )
+                except ValueError:
+                    continue
 
-        return redirect('portfolios')
+            return redirect('portfolios')
+        else:
+            # Form had errors, continue to re-render with errors
+            pass
 
     # Initialize form with current portfolio data
-    form = PortfolioForm(instance=portfolio)
+    form = PortfolioForm(instance=portfolio, user=current_user)
 
     # Get all unique account+symbol combinations from the user's account positions
     if current_user:

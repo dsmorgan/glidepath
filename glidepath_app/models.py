@@ -255,6 +255,8 @@ class Portfolio(models.Model):
     ruleset = models.ForeignKey(
         RuleSet, on_delete=models.SET_NULL, null=True, blank=True, related_name="portfolios"
     )
+    year_born = models.IntegerField(null=True, blank=True, help_text="Birth year for target allocation calculation")
+    retirement_age = models.IntegerField(null=True, blank=True, help_text="Target retirement age for allocation")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

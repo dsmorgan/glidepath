@@ -265,9 +265,26 @@ class IdentityProviderForm(forms.ModelForm):
 class PortfolioForm(forms.ModelForm):
     """Form for creating and editing portfolios."""
 
+    # Generate year and retirement age choices
+    YEAR_BORN_CHOICES = [('', 'Select year')] + [(year, str(year)) for year in range(1940, 2021)]
+    RETIREMENT_AGE_CHOICES = [('', 'Select age')] + [(age, str(age)) for age in range(40, 81)]
+
+    year_born = forms.IntegerField(
+        required=False,
+        widget=forms.Select(choices=YEAR_BORN_CHOICES, attrs={
+            'class': 'w-full border border-gray-300 rounded-md p-2'
+        })
+    )
+    retirement_age = forms.IntegerField(
+        required=False,
+        widget=forms.Select(choices=RETIREMENT_AGE_CHOICES, attrs={
+            'class': 'w-full border border-gray-300 rounded-md p-2'
+        })
+    )
+
     class Meta:
         model = Portfolio
-        fields = ['name', 'ruleset']
+        fields = ['name', 'ruleset', 'year_born', 'retirement_age']
         widgets = {
             'name': forms.TextInput(attrs={
                 'class': 'w-full border border-gray-300 rounded-md p-2',
@@ -280,9 +297,28 @@ class PortfolioForm(forms.ModelForm):
         labels = {
             'name': 'Portfolio Name',
             'ruleset': 'Glidepath Rule',
+            'year_born': 'Year Born',
+            'retirement_age': 'Retirement Age',
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.user = user
         self.fields['ruleset'].empty_label = "None (No glidepath rule)"
         self.fields['ruleset'].required = False
+
+    def clean_name(self):
+        """Ensure portfolio name is unique for the user."""
+        name = self.cleaned_data.get('name')
+        if not name:
+            raise forms.ValidationError("Portfolio name is required.")
+
+        # Check for duplicate names (excluding current instance if editing)
+        query = Portfolio.objects.filter(user=self.user, name=name)
+        if self.instance.pk:
+            query = query.exclude(pk=self.instance.pk)
+
+        if query.exists():
+            raise forms.ValidationError(f"Portfolio '{name}' already exists for this user.")
+
+        return name

@@ -157,13 +157,15 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
     Analyze a portfolio and generate breakdown data for charts and tables.
 
     Returns a dict with:
-    - class_breakdown: Class-level allocation
-    - category_breakdown: Category-level allocation
-    - ticker_breakdown: Ticker-level allocation
+    - class_breakdown: Class-level allocation (current)
+    - category_breakdown: Category-level allocation (current)
+    - target_class_breakdown: Target class allocation from glidepath rule
+    - target_category_breakdown: Target category allocation from glidepath rule
     - category_details: Detailed breakdown by category with symbols and subtotals
     - total_value: Total portfolio value
     """
     from decimal import Decimal, ROUND_HALF_UP
+    from datetime import datetime
 
     # Get portfolio items
     portfolio_items = portfolio.items.all()
@@ -284,10 +286,38 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
             ]
         })
 
+    # Calculate target allocations from glidepath rule if available
+    target_class_breakdown = {}
+    target_category_breakdown = {}
+
+    if portfolio.ruleset and portfolio.year_born and portfolio.retirement_age:
+        from datetime import datetime
+        # Calculate years to retirement
+        current_year = datetime.now().year
+        years_to_retirement = portfolio.retirement_age - (current_year - portfolio.year_born)
+
+        # Find the glidepath rule for this retirement age
+        from .models import GlidepathRule
+        matching_rule = GlidepathRule.objects.filter(
+            ruleset=portfolio.ruleset,
+            gt_retire_age__lte=years_to_retirement,
+            lt_retire_age__gt=years_to_retirement
+        ).first()
+
+        if matching_rule:
+            # Get class allocations
+            for class_alloc in matching_rule.class_allocations.all():
+                target_class_breakdown[class_alloc.asset_class.name] = float(class_alloc.percentage)
+
+            # Get category allocations
+            for cat_alloc in matching_rule.category_allocations.all():
+                target_category_breakdown[cat_alloc.asset_category.name] = float(cat_alloc.percentage)
+
     return {
         'class_breakdown': {k: float(v) for k, v in class_breakdown.items()},
         'category_breakdown': {k: float(v) for k, v in category_breakdown.items()},
-        'ticker_breakdown': {k: float(v) for k, v in ticker_breakdown.items()},
+        'target_class_breakdown': target_class_breakdown,
+        'target_category_breakdown': target_category_breakdown,
         'category_details': formatted_category_details,
         'total_value': float(total_value),
     }
