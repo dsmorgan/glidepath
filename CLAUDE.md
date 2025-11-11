@@ -35,30 +35,237 @@ glidepath/
 
 ### Database Models (glidepath_app/models.py)
 
+#### Entity Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          ALLOCATION MANAGEMENT                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  RuleSet                    GlidepathRule              AssetClass            │
+│  ────────                   ──────────────             ──────────            │
+│  id (PK)                    id (PK)                    id (PK)               │
+│  name (UNIQUE)              ruleset_id (FK) ──────→ name (UNIQUE)           │
+│                             gt_retire_age                                    │
+│                             lt_retire_age                                    │
+│                                                                               │
+│                    ▲                                                          │
+│                    │                                                          │
+│                    └────────────┬──────────────────────────────────┐          │
+│                                 │                                  │          │
+│                                 │                                  │          │
+│                         ClassAllocation                  AssetCategory        │
+│                         ────────────────                 ──────────────       │
+│                         id (PK)                         id (PK)              │
+│                         rule_id (FK) ──┐               name                 │
+│                         asset_class_id  │               asset_class_id (FK)  │
+│                         (FK) ───────────┼──────→        unique: (name,      │
+│                         percentage      │               asset_class)         │
+│                                         │                                    │
+│                                         │                                    │
+│                                  ▼      │                                    │
+│                         CategoryAllocation               Fund                │
+│                         ───────────────────             ─────                │
+│                         id (PK)                         id (PK)              │
+│                         rule_id (FK)                    ticker (UNIQUE)      │
+│                         asset_category_id (FK)──→       name                 │
+│                         percentage                      category_id (FK)──→  │
+│                                                         created_at            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        PORTFOLIO & HOLDINGS MANAGEMENT                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  User                      Portfolio                   PortfolioItem         │
+│  ────                      ─────────                   ─────────────         │
+│  id (UUID, PK)             id (UUID, PK)              id (UUID, PK)         │
+│  username (UNIQUE)         user_id (FK) ────────┐     portfolio_id (FK)──┐  │
+│  email (UNIQUE)            name                 │     account_number     │  │
+│  name                      ruleset_id (FK)      │     symbol             │  │
+│  identity_provider_id      (FK, nullable)       │     unique: (portfolio,│  │
+│  (FK, nullable)            year_born            │     account_number,    │  │
+│  role                      retirement_age       │     symbol)            │  │
+│  disabled                  created_at           │                        │  │
+│  password (internal only)  updated_at           │                        │  │
+│  created_at                                     │                        │  │
+│  updated_at                                     │                        │  │
+│         │                                       │                        │  │
+│         │                                       └────────────────────────┘  │
+│         │                                                                    │
+│         │                          AccountUpload      AccountPosition        │
+│         │                          ──────────────     ────────────────       │
+│         │                          id (UUID, PK)      id (UUID, PK)          │
+│         │                          user_id (FK) ───┐  upload_id (FK) ──┐    │
+│         │                          upload_datetime  │  account_number   │    │
+│         │                          file_datetime    │  account_name     │    │
+│         │                          upload_type      │  symbol           │    │
+│         │                          filename         │  description      │    │
+│         │                          entry_count      │  quantity         │    │
+│         │                                           │  last_price       │    │
+│         │                                           │  ... (price data) │    │
+│         │                                           │  type             │    │
+│         │                                           │  [and more fields]│    │
+│         └──────────────────────────────────────────┴──────────────────┘    │
+│                                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    AUTHENTICATION & CONFIGURATION                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  IdentityProvider                          APISettings                       │
+│  ─────────────────                         ───────────                       │
+│  id (UUID, PK)                             id (PK)                           │
+│  name (UNIQUE)                             alpha_vantage_api_key            │
+│  type (choice: OAuth2/OIDC)                finnhub_api_key                  │
+│  redirect_url                              polygon_api_key                  │
+│  auto_provision_users                      eodhd_api_key                    │
+│  client_id                                 updated_at                        │
+│  client_secret                                                               │
+│  authorization_url                                                           │
+│  token_url                                                                   │
+│  identity_path                                                               │
+│  email_path                                                                  │
+│  name_path                                                                   │
+│  scopes                                                                      │
+│  created_at                                                                  │
+│  updated_at                                                                  │
+│         │                                                                    │
+│         └──→ User (identity_provider_id FK)                                 │
+│                                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Model Descriptions
+
 **RuleSet** - Container for a set of glidepath rules (one row = one CSV import)
 - `name`: Unique name for the ruleset
+- Related to: GlidepathRule (1:many), Portfolio (1:many)
 
 **GlidepathRule** - An allocation rule for a retirement age band
 - `ruleset`: Foreign key to RuleSet
 - `gt_retire_age`: Greater than retirement age (lower bound of band)
 - `lt_retire_age`: Less than retirement age (upper bound of band)
 - Validation: Ages are clamped to [-100, 100], ensures no overlaps/gaps
+- Related to: ClassAllocation (1:many), CategoryAllocation (1:many)
 
 **AssetClass** - Top-level asset categories (Stocks, Bonds, Crypto, Other)
-- `name`: Asset class name
+- `name`: Asset class name (unique)
+- Related to: AssetCategory (1:many), ClassAllocation (1:many), Fund (optional)
 
 **ClassAllocation** - Percentage allocation to an asset class within a rule
 - `rule`: Foreign key to GlidepathRule
 - `asset_class`: Foreign key to AssetClass
 - `percentage`: Decimal percentage (must sum to 100% per rule)
+- Unique together on (rule, asset_class)
 
 **AssetCategory** - Subcategories within an asset class (e.g., "Large Cap" under Stocks)
 - `name`: Category name
 - `asset_class`: Foreign key to AssetClass
 - Unique together on (name, asset_class)
+- Related to: CategoryAllocation (1:many), Fund (1:many)
 
 **CategoryAllocation** - Percentage allocation to a category within a rule
-- Similar structure to ClassAllocation but for categories
+- `rule`: Foreign key to GlidepathRule
+- `asset_category`: Foreign key to AssetCategory
+- `percentage`: Decimal percentage
+- Unique together on (rule, asset_category)
+
+**APISettings** - Stores API keys and settings for financial data sources
+- Singleton table (only one row with id=1)
+- `alpha_vantage_api_key`: Alpha Vantage API key
+- `finnhub_api_key`: Finnhub API key
+- `polygon_api_key`: Polygon.io API key
+- `eodhd_api_key`: EODHD API key
+- `updated_at`: Timestamp of last update
+
+**Fund** - Stores investment fund information
+- `ticker`: Fund ticker symbol (unique)
+- `name`: Fund name
+- `category`: Foreign key to AssetCategory (nullable, optional)
+- `created_at`: Creation timestamp
+- Related to: AssetCategory (many:1 optional)
+
+**IdentityProvider** - Stores OAuth2/OIDC identity provider configurations
+- `id`: UUID primary key
+- `name`: Provider name (unique)
+- `type`: Provider type (currently only OAuth2/OIDC)
+- `redirect_url`: OAuth redirect URL
+- `auto_provision_users`: Boolean flag to auto-create users on first login
+- `client_id`: OAuth client ID
+- `client_secret`: OAuth client secret
+- `authorization_url`: OAuth authorization endpoint
+- `token_url`: OAuth token endpoint
+- `identity_path`: JSON path to user identity in provider response
+- `email_path`: JSON path to email in provider response
+- `name_path`: JSON path to name in provider response
+- `scopes`: Space-separated OAuth scopes
+- Related to: User (1:many)
+
+**User** - Stores user account information
+- `id`: UUID primary key
+- `username`: Username (unique)
+- `email`: Email address (unique)
+- `name`: Full name
+- `identity_provider`: Foreign key to IdentityProvider (nullable)
+- `role`: User role (0=Administrator, 1=User)
+- `disabled`: Boolean flag for account status
+- `password`: Password hash (only for internal users)
+- `created_at`: Account creation timestamp
+- `updated_at`: Last updated timestamp
+- Related to: IdentityProvider (many:1 optional), AccountUpload (1:many), Portfolio (1:many)
+
+**AccountUpload** - Stores metadata about uploaded account position CSV files
+- `id`: UUID primary key
+- `user`: Foreign key to User
+- `upload_datetime`: Timestamp when file was uploaded
+- `file_datetime`: Raw date/time string from CSV file
+- `upload_type`: Type of upload (currently 'fidelity')
+- `filename`: Original filename
+- `entry_count`: Number of positions in the upload
+- Related to: User (many:1), AccountPosition (1:many)
+
+**AccountPosition** - Stores individual position records from account CSV uploads
+- `id`: UUID primary key
+- `upload`: Foreign key to AccountUpload
+- `account_number`: Account identifier
+- `account_name`: Account name
+- `symbol`: Normalized ticker symbol
+- `description`: Position description
+- `quantity`: Quantity held (string)
+- `last_price`: Last trade price (string)
+- `last_price_change`: Price change amount (string)
+- `current_value`: Current market value (string)
+- `todays_gain_loss_dollar`: Daily P&L in dollars (string)
+- `todays_gain_loss_percent`: Daily P&L percentage (string)
+- `total_gain_loss_dollar`: Total P&L in dollars (string)
+- `total_gain_loss_percent`: Total P&L percentage (string)
+- `percent_of_account`: Percentage of account (string)
+- `cost_basis_total`: Total cost basis (string)
+- `average_cost_basis`: Average cost per share (string)
+- `type`: Position type (string)
+- Related to: AccountUpload (many:1)
+
+**Portfolio** - Stores portfolio configurations for grouping account positions
+- `id`: UUID primary key
+- `user`: Foreign key to User
+- `name`: Portfolio name
+- `ruleset`: Foreign key to RuleSet (nullable, optional)
+- `year_born`: Birth year for target allocation calculation
+- `retirement_age`: Target retirement age for allocation
+- `created_at`: Creation timestamp
+- `updated_at`: Last updated timestamp
+- Unique together on (user, name)
+- Related to: User (many:1), RuleSet (many:1 optional), PortfolioItem (1:many)
+
+**PortfolioItem** - Stores which account+symbol combinations are included in a portfolio
+- `id`: UUID primary key
+- `portfolio`: Foreign key to Portfolio
+- `account_number`: Account identifier
+- `symbol`: Ticker symbol
+- Unique together on (portfolio, account_number, symbol)
+- Related to: Portfolio (many:1)
 
 ### Key Business Logic (glidepath_app/services.py)
 
