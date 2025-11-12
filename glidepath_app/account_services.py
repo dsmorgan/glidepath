@@ -407,6 +407,16 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
                 category_item['target_dollar'] = round(target_dollar, 2)
                 category_item['difference'] = round(difference, 2)
 
+    # Calculate retirement status display text
+    retirement_status = None
+    if years_to_retirement is not None:
+        if years_to_retirement < 0:
+            retirement_status = f"{abs(years_to_retirement)} years until retirement"
+        elif years_to_retirement == 0:
+            retirement_status = "Retirement this year!"
+        else:
+            retirement_status = f"{years_to_retirement} years past retirement"
+
     return {
         'class_breakdown': {k: float(v) for k, v in class_breakdown.items()},
         'category_breakdown': {k: float(v) for k, v in category_breakdown.items()},
@@ -418,4 +428,5 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
         'year_born': portfolio.year_born,
         'retirement_age': portfolio.retirement_age,
         'years_to_retirement': years_to_retirement,
+        'retirement_status': retirement_status,
     }
