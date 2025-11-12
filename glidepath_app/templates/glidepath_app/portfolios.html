@@ -562,27 +562,32 @@
                                 </div>
                             </div>
 
-                            <!-- Fund List (left justified) -->
-                            {% if rec.funds %}
-                            <div class="ml-16 text-sm text-gray-600 mb-3">
-                                → {% for fund in rec.funds %}{% if fund.ticker %}<span class="{% if not fund.is_recommended %}text-red-600{% endif %}">{{ fund.ticker }}</span>{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}
-                            </div>
-                            {% endif %}
-
-                            <!-- Account Allocations (right justified) -->
-                            {% if rec.account_allocations %}
-                            <div class="space-y-1 mt-2">
-                                {% for alloc in rec.account_allocations %}
-                                <div class="flex justify-end text-sm">
-                                    <span class="text-gray-600">Account: </span>
-                                    <span class="text-gray-900 font-mono ml-2 mr-4">{{ alloc.account_number }}</span>
-                                    <span class="text-gray-900 font-mono font-semibold min-w-[80px] text-right">
-                                        ${{ alloc.amount|floatformat:2 }}
-                                    </span>
+                            <!-- Fund List and Account Allocations in 2-column layout -->
+                            <div class="flex gap-8 mt-2">
+                                <!-- Fund List (left) -->
+                                {% if rec.funds %}
+                                <div class="text-sm text-gray-600 flex-1">
+                                    → {% for fund in rec.funds %}{% if fund.ticker %}<span class="{% if not fund.is_recommended %}text-red-600{% endif %}">{{ fund.ticker }}</span>{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}
                                 </div>
-                                {% endfor %}
+                                {% else %}
+                                <div class="flex-1"></div>
+                                {% endif %}
+
+                                <!-- Account Allocations (right) -->
+                                {% if rec.account_allocations %}
+                                <div class="space-y-1">
+                                    {% for alloc in rec.account_allocations %}
+                                    <div class="flex text-sm whitespace-nowrap">
+                                        <span class="text-gray-600">Account: </span>
+                                        <span class="text-gray-900 font-mono ml-2 mr-4">{{ alloc.account_number }}</span>
+                                        <span class="text-gray-900 font-mono font-semibold min-w-[80px] text-right">
+                                            ${{ alloc.amount|floatformat:2 }}
+                                        </span>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
                             </div>
-                            {% endif %}
                         </div>
                         {% endfor %}
                     </div>

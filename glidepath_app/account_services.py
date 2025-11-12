@@ -744,12 +744,18 @@ def calculate_rebalance_recommendations(portfolio: Portfolio, tolerance: float) 
                 if 'account_allocations' not in existing_rec:
                     existing_rec['account_allocations'] = []
 
-                allocate_amount = min(remaining_cash, buy_amount)
-                existing_rec['account_allocations'].append({
-                    'account_number': account_number,
-                    'amount': round(allocate_amount, 2)
-                })
-                remaining_cash -= allocate_amount
+                # Calculate how much has already been allocated to this category
+                already_allocated = sum(alloc['amount'] for alloc in existing_rec['account_allocations'])
+                remaining_to_allocate = buy_amount - already_allocated
+
+                # Only allocate if we haven't reached the category target yet
+                if remaining_to_allocate > 0:
+                    allocate_amount = min(remaining_cash, remaining_to_allocate)
+                    existing_rec['account_allocations'].append({
+                        'account_number': account_number,
+                        'amount': round(allocate_amount, 2)
+                    })
+                    remaining_cash -= allocate_amount
             else:
                 # Create new buy recommendation
                 allocate_amount = min(remaining_cash, buy_amount)
