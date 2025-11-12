@@ -67,7 +67,7 @@ class FundForm(forms.ModelForm):
 
     class Meta:
         model = Fund
-        fields = ['ticker', 'name', 'category']
+        fields = ['ticker', 'name', 'category', 'preference']
         widgets = {
             'ticker': forms.TextInput(attrs={
                 'class': 'w-full border border-gray-300 rounded-md p-2 bg-gray-100',
@@ -80,11 +80,20 @@ class FundForm(forms.ModelForm):
             'category': forms.Select(attrs={
                 'class': 'w-full border border-gray-300 rounded-md p-2'
             }),
+            'preference': forms.NumberInput(attrs={
+                'class': 'w-full border border-gray-300 rounded-md p-2',
+                'min': '1',
+                'max': '256',
+            }),
         }
         labels = {
             'ticker': 'Ticker Symbol',
             'name': 'Fund Name',
             'category': 'Asset Category',
+            'preference': 'Preference',
+        }
+        help_texts = {
+            'preference': 'Display order and recommendation priority. Lower values appear first (1 is highest priority). Values 1-10 mark this as a recommended fund for the category.',
         }
 
     def __init__(self, *args, **kwargs):

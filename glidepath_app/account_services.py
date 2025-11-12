@@ -272,7 +272,9 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
             category_details[category_key]['symbols'][symbol] = {
                 'value': value,
                 'quantity': quantity,
-                'fund_name': fund.name if fund else None
+                'fund_name': fund.name if fund else None,
+                'preference': fund.preference if fund else None,
+                'is_recommended': fund.is_recommended() if fund else False,
             }
         elif fund:
             # Fund exists but has no category assigned - treat as "Other"
@@ -289,7 +291,9 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
             category_details[category_key]['symbols'][symbol] = {
                 'value': value,
                 'quantity': quantity,
-                'fund_name': fund.name
+                'fund_name': fund.name,
+                'preference': fund.preference,
+                'is_recommended': fund.is_recommended(),
             }
             if 'Other' not in class_breakdown:
                 class_breakdown['Other'] = Decimal('0')
@@ -312,7 +316,9 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
             category_details[category_key]['symbols'][symbol] = {
                 'value': value,
                 'quantity': quantity,
-                'fund_name': None
+                'fund_name': None,
+                'preference': None,
+                'is_recommended': False,
             }
             if 'Unknown' not in class_breakdown:
                 class_breakdown['Unknown'] = Decimal('0')
@@ -389,7 +395,9 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
                     'value': float(symbol_data['value']) if isinstance(symbol_data, dict) else float(symbol_data),  # Convert to float
                     'quantity': float(symbol_data.get('quantity', 0)) if isinstance(symbol_data, dict) else 0,  # Convert to float
                     'price': (float(symbol_data['value']) / float(symbol_data['quantity'])) if isinstance(symbol_data, dict) and symbol_data.get('quantity', 0) > 0 else 0,  # Calculate price
-                    'fund_name': symbol_data.get('fund_name') if isinstance(symbol_data, dict) else None
+                    'fund_name': symbol_data.get('fund_name') if isinstance(symbol_data, dict) else None,
+                    'preference': symbol_data.get('preference') if isinstance(symbol_data, dict) else None,
+                    'is_recommended': symbol_data.get('is_recommended', False) if isinstance(symbol_data, dict) else False,
                 }
                 for ticker, symbol_data in sorted(details['symbols'].items())
             ]
@@ -547,25 +555,69 @@ def calculate_rebalance_recommendations(portfolio: Portfolio, tolerance: float) 
     total_buys = 0
 
     for cat in rebalance_categories:
+        category_name = cat['category']
+        asset_class_name = cat['asset_class']
+
         if cat['dollar_diff'] < 0:
-            # Need to sell
+            # Need to sell - get funds currently in portfolio for this category
+            # Find the category in analysis_data['category_details']
+            category_funds = []
+            for cat_detail in analysis_data['category_details']:
+                if cat_detail['category'] == category_name and cat_detail['asset_class'] == asset_class_name:
+                    # Get symbols from this category, sorted by preference descending (256→1)
+                    symbols = cat_detail.get('symbols', [])
+                    # Sort by preference descending (treat None as 256)
+                    category_funds = sorted(
+                        symbols,
+                        key=lambda x: x.get('preference') if x.get('preference') is not None else 256,
+                        reverse=True  # Highest first (256→1)
+                    )
+                    break
+
             amount = abs(cat['dollar_diff'])
             total_sells += amount
             recommendations.append({
                 'action': 'Sell',
                 'amount': amount,
-                'category': cat['category'],
-                'tagged': True
+                'category': category_name,
+                'asset_class': asset_class_name,
+                'tagged': True,
+                'funds': category_funds
             })
         elif cat['dollar_diff'] > 0:
-            # Need to buy
+            # Need to buy - get recommended funds from Funds table for this category
+            # First, find the AssetCategory from database
+            recommended_funds = []
+            try:
+                from .models import AssetCategory
+                asset_category = AssetCategory.objects.filter(
+                    asset_class__name=asset_class_name,
+                    name=category_name
+                ).prefetch_related('funds').first()
+
+                if asset_category:
+                    # Get recommended funds (preference 1-10), sorted by preference ascending (1→10)
+                    recommended_funds = [
+                        {
+                            'ticker': fund.ticker,
+                            'fund_name': fund.name,
+                            'preference': fund.preference,
+                            'is_recommended': True
+                        }
+                        for fund in asset_category.funds.filter(preference__gte=1, preference__lte=10).order_by('preference')
+                    ]
+            except:
+                pass
+
             amount = cat['dollar_diff']
             total_buys += amount
             recommendations.append({
                 'action': 'Buy',
                 'amount': amount,
-                'category': cat['category'],
-                'tagged': True
+                'category': category_name,
+                'asset_class': asset_class_name,
+                'tagged': True,
+                'funds': recommended_funds
             })
 
     # Calculate net difference
@@ -587,11 +639,36 @@ def calculate_rebalance_recommendations(portfolio: Portfolio, tolerance: float) 
             max_buy = cat['target_dollar'] - cat['actual_dollar']
             if max_buy > 0:
                 buy_amount = min(remaining, max_buy)
+
+                # Get recommended funds for this category
+                recommended_funds = []
+                try:
+                    from .models import AssetCategory
+                    asset_category = AssetCategory.objects.filter(
+                        asset_class__name=cat['asset_class'],
+                        name=cat['category']
+                    ).prefetch_related('funds').first()
+
+                    if asset_category:
+                        recommended_funds = [
+                            {
+                                'ticker': fund.ticker,
+                                'fund_name': fund.name,
+                                'preference': fund.preference,
+                                'is_recommended': True
+                            }
+                            for fund in asset_category.funds.filter(preference__gte=1, preference__lte=10).order_by('preference')
+                        ]
+                except:
+                    pass
+
                 recommendations.append({
                     'action': 'Buy',
                     'amount': buy_amount,
                     'category': cat['category'],
-                    'tagged': False
+                    'asset_class': cat['asset_class'],
+                    'tagged': False,
+                    'funds': recommended_funds
                 })
                 total_buys += buy_amount
                 remaining -= buy_amount
@@ -608,11 +685,26 @@ def calculate_rebalance_recommendations(portfolio: Portfolio, tolerance: float) 
             max_sell = cat['actual_dollar'] - cat['target_dollar']
             if max_sell > 0:
                 sell_amount = min(remaining, max_sell)
+
+                # Get funds currently in portfolio for this category
+                category_funds = []
+                for cat_detail in analysis_data['category_details']:
+                    if cat_detail['category'] == cat['category'] and cat_detail['asset_class'] == cat['asset_class']:
+                        symbols = cat_detail.get('symbols', [])
+                        category_funds = sorted(
+                            symbols,
+                            key=lambda x: x.get('preference') if x.get('preference') is not None else 256,
+                            reverse=True  # Highest first (256→1)
+                        )
+                        break
+
                 recommendations.append({
                     'action': 'Sell',
                     'amount': sell_amount,
                     'category': cat['category'],
-                    'tagged': False
+                    'asset_class': cat['asset_class'],
+                    'tagged': False,
+                    'funds': category_funds
                 })
                 total_sells += sell_amount
                 remaining -= sell_amount

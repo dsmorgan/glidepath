@@ -188,8 +188,8 @@
                                         <!-- Symbol Rows -->
                                         {% for symbol_item in category_group.symbols %}
                                         <tr class="border-b border-gray-200 hover:bg-gray-50">
-                                            <td class="px-6 py-3 text-gray-700">{{ symbol_item.ticker }}</td>
-                                            <td class="px-6 py-3 text-gray-700">{{ symbol_item.fund_name|default:"No Fund Mapping" }}</td>
+                                            <td class="px-6 py-3 {% if not symbol_item.is_recommended %}text-red-600{% else %}text-gray-700{% endif %}">{{ symbol_item.ticker }}</td>
+                                            <td class="px-6 py-3 {% if not symbol_item.is_recommended %}text-red-600{% else %}text-gray-700{% endif %}">{{ symbol_item.fund_name|default:"No Fund Mapping" }}</td>
                                             <td class="px-6 py-3 text-right text-gray-700 font-mono" data-quantity="{{ symbol_item.quantity }}"></td>
                                             <td class="px-6 py-3 text-right text-gray-700 font-mono" data-price="{{ symbol_item.price }}"></td>
                                             <td class="px-6 py-3 text-right text-gray-700 font-mono" data-value="{{ symbol_item.value }}"></td>
@@ -540,16 +540,23 @@
                     <h4 class="text-lg font-semibold text-gray-800 mb-4">Actions</h4>
                     <div class="space-y-2">
                         {% for rec in rebalance_data.recommendations %}
-                        <div class="flex items-center gap-4 p-3 {% if rec.action == 'Sell' %}bg-red-50 border-l-4 border-red-400{% else %}bg-green-50 border-l-4 border-green-400{% endif %} rounded">
-                            <span class="font-semibold {% if rec.action == 'Sell' %}text-red-700{% else %}text-green-700{% endif %} min-w-[60px]">
-                                {{ rec.action }}
-                            </span>
-                            <span class="font-mono text-gray-900">
-                                ${{ rec.amount|floatformat:2 }}
-                            </span>
-                            <span class="text-gray-700">
-                                in funds from <span class="font-semibold">{{ rec.category }}</span>
-                            </span>
+                        <div class="p-3 {% if rec.action == 'Sell' %}bg-red-50 border-l-4 border-red-400{% else %}bg-green-50 border-l-4 border-green-400{% endif %} rounded">
+                            <div class="flex items-center gap-4 mb-2">
+                                <span class="font-semibold {% if rec.action == 'Sell' %}text-red-700{% else %}text-green-700{% endif %} min-w-[60px]">
+                                    {{ rec.action }}
+                                </span>
+                                <span class="font-mono text-gray-900">
+                                    ${{ rec.amount|floatformat:2 }}
+                                </span>
+                                <span class="text-gray-700">
+                                    in funds from <span class="font-semibold">{{ rec.category }}</span>
+                                </span>
+                            </div>
+                            {% if rec.funds %}
+                            <div class="ml-16 text-sm text-gray-600">
+                                → {% for fund in rec.funds %}{% if fund.ticker %}<span class="{% if not fund.is_recommended %}text-red-600{% endif %}">{{ fund.ticker }}</span>{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}
+                            </div>
+                            {% endif %}
                         </div>
                         {% endfor %}
                     </div>
