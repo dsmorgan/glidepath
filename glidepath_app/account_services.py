@@ -324,33 +324,8 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
     # Calculate total value
     total_value = sum(symbol_totals.values()) if symbol_totals else Decimal('0')
 
-    # Format category details for template
-    formatted_category_details = []
-    for category_key in sorted(category_details.keys()):
-        details = category_details[category_key]
-        subtotal_float = float(details['total'])
-
-        # Calculate current percentage (always, even without glidepath rule)
-        current_pct = (subtotal_float / float(total_value) * 100) if total_value > 0 else 0
-
-        formatted_category_details.append({
-            'category': details.get('category_name', category_key),  # Use category_name for display
-            'asset_class': details['asset_class'],
-            'subtotal': subtotal_float,  # Convert Decimal to float for JSON serialization
-            'current_pct': round(current_pct, 2),  # Always include current percentage
-            'symbols': [
-                {
-                    'ticker': ticker,
-                    'value': float(symbol_data['value']) if isinstance(symbol_data, dict) else float(symbol_data),  # Convert to float
-                    'quantity': float(symbol_data.get('quantity', 0)) if isinstance(symbol_data, dict) else 0,  # Convert to float
-                    'price': (float(symbol_data['value']) / float(symbol_data['quantity'])) if isinstance(symbol_data, dict) and symbol_data.get('quantity', 0) > 0 else 0,  # Calculate price
-                    'fund_name': symbol_data.get('fund_name') if isinstance(symbol_data, dict) else None
-                }
-                for ticker, symbol_data in sorted(details['symbols'].items())
-            ]
-        })
-
     # Calculate target allocations from glidepath rule if available
+    # Do this BEFORE formatting so we can add missing categories
     from datetime import datetime
     current_year = datetime.now().year
 
@@ -384,28 +359,65 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
                 category_key = f"{cat_alloc.asset_category.asset_class.name}:{cat_alloc.asset_category.name}"
                 target_category_breakdown[category_key] = float(cat_alloc.percentage)
 
-            # Add target and difference information to category details
-            # Convert total_value to float for calculations to avoid Decimal/float type issues
-            total_value_float = float(total_value)
+                # Ensure all categories from glidepath rule are in category_details
+                # even if they have no actual holdings
+                if category_key not in category_details:
+                    category_details[category_key] = {
+                        'asset_class': cat_alloc.asset_category.asset_class.name,
+                        'category_name': cat_alloc.asset_category.name,
+                        'total': Decimal('0'),
+                        'symbols': {}
+                    }
 
-            for category_item in formatted_category_details:
-                category_name = category_item['category']
-                asset_class_name = category_item['asset_class']
-                # Use composite key to look up target percentage
-                category_key = f"{asset_class_name}:{category_name}"
-                target_pct = target_category_breakdown.get(category_key, 0)
-                current_value = float(category_item['subtotal'])
+    # Now format ALL category details for template (including newly added empty categories)
+    formatted_category_details = []
+    for category_key in sorted(category_details.keys()):
+        details = category_details[category_key]
+        subtotal_float = float(details['total'])
 
-                # Calculate target dollar amount
-                target_dollar = (total_value_float * target_pct / 100) if target_pct > 0 else 0
+        # Calculate current percentage (always, even without glidepath rule)
+        current_pct = (subtotal_float / float(total_value) * 100) if total_value > 0 else 0
 
-                # Calculate difference (positive = under target, negative = over target)
-                difference = target_dollar - current_value
+        formatted_category_details.append({
+            'category': details.get('category_name', category_key),  # Use category_name for display
+            'asset_class': details['asset_class'],
+            'subtotal': subtotal_float,  # Convert Decimal to float for JSON serialization
+            'current_pct': round(current_pct, 2),  # Always include current percentage
+            'symbols': [
+                {
+                    'ticker': ticker,
+                    'value': float(symbol_data['value']) if isinstance(symbol_data, dict) else float(symbol_data),  # Convert to float
+                    'quantity': float(symbol_data.get('quantity', 0)) if isinstance(symbol_data, dict) else 0,  # Convert to float
+                    'price': (float(symbol_data['value']) / float(symbol_data['quantity'])) if isinstance(symbol_data, dict) and symbol_data.get('quantity', 0) > 0 else 0,  # Calculate price
+                    'fund_name': symbol_data.get('fund_name') if isinstance(symbol_data, dict) else None
+                }
+                for ticker, symbol_data in sorted(details['symbols'].items())
+            ]
+        })
 
-                category_item['target_pct'] = round(target_pct, 2)
-                # current_pct is already calculated above, no need to recalculate
-                category_item['target_dollar'] = round(target_dollar, 2)
-                category_item['difference'] = round(difference, 2)
+    # Add target and difference information to category details if we have a matching rule
+    if matching_rule:
+        # Convert total_value to float for calculations to avoid Decimal/float type issues
+        total_value_float = float(total_value)
+
+        for category_item in formatted_category_details:
+            category_name = category_item['category']
+            asset_class_name = category_item['asset_class']
+            # Use composite key to look up target percentage
+            category_key = f"{asset_class_name}:{category_name}"
+            target_pct = target_category_breakdown.get(category_key, 0)
+            current_value = float(category_item['subtotal'])
+
+            # Calculate target dollar amount
+            target_dollar = (total_value_float * target_pct / 100) if target_pct > 0 else 0
+
+            # Calculate difference (positive = under target, negative = over target)
+            difference = target_dollar - current_value
+
+            category_item['target_pct'] = round(target_pct, 2)
+            # current_pct is already calculated above, no need to recalculate
+            category_item['target_dollar'] = round(target_dollar, 2)
+            category_item['difference'] = round(difference, 2)
 
     # Calculate retirement status display text
     retirement_status = None
