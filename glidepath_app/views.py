@@ -1,4 +1,6 @@
 import json
+import csv
+import io
 
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect
@@ -196,11 +198,17 @@ def settings_view(request):
     users = User.objects.all().order_by('username')
     identity_providers = IdentityProvider.objects.all().order_by('name')
 
+    # Get session messages for funds upload
+    funds_upload_success = request.session.pop('funds_upload_success', None)
+    funds_upload_error = request.session.pop('funds_upload_error', None)
+
     context = {
         "form": form,
         "success_message": success_message,
         "users": users,
         "identity_providers": identity_providers,
+        "funds_upload_success": funds_upload_success,
+        "funds_upload_error": funds_upload_error,
     }
 
     return render(request, "glidepath_app/settings.html", context)
@@ -291,6 +299,7 @@ def funds_view(request):
         'ticker': 'ticker',
         'name': 'name',
         'category': 'category__name',
+        'preference': 'preference',
     }
 
     # Get the sort field, default to ticker if invalid
@@ -303,8 +312,17 @@ def funds_view(request):
     # Get all funds with sorting
     funds_list = Fund.objects.select_related('category', 'category__asset_class').order_by(sort_field)
 
-    # Pagination - 10 funds per page
-    paginator = Paginator(funds_list, 10)
+    # Get per-page parameter (default 10, options 10 or 100)
+    per_page_str = request.GET.get('per_page', '10')
+    try:
+        per_page = int(per_page_str)
+        if per_page not in [10, 100]:
+            per_page = 10
+    except ValueError:
+        per_page = 10
+
+    # Pagination
+    paginator = Paginator(funds_list, per_page)
     page = request.GET.get('page', 1)
 
     try:
@@ -318,6 +336,7 @@ def funds_view(request):
         'funds': funds,
         'sort_by': sort_by,
         'order': order,
+        'per_page': per_page,
     }
 
     return render(request, "glidepath_app/funds.html", context)
@@ -903,3 +922,124 @@ def select_user(request, user_id):
     # Get the referer URL or default to home
     referer = request.META.get('HTTP_REFERER', '/')
     return redirect(referer)
+
+
+def download_funds_csv(request):
+    """Download all funds as a CSV file."""
+    # Create the HttpResponse object with CSV header
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="funds.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow(['ticker', 'name', 'category', 'preference'])
+
+    # Get all funds
+    funds = Fund.objects.select_related('category', 'category__asset_class').all()
+
+    for fund in funds:
+        # Format category as "Class:Category" or leave blank
+        if fund.category:
+            category_str = f"{fund.category.asset_class.name}:{fund.category.name}"
+        else:
+            category_str = ""
+
+        writer.writerow([
+            fund.ticker,
+            fund.name,
+            category_str,
+            fund.preference if fund.preference is not None else 99
+        ])
+
+    return response
+
+
+def upload_funds_csv(request):
+    """Upload funds from a CSV file."""
+    if request.method != 'POST':
+        return redirect('settings')
+
+    if 'file' not in request.FILES:
+        request.session['funds_upload_error'] = 'No file uploaded'
+        return redirect('settings')
+
+    csv_file = request.FILES['file']
+
+    # Validate file extension
+    if not csv_file.name.endswith('.csv'):
+        request.session['funds_upload_error'] = 'File must be a CSV'
+        return redirect('settings')
+
+    try:
+        # Read and decode the CSV file
+        file_data = csv_file.read().decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(file_data))
+
+        inserted_count = 0
+        skipped_count = 0
+        errors = []
+
+        for row_num, row in enumerate(csv_reader, start=2):  # Start at 2 (after header)
+            ticker = row.get('ticker', '').strip()
+            name = row.get('name', '').strip()
+            category_str = row.get('category', '').strip()
+            preference_str = row.get('preference', '99').strip()
+
+            if not ticker:
+                errors.append(f"Row {row_num}: Missing ticker")
+                continue
+
+            # Check if fund already exists
+            if Fund.objects.filter(ticker=ticker).exists():
+                skipped_count += 1
+                continue
+
+            # Parse preference
+            try:
+                preference = int(preference_str) if preference_str else 99
+            except ValueError:
+                preference = 99
+
+            # Parse category
+            category = None
+            if category_str:
+                parts = category_str.split(':', 1)
+                if len(parts) == 2:
+                    class_name, category_name = parts[0].strip(), parts[1].strip()
+
+                    # Find or create asset class
+                    from .models import AssetClass
+                    asset_class, _ = AssetClass.objects.get_or_create(name=class_name)
+
+                    # Find or create category
+                    category, _ = AssetCategory.objects.get_or_create(
+                        asset_class=asset_class,
+                        name=category_name
+                    )
+
+            # Create the fund
+            Fund.objects.create(
+                ticker=ticker,
+                name=name if name else ticker,
+                category=category,
+                preference=preference
+            )
+            inserted_count += 1
+
+        # Build success message
+        message_parts = []
+        if inserted_count > 0:
+            message_parts.append(f"{inserted_count} fund(s) inserted")
+        if skipped_count > 0:
+            message_parts.append(f"{skipped_count} fund(s) skipped (already exist)")
+
+        if errors:
+            request.session['funds_upload_error'] = f"{'; '.join(message_parts)}. Errors: {'; '.join(errors)}"
+        elif message_parts:
+            request.session['funds_upload_success'] = '; '.join(message_parts)
+        else:
+            request.session['funds_upload_error'] = 'No funds were processed'
+
+    except Exception as e:
+        request.session['funds_upload_error'] = f'Error processing CSV: {str(e)}'
+
+    return redirect('settings')

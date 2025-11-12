@@ -80,6 +80,7 @@
                     <th class="px-4 py-3 text-left text-sm font-semibold text-gray-900">ID</th>
                     <th class="px-4 py-3 text-left text-sm font-semibold text-gray-900">Name</th>
                     <th class="px-4 py-3 text-left text-sm font-semibold text-gray-900">Type</th>
+                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-900">Disabled</th>
                     <th class="px-4 py-3 text-left text-sm font-semibold text-gray-900">Actions</th>
                 </tr>
             </thead>
@@ -92,6 +93,9 @@
                         {% for value, label in provider.PROVIDER_TYPE_CHOICES %}
                             {% if provider.type == value %}{{ label }}{% endif %}
                         {% endfor %}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-700">
+                        {% if provider.disabled %}Yes{% else %}No{% endif %}
                     </td>
                     <td class="px-4 py-3 text-sm text-gray-700 space-x-2">
                         <a href="{% url 'identity_provider_edit' provider.id %}" class="text-indigo-600 hover:text-indigo-900">Edit</a>
@@ -108,6 +112,56 @@
     {% else %}
     <p class="text-gray-600">No identity providers configured yet. <a href="{% url 'identity_provider_add' %}" class="text-indigo-600 hover:underline">Add an identity provider</a></p>
     {% endif %}
+</div>
+
+<!-- Funds Management Section -->
+<div class="bg-white shadow rounded-lg p-6 mb-6">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold text-gray-900">Funds Management</h1>
+        <a href="{% url 'download_funds_csv' %}" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+            Download Funds CSV
+        </a>
+    </div>
+
+    <p class="text-gray-700 mb-6">
+        Download all funds to CSV or upload a CSV file to bulk import funds.
+        Upload format: ticker, name, category (as "Class:Category" or blank for Other), preference (1-256).
+        Existing funds (by ticker) will be skipped.
+    </p>
+
+    {% if funds_upload_success %}
+    <div class="bg-green-50 border-l-4 border-green-400 p-4 mb-6">
+        <p class="text-green-700">{{ funds_upload_success }}</p>
+    </div>
+    {% endif %}
+
+    {% if funds_upload_error %}
+    <div class="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
+        <p class="text-red-700">{{ funds_upload_error }}</p>
+    </div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" action="{% url 'upload_funds_csv' %}" class="space-y-4">
+        {% csrf_token %}
+        <div>
+            <label for="funds-csv-file" class="block text-sm font-medium text-gray-700 mb-1">
+                Upload Funds CSV
+            </label>
+            <input
+                type="file"
+                id="funds-csv-file"
+                name="file"
+                accept=".csv"
+                required
+                class="w-full border border-gray-300 rounded-md p-2 text-sm"
+            />
+        </div>
+        <div class="flex justify-end">
+            <button type="submit" class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                Upload CSV
+            </button>
+        </div>
+    </form>
 </div>
 
 <!-- API Settings Section -->
