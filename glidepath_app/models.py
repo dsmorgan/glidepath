@@ -120,6 +120,10 @@ class Fund(models.Model):
         AssetCategory, on_delete=models.CASCADE, related_name="funds",
         null=True, blank=True
     )
+    preference = models.IntegerField(
+        default=99,
+        help_text="Display order and recommendation priority (1-10 = recommended, lower = higher priority)"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -127,6 +131,14 @@ class Fund(models.Model):
 
     def __str__(self) -> str:
         return f"{self.ticker} - {self.name}"
+
+    def is_recommended(self):
+        """Returns True if this fund is recommended (preference 1-10)."""
+        return self.preference is not None and 1 <= self.preference <= 10
+
+    def get_sort_preference(self):
+        """Returns the preference value for sorting, treating NULL as 256."""
+        return self.preference if self.preference is not None else 256
 
 
 class IdentityProvider(models.Model):
