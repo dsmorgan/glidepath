@@ -81,17 +81,7 @@
                 <div class="bg-blue-50 p-4 rounded border border-blue-200">
                     <p class="text-sm text-gray-600">Retirement Status</p>
                     <p class="text-lg font-semibold text-gray-900">
-                        {% if analysis_data.years_to_retirement is not None %}
-                            {% if analysis_data.years_to_retirement < 0 %}
-                                {{ analysis_data.years_to_retirement|abs }} years until retirement
-                            {% elif analysis_data.years_to_retirement == 0 %}
-                                Retirement this year!
-                            {% else %}
-                                {{ analysis_data.years_to_retirement }} years past retirement
-                            {% endif %}
-                        {% else %}
-                            -
-                        {% endif %}
+                        {% if analysis_data.retirement_status %}{{ analysis_data.retirement_status }}{% else %}-{% endif %}
                     </p>
                 </div>
             </div>
