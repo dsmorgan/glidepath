@@ -336,7 +336,7 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
             category_breakdown['Unknown'] += value
 
     # Calculate total value
-    total_value = sum(symbol_totals.values()) if symbol_totals else Decimal('0')
+    total_value = sum(ticker_breakdown.values()) if ticker_breakdown else Decimal('0')
 
     # Calculate target allocations from glidepath rule if available
     # Do this BEFORE formatting so we can add missing categories
