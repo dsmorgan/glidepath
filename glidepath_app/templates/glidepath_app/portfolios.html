@@ -9,17 +9,17 @@
     <div class="bg-gray-50 p-6 rounded-lg mb-8">
         <div class="flex justify-between items-center mb-6">
             <h2 class="text-xl font-semibold text-gray-800">Manage Portfolios</h2>
-            <a href="{% url 'portfolio_create' %}"
-               class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-medium">
-                Add Portfolio
-            </a>
         </div>
 
         {% if portfolios %}
-        <form method="get" class="space-y-2">
-            <div class="flex gap-2">
+        <div class="flex gap-2 items-center">
+            <a href="{% url 'portfolio_create' %}"
+               class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-medium whitespace-nowrap">
+                Add Portfolio
+            </a>
+            <form method="get" class="flex-1">
                 <select name="portfolio" onchange="this.form.submit()"
-                        class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
                     <option value="">Select Portfolio</option>
                     {% for portfolio in portfolios %}
                     <option value="{{ portfolio.id }}" {% if selected_portfolio and selected_portfolio.id == portfolio.id %}selected{% endif %}>
@@ -27,28 +27,25 @@
                     </option>
                     {% endfor %}
                 </select>
-            </div>
-        </form>
-
-        {% if selected_portfolio %}
-        <div class="flex gap-2 mt-4">
+            </form>
+            {% if selected_portfolio %}
             <a href="{% url 'edit_portfolio' selected_portfolio.id %}"
-               class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 text-center flex-1">
+               class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 text-center whitespace-nowrap">
                 Edit
             </a>
-            <form method="post" action="{% url 'delete_portfolio' selected_portfolio.id %}" class="flex-1"
+            <form method="post" action="{% url 'delete_portfolio' selected_portfolio.id %}"
                   onsubmit="return confirm('Are you sure you want to delete this portfolio?');">
                 {% csrf_token %}
-                <button type="submit" class="w-full px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">
+                <button type="submit" class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 whitespace-nowrap">
                     Delete
                 </button>
             </form>
             <a href="{% url 'download_portfolio_csv' selected_portfolio.id %}"
-               class="px-4 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 text-center flex-1">
+               class="px-4 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 text-center whitespace-nowrap">
                 Download CSV
             </a>
+            {% endif %}
         </div>
-        {% endif %}
         {% else %}
         <p class="text-gray-500">No portfolios created yet. Click "Add Portfolio" to get started.</p>
         {% endif %}
@@ -64,15 +61,15 @@
             <!-- Portfolio Metadata -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div class="bg-blue-50 p-4 rounded border border-blue-200">
-                    <p class="text-sm text-gray-600">Current Year</p>
-                    <p class="text-lg font-semibold text-gray-900">
-                        {% if analysis_data.current_year %}{{ analysis_data.current_year }}{% else %}-{% endif %}
-                    </p>
-                </div>
-                <div class="bg-blue-50 p-4 rounded border border-blue-200">
                     <p class="text-sm text-gray-600">Year Born</p>
                     <p class="text-lg font-semibold text-gray-900">
                         {% if analysis_data.year_born %}{{ analysis_data.year_born }}{% else %}-{% endif %}
+                    </p>
+                </div>
+                <div class="bg-blue-50 p-4 rounded border border-blue-200">
+                    <p class="text-sm text-gray-600">Current Year</p>
+                    <p class="text-lg font-semibold text-gray-900">
+                        {% if analysis_data.current_year %}{{ analysis_data.current_year }}{% else %}-{% endif %}
                     </p>
                 </div>
                 <div class="bg-blue-50 p-4 rounded border border-blue-200">
@@ -82,9 +79,19 @@
                     </p>
                 </div>
                 <div class="bg-blue-50 p-4 rounded border border-blue-200">
-                    <p class="text-sm text-gray-600">Years to Retirement</p>
+                    <p class="text-sm text-gray-600">Retirement Status</p>
                     <p class="text-lg font-semibold text-gray-900">
-                        {% if analysis_data.years_to_retirement is not None %}{{ analysis_data.years_to_retirement }}{% else %}-{% endif %}
+                        {% if analysis_data.years_to_retirement is not None %}
+                            {% if analysis_data.years_to_retirement < 0 %}
+                                {{ analysis_data.years_to_retirement|abs }} years until retirement
+                            {% elif analysis_data.years_to_retirement == 0 %}
+                                Retirement this year!
+                            {% else %}
+                                {{ analysis_data.years_to_retirement }} years past retirement
+                            {% endif %}
+                        {% else %}
+                            -
+                        {% endif %}
                     </p>
                 </div>
             </div>
@@ -180,6 +187,8 @@
                                         <tr>
                                             <th class="px-6 py-3 text-left font-medium text-gray-700">Symbol</th>
                                             <th class="px-6 py-3 text-left font-medium text-gray-700">Fund Name</th>
+                                            <th class="px-6 py-3 text-right font-medium text-gray-700">Quantity</th>
+                                            <th class="px-6 py-3 text-right font-medium text-gray-700">Price</th>
                                             <th class="px-6 py-3 text-right font-medium text-gray-700">Current Value</th>
                                         </tr>
                                     </thead>
@@ -189,6 +198,8 @@
                                         <tr class="border-b border-gray-200 hover:bg-gray-50">
                                             <td class="px-6 py-3 text-gray-700">{{ symbol_item.ticker }}</td>
                                             <td class="px-6 py-3 text-gray-700">{{ symbol_item.fund_name|default:"No Fund Mapping" }}</td>
+                                            <td class="px-6 py-3 text-right text-gray-700 font-mono" data-quantity="{{ symbol_item.quantity }}"></td>
+                                            <td class="px-6 py-3 text-right text-gray-700 font-mono" data-price="{{ symbol_item.price }}"></td>
                                             <td class="px-6 py-3 text-right text-gray-700 font-mono" data-value="{{ symbol_item.value }}"></td>
                                         </tr>
                                         {% endfor %}
@@ -246,17 +257,42 @@
                             const diff = category.difference || 0;
                             const diffText = diff > 0 ? `+$${formatNumber(diff)}` : `-$${formatNumber(Math.abs(diff))}`;
                             const diffClass = diff > 0 ? 'text-green-600' : diff < 0 ? 'text-red-600' : 'text-gray-600';
-                            diffSpan.textContent = `Diff: ${diffText}`;
+
+                            // Calculate percentage difference (target - current)
+                            const targetPct = parseFloat(category.target_pct || 0);
+                            const currentPct = parseFloat(category.current_pct || 0);
+                            const pctDiff = targetPct - currentPct;
+                            const pctDiffText = pctDiff > 0 ? `+${pctDiff.toFixed(2)}%` : `${pctDiff.toFixed(2)}%`;
+
+                            diffSpan.textContent = `Diff: ${diffText} (${pctDiffText})`;
                             diffSpan.className = `text-sm font-mono ${diffClass} min-w-[120px]`;
                         }
                     });
 
                     // Format symbol values in table (run once after all categories are processed)
-                    const tableRows = document.querySelectorAll(`[data-value]`);
-                    tableRows.forEach(cell => {
+                    const valueCells = document.querySelectorAll(`[data-value]`);
+                    valueCells.forEach(cell => {
                         const value = parseFloat(cell.dataset.value);
                         if (!isNaN(value)) {
                             cell.textContent = '$' + formatNumber(value);
+                        }
+                    });
+
+                    // Format quantity cells
+                    const quantityCells = document.querySelectorAll(`[data-quantity]`);
+                    quantityCells.forEach(cell => {
+                        const quantity = parseFloat(cell.dataset.quantity);
+                        if (!isNaN(quantity)) {
+                            cell.textContent = formatNumber(quantity);
+                        }
+                    });
+
+                    // Format price cells (2 decimal places)
+                    const priceCells = document.querySelectorAll(`[data-price]`);
+                    priceCells.forEach(cell => {
+                        const price = parseFloat(cell.dataset.price);
+                        if (!isNaN(price)) {
+                            cell.textContent = '$' + price.toFixed(2);
                         }
                     });
                 });
