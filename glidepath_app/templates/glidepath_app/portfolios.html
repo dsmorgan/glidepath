@@ -172,6 +172,7 @@
 
                         <!-- Accordion Content - shows symbols with fund names when expanded -->
                         <div class="accordion-content hidden bg-white border-t border-gray-200">
+                            {% if category_group.symbols %}
                             <div class="overflow-x-auto">
                                 <table class="w-full text-sm">
                                     <thead class="bg-gray-100 border-b border-gray-300">
@@ -197,6 +198,11 @@
                                     </tbody>
                                 </table>
                             </div>
+                            {% else %}
+                            <div class="p-6 text-center text-gray-500 italic">
+                                No funds currently allocated to this category
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                     {% endfor %}
