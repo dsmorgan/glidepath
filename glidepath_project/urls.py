@@ -23,6 +23,8 @@ from glidepath_app.views import (
     select_user,
     identity_provider_detail,
     delete_identity_provider,
+    download_funds_csv,
+    upload_funds_csv,
 )
 
 urlpatterns = [
@@ -51,4 +53,6 @@ urlpatterns = [
     path('logout/', logout_view, name='logout'),
     path('export/', export_rules, name='export_rules'),
     path('api/query-ticker/', query_ticker, name='query_ticker'),
+    path('settings/funds/download/', download_funds_csv, name='download_funds_csv'),
+    path('settings/funds/upload/', upload_funds_csv, name='upload_funds_csv'),
 ]

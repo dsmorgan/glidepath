@@ -153,6 +153,7 @@ class IdentityProvider(models.Model):
     type = models.IntegerField(choices=PROVIDER_TYPE_CHOICES, default=0)
     redirect_url = models.URLField(blank=True)
     auto_provision_users = models.BooleanField(default=False)
+    disabled = models.BooleanField(default=False, help_text="Prevents new logins from this provider")
     client_id = models.CharField(max_length=500)
     client_secret = models.CharField(max_length=500)
     authorization_url = models.URLField()
