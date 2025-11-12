@@ -194,6 +194,7 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
 
     # Aggregate positions by symbol
     symbol_totals = {}  # symbol -> total current value (as Decimal)
+    symbol_quantities = {}  # symbol -> total quantity (as Decimal)
     for account_number, symbol in account_symbols:
         upload = latest_uploads.get(account_number)
         if not upload:
@@ -216,6 +217,17 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
             if symbol not in symbol_totals:
                 symbol_totals[symbol] = Decimal('0')
             symbol_totals[symbol] += current_value
+
+            # Parse quantity, handling commas
+            quantity_str = position.quantity.replace(',', '').strip()
+            try:
+                quantity = Decimal(quantity_str) if quantity_str else Decimal('0')
+            except:
+                quantity = Decimal('0')
+
+            if symbol not in symbol_quantities:
+                symbol_quantities[symbol] = Decimal('0')
+            symbol_quantities[symbol] += quantity
 
     # Build breakdowns by looking up fund information
     class_breakdown = {}  # class_name -> total value
@@ -256,8 +268,10 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
                     'symbols': {}
                 }
             category_details[category_key]['total'] += value
+            quantity = symbol_quantities.get(symbol, Decimal('0'))
             category_details[category_key]['symbols'][symbol] = {
                 'value': value,
+                'quantity': quantity,
                 'fund_name': fund.name if fund else None
             }
         elif fund:
@@ -271,8 +285,10 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
                     'symbols': {}
                 }
             category_details[category_key]['total'] += value
+            quantity = symbol_quantities.get(symbol, Decimal('0'))
             category_details[category_key]['symbols'][symbol] = {
                 'value': value,
+                'quantity': quantity,
                 'fund_name': fund.name
             }
             if 'Other' not in class_breakdown:
@@ -292,8 +308,10 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
                     'symbols': {}
                 }
             category_details[category_key]['total'] += value
+            quantity = symbol_quantities.get(symbol, Decimal('0'))
             category_details[category_key]['symbols'][symbol] = {
                 'value': value,
+                'quantity': quantity,
                 'fund_name': None
             }
             if 'Unknown' not in class_breakdown:
@@ -324,6 +342,8 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
                 {
                     'ticker': ticker,
                     'value': float(symbol_data['value']) if isinstance(symbol_data, dict) else float(symbol_data),  # Convert to float
+                    'quantity': float(symbol_data.get('quantity', 0)) if isinstance(symbol_data, dict) else 0,  # Convert to float
+                    'price': (float(symbol_data['value']) / float(symbol_data['quantity'])) if isinstance(symbol_data, dict) and symbol_data.get('quantity', 0) > 0 else 0,  # Calculate price
                     'fund_name': symbol_data.get('fund_name') if isinstance(symbol_data, dict) else None
                 }
                 for ticker, symbol_data in sorted(details['symbols'].items())
