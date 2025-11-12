@@ -417,6 +417,9 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
         else:
             retirement_status = f"{years_to_retirement} years past retirement"
 
+    # Calculate rebalance recommendations if tolerance is provided
+    rebalance_data = None
+
     return {
         'class_breakdown': {k: float(v) for k, v in class_breakdown.items()},
         'category_breakdown': {k: float(v) for k, v in category_breakdown.items()},
@@ -429,4 +432,182 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
         'retirement_age': portfolio.retirement_age,
         'years_to_retirement': years_to_retirement,
         'retirement_status': retirement_status,
+        'rebalance_data': rebalance_data,
+    }
+
+
+def calculate_rebalance_recommendations(portfolio: Portfolio, tolerance: float) -> dict:
+    """
+    Calculate rebalance recommendations based on tolerance threshold.
+
+    Args:
+        portfolio: Portfolio instance
+        tolerance: Tolerance threshold as percentage (e.g., 2.0 for 2%)
+
+    Returns:
+        dict with:
+        - recommendations: list of buy/sell actions
+        - total_buys: total dollar amount to buy
+        - total_sells: total dollar amount to sell
+        - net_balanced: whether sells and buys are balanced
+    """
+    # Get portfolio analysis data
+    analysis_data = get_portfolio_analysis(portfolio)
+
+    if not analysis_data.get('target_category_breakdown'):
+        return {
+            'recommendations': [],
+            'total_buys': 0,
+            'total_sells': 0,
+            'net_balanced': True,
+            'message': 'No glidepath rule assigned or retirement age not set'
+        }
+
+    total_value = analysis_data['total_value']
+    if total_value <= 0:
+        return {
+            'recommendations': [],
+            'total_buys': 0,
+            'total_sells': 0,
+            'net_balanced': True,
+            'message': 'Portfolio has no value'
+        }
+
+    # Build list of all categories with their metrics
+    all_categories = []
+    any_category_exceeded = False
+
+    for category_item in analysis_data['category_details']:
+        category_name = category_item['category']
+        asset_class = category_item['asset_class']
+        actual_pct = category_item.get('current_pct', 0)
+        target_pct = category_item.get('target_pct', 0)
+        actual_dollar = category_item['subtotal']
+        target_dollar = (total_value * target_pct / 100) if target_pct > 0 else 0
+
+        # Calculate percentage difference (target - actual)
+        pct_diff = target_pct - actual_pct
+        dollar_diff = target_dollar - actual_dollar
+
+        # Check if exceeds tolerance
+        exceeds_tolerance = abs(pct_diff) > tolerance
+
+        if exceeds_tolerance and category_name not in ['Other', 'Unknown']:
+            any_category_exceeded = True
+
+        all_categories.append({
+            'category': category_name,
+            'asset_class': asset_class,
+            'actual_pct': actual_pct,
+            'target_pct': target_pct,
+            'actual_dollar': actual_dollar,
+            'target_dollar': target_dollar,
+            'pct_diff': pct_diff,
+            'dollar_diff': dollar_diff,
+            'exceeds_tolerance': exceeds_tolerance,
+        })
+
+    # Sort by pct_diff (low to high: most oversized to most undersized)
+    all_categories.sort(key=lambda x: x['pct_diff'])
+
+    # Identify categories to rebalance
+    rebalance_categories = []
+
+    for cat in all_categories:
+        include = False
+
+        if cat['category'] == 'Other':
+            # Include Other if ANY category exceeded AND Other value > $1
+            include = any_category_exceeded and cat['actual_dollar'] > 1
+        elif cat['category'] == 'Unknown':
+            # Include Unknown only if it exceeds tolerance
+            include = cat['exceeds_tolerance']
+        else:
+            # Regular categories: include if exceeds tolerance
+            include = cat['exceeds_tolerance']
+
+        if include:
+            rebalance_categories.append(cat)
+
+    # Calculate initial recommendations from rebalance categories
+    recommendations = []
+    total_sells = 0
+    total_buys = 0
+
+    for cat in rebalance_categories:
+        if cat['dollar_diff'] < 0:
+            # Need to sell
+            amount = abs(cat['dollar_diff'])
+            total_sells += amount
+            recommendations.append({
+                'action': 'Sell',
+                'amount': amount,
+                'category': cat['category'],
+                'tagged': True
+            })
+        elif cat['dollar_diff'] > 0:
+            # Need to buy
+            amount = cat['dollar_diff']
+            total_buys += amount
+            recommendations.append({
+                'action': 'Buy',
+                'amount': amount,
+                'category': cat['category'],
+                'tagged': True
+            })
+
+    # Calculate net difference
+    net = total_sells - total_buys
+
+    # Get untagged categories for balancing
+    untagged_categories = [cat for cat in all_categories if cat not in rebalance_categories]
+
+    # Balance the net difference
+    if net > 0:
+        # More sells than buys - need to find categories to buy
+        # Start from most undersized untagged categories
+        remaining = net
+        for cat in reversed(untagged_categories):  # Reverse to start from most undersized
+            if remaining <= 0:
+                break
+
+            # Calculate how much we can buy up to target
+            max_buy = cat['target_dollar'] - cat['actual_dollar']
+            if max_buy > 0:
+                buy_amount = min(remaining, max_buy)
+                recommendations.append({
+                    'action': 'Buy',
+                    'amount': buy_amount,
+                    'category': cat['category'],
+                    'tagged': False
+                })
+                total_buys += buy_amount
+                remaining -= buy_amount
+
+    elif net < 0:
+        # More buys than sells - need to find categories to sell
+        # Start from most oversized untagged categories
+        remaining = abs(net)
+        for cat in untagged_categories:  # Already sorted from most oversized
+            if remaining <= 0:
+                break
+
+            # Calculate how much we can sell down to target
+            max_sell = cat['actual_dollar'] - cat['target_dollar']
+            if max_sell > 0:
+                sell_amount = min(remaining, max_sell)
+                recommendations.append({
+                    'action': 'Sell',
+                    'amount': sell_amount,
+                    'category': cat['category'],
+                    'tagged': False
+                })
+                total_sells += sell_amount
+                remaining -= sell_amount
+
+    return {
+        'recommendations': recommendations,
+        'total_buys': total_buys,
+        'total_sells': total_sells,
+        'net_balanced': abs(total_sells - total_buys) < 0.01,  # Allow for rounding errors
     }
