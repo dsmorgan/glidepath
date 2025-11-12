@@ -9,7 +9,7 @@ from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm,
 from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, AccountPosition, Portfolio, PortfolioItem
 from .services import export_glidepath_rules, import_glidepath_rules
 from .ticker_service import query_ticker as query_ticker_service
-from .account_services import import_fidelity_csv, get_portfolio_analysis
+from .account_services import import_fidelity_csv, get_portfolio_analysis, calculate_rebalance_recommendations
 
 DEFAULT_COLORS = [
     "#4dc9f6",
@@ -417,8 +417,16 @@ def portfolios_view(request):
     else:
         current_user = User.objects.first()
 
+    # Get tolerance parameter (default to 2.0%)
+    tolerance_str = request.GET.get('tolerance', '2.0')
+    try:
+        tolerance = float(tolerance_str)
+    except ValueError:
+        tolerance = 2.0
+
     # Get all portfolios for the current user
     analysis_data = None
+    rebalance_data = None
     if current_user:
         portfolios = Portfolio.objects.filter(user=current_user)
         selected_portfolio_id = request.GET.get('portfolio') or request.POST.get('selected_portfolio')
@@ -440,6 +448,9 @@ def portfolios_view(request):
             # Serialize category_details to JSON for JavaScript consumption
             if analysis_data and 'category_details' in analysis_data:
                 analysis_data['category_details_json'] = json.dumps(analysis_data['category_details'])
+
+            # Calculate rebalance recommendations
+            rebalance_data = calculate_rebalance_recommendations(selected_portfolio, tolerance)
     else:
         portfolios = Portfolio.objects.none()
         selected_portfolio = None
@@ -449,6 +460,8 @@ def portfolios_view(request):
         'selected_portfolio': selected_portfolio,
         'current_user': current_user,
         'analysis_data': analysis_data,
+        'rebalance_data': rebalance_data,
+        'tolerance': tolerance,
     }
 
     return render(request, "glidepath_app/portfolios.html", context)
