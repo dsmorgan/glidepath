@@ -192,9 +192,9 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
             if latest_upload:
                 latest_uploads[account_number] = latest_upload
 
-    # Aggregate positions by symbol
-    symbol_totals = {}  # symbol -> total current value (as Decimal)
-    symbol_quantities = {}  # symbol -> total quantity (as Decimal)
+    # Aggregate positions by (account_number, symbol) to track per-account holdings
+    # Key: (account_number, symbol) -> Dict with value and quantity
+    symbol_account_data = {}  # (account_number, symbol) -> {'value': Decimal, 'quantity': Decimal}
     for account_number, symbol in account_symbols:
         upload = latest_uploads.get(account_number)
         if not upload:
@@ -214,10 +214,6 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
             except:
                 current_value = Decimal('0')
 
-            if symbol not in symbol_totals:
-                symbol_totals[symbol] = Decimal('0')
-            symbol_totals[symbol] += current_value
-
             # Parse quantity, handling commas
             quantity_str = position.quantity.replace(',', '').strip()
             try:
@@ -225,18 +221,27 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
             except:
                 quantity = Decimal('0')
 
-            if symbol not in symbol_quantities:
-                symbol_quantities[symbol] = Decimal('0')
-            symbol_quantities[symbol] += quantity
+            # Store per-account data
+            key = (account_number, symbol)
+            if key not in symbol_account_data:
+                symbol_account_data[key] = {'value': Decimal('0'), 'quantity': Decimal('0')}
+            symbol_account_data[key]['value'] += current_value
+            symbol_account_data[key]['quantity'] += quantity
 
     # Build breakdowns by looking up fund information
     class_breakdown = {}  # class_name -> total value
     category_breakdown = {}  # class_name:category_name -> total value
     ticker_breakdown = {}  # ticker -> total value
-    category_details = {}  # class_name:category_name -> {'total': value, 'symbols': {...}}
+    category_details = {}  # class_name:category_name -> {'total': value, 'symbols': [...]}
 
-    for symbol, value in symbol_totals.items():
-        ticker_breakdown[symbol] = value
+    for (account_number, symbol), account_data in symbol_account_data.items():
+        value = account_data['value']
+        quantity = account_data['quantity']
+
+        # Update total value tracking for ticker
+        if symbol not in ticker_breakdown:
+            ticker_breakdown[symbol] = Decimal('0')
+        ticker_breakdown[symbol] += value
 
         # Look up fund to get class and category
         fund = Fund.objects.filter(ticker=symbol).first()
@@ -265,17 +270,18 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
                     'asset_class': asset_class.name,
                     'category_name': category.name,  # Store original category name separately
                     'total': Decimal('0'),
-                    'symbols': {}
+                    'symbols': []  # Changed to list for per-account entries
                 }
             category_details[category_key]['total'] += value
-            quantity = symbol_quantities.get(symbol, Decimal('0'))
-            category_details[category_key]['symbols'][symbol] = {
+            category_details[category_key]['symbols'].append({
+                'account_number': account_number,
+                'ticker': symbol,
                 'value': value,
                 'quantity': quantity,
                 'fund_name': fund.name if fund else None,
                 'preference': fund.preference if fund else None,
                 'is_recommended': fund.is_recommended() if fund else False,
-            }
+            })
         elif fund:
             # Fund exists but has no category assigned - treat as "Other"
             category_key = 'Other'
@@ -284,17 +290,18 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
                     'asset_class': 'Other',
                     'category_name': 'Other',
                     'total': Decimal('0'),
-                    'symbols': {}
+                    'symbols': []  # Changed to list for per-account entries
                 }
             category_details[category_key]['total'] += value
-            quantity = symbol_quantities.get(symbol, Decimal('0'))
-            category_details[category_key]['symbols'][symbol] = {
+            category_details[category_key]['symbols'].append({
+                'account_number': account_number,
+                'ticker': symbol,
                 'value': value,
                 'quantity': quantity,
                 'fund_name': fund.name,
                 'preference': fund.preference,
                 'is_recommended': fund.is_recommended(),
-            }
+            })
             if 'Other' not in class_breakdown:
                 class_breakdown['Other'] = Decimal('0')
             class_breakdown['Other'] += value
@@ -309,17 +316,18 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
                     'asset_class': 'Unknown',
                     'category_name': 'Unknown',
                     'total': Decimal('0'),
-                    'symbols': {}
+                    'symbols': []  # Changed to list for per-account entries
                 }
             category_details[category_key]['total'] += value
-            quantity = symbol_quantities.get(symbol, Decimal('0'))
-            category_details[category_key]['symbols'][symbol] = {
+            category_details[category_key]['symbols'].append({
+                'account_number': account_number,
+                'ticker': symbol,
                 'value': value,
                 'quantity': quantity,
                 'fund_name': None,
                 'preference': None,
                 'is_recommended': False,
-            }
+            })
             if 'Unknown' not in class_breakdown:
                 class_breakdown['Unknown'] = Decimal('0')
             class_breakdown['Unknown'] += value
@@ -372,7 +380,7 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
                         'asset_class': cat_alloc.asset_category.asset_class.name,
                         'category_name': cat_alloc.asset_category.name,
                         'total': Decimal('0'),
-                        'symbols': {}
+                        'symbols': []  # Changed to list for per-account entries
                     }
 
     # Now format ALL category details for template (including newly added empty categories)
@@ -391,15 +399,16 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
             'current_pct': round(current_pct, 2),  # Always include current percentage
             'symbols': [
                 {
-                    'ticker': ticker,
-                    'value': float(symbol_data['value']) if isinstance(symbol_data, dict) else float(symbol_data),  # Convert to float
-                    'quantity': float(symbol_data.get('quantity', 0)) if isinstance(symbol_data, dict) else 0,  # Convert to float
-                    'price': (float(symbol_data['value']) / float(symbol_data['quantity'])) if isinstance(symbol_data, dict) and symbol_data.get('quantity', 0) > 0 else 0,  # Calculate price
-                    'fund_name': symbol_data.get('fund_name') if isinstance(symbol_data, dict) else None,
-                    'preference': symbol_data.get('preference') if isinstance(symbol_data, dict) else None,
-                    'is_recommended': symbol_data.get('is_recommended', False) if isinstance(symbol_data, dict) else False,
+                    'account_number': symbol_data.get('account_number'),
+                    'ticker': symbol_data.get('ticker'),
+                    'value': float(symbol_data.get('value', 0)),  # Convert to float
+                    'quantity': float(symbol_data.get('quantity', 0)),  # Convert to float
+                    'price': (float(symbol_data.get('value', 0)) / float(symbol_data.get('quantity', 0))) if symbol_data.get('quantity', 0) > 0 else 0,  # Calculate price
+                    'fund_name': symbol_data.get('fund_name'),
+                    'preference': symbol_data.get('preference'),
+                    'is_recommended': symbol_data.get('is_recommended', False),
                 }
-                for ticker, symbol_data in sorted(details['symbols'].items())
+                for symbol_data in sorted(details['symbols'], key=lambda x: (x.get('account_number', ''), x.get('ticker', '')))
             ]
         })
 
@@ -458,7 +467,10 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
 
 def calculate_rebalance_recommendations(portfolio: Portfolio, tolerance: float) -> dict:
     """
-    Calculate rebalance recommendations based on tolerance threshold.
+    Calculate rebalance recommendations based on tolerance threshold with account-aware allocation.
+
+    For Sells: Identifies which accounts to sell from (largest balance first) until target is met
+    For Buys: After sells are determined, allocates available cash from smallest account to largest deficit
 
     Args:
         portfolio: Portfolio instance
@@ -466,7 +478,7 @@ def calculate_rebalance_recommendations(portfolio: Portfolio, tolerance: float) 
 
     Returns:
         dict with:
-        - recommendations: list of buy/sell actions
+        - recommendations: list of buy/sell actions with account allocations
         - total_buys: total dollar amount to buy
         - total_sells: total dollar amount to sell
         - net_balanced: whether sells and buys are balanced
@@ -549,104 +561,206 @@ def calculate_rebalance_recommendations(portfolio: Portfolio, tolerance: float) 
         if include:
             rebalance_categories.append(cat)
 
-    # Calculate initial recommendations from rebalance categories
+    # Calculate recommendations from rebalance categories with account-aware allocation
     recommendations = []
     total_sells = 0
     total_buys = 0
 
-    for cat in rebalance_categories:
-        category_name = cat['category']
-        asset_class_name = cat['asset_class']
+    # Track available cash in each account from sells
+    account_cash_available = {}
 
+    # Process SELLS first to determine account allocations
+    for cat in rebalance_categories:
         if cat['dollar_diff'] < 0:
-            # Need to sell - get funds currently in portfolio for this category
-            # Find the category in analysis_data['category_details']
+            # Need to sell
+            category_name = cat['category']
+            asset_class_name = cat['asset_class']
+            sell_amount_needed = abs(cat['dollar_diff'])
+
+            # Find all accounts with holdings in this category
+            account_holdings = {}  # account_number -> value
             category_funds = []
+
             for cat_detail in analysis_data['category_details']:
                 if cat_detail['category'] == category_name and cat_detail['asset_class'] == asset_class_name:
-                    # Get symbols from this category, sorted by preference descending (256→1)
                     symbols = cat_detail.get('symbols', [])
-                    # Sort by preference descending (treat None as 256)
+                    # Collect holdings by account
+                    for symbol_item in symbols:
+                        acct = symbol_item.get('account_number')
+                        value = symbol_item.get('value', 0)
+                        if acct not in account_holdings:
+                            account_holdings[acct] = 0
+                        account_holdings[acct] += value
+
+                    # Get fund list (sorted worst to best for selling)
                     category_funds = sorted(
                         symbols,
                         key=lambda x: x.get('preference') if x.get('preference') is not None else 256,
-                        reverse=True  # Highest first (256→1)
+                        reverse=True  # Highest preference first (256→1)
                     )
                     break
 
-            amount = abs(cat['dollar_diff'])
-            total_sells += amount
+            # Sort accounts by balance (largest first)
+            sorted_accounts = sorted(account_holdings.items(), key=lambda x: x[1], reverse=True)
+
+            # Allocate sells from each account until we meet target
+            account_allocations = []
+            remaining_to_sell = sell_amount_needed
+
+            for account_number, account_balance in sorted_accounts:
+                if remaining_to_sell <= 0:
+                    break
+
+                # Sell only what's needed (partial sale allowed from last account)
+                sell_from_account = min(remaining_to_sell, account_balance)
+                account_allocations.append({
+                    'account_number': account_number,
+                    'amount': round(sell_from_account, 2)
+                })
+
+                # Track available cash for buying
+                if account_number not in account_cash_available:
+                    account_cash_available[account_number] = 0
+                account_cash_available[account_number] += sell_from_account
+
+                remaining_to_sell -= sell_from_account
+
+            total_sells += sell_amount_needed
             recommendations.append({
                 'action': 'Sell',
-                'amount': amount,
+                'amount': round(sell_amount_needed, 2),
                 'category': category_name,
                 'asset_class': asset_class_name,
                 'tagged': True,
+                'account_allocations': account_allocations,
                 'funds': category_funds
             })
-        elif cat['dollar_diff'] > 0:
-            # Need to buy - get recommended funds from Funds table for this category
-            # First, find the AssetCategory from database
-            recommended_funds = []
-            try:
-                from .models import AssetCategory
-                asset_category = AssetCategory.objects.filter(
-                    asset_class__name=asset_class_name,
-                    name=category_name
-                ).prefetch_related('funds').first()
 
-                if asset_category:
-                    # Get recommended funds (preference 1-10), sorted by preference ascending (1→10)
-                    recommended_funds = [
-                        {
-                            'ticker': fund.ticker,
-                            'fund_name': fund.name,
-                            'preference': fund.preference,
-                            'is_recommended': True
-                        }
-                        for fund in asset_category.funds.filter(preference__gte=1, preference__lte=10).order_by('preference')
-                    ]
-            except:
-                pass
+    # Process BUYS with account-aware allocation
+    buy_list = [cat for cat in rebalance_categories if cat['dollar_diff'] > 0]
 
-            amount = cat['dollar_diff']
-            total_buys += amount
-            recommendations.append({
-                'action': 'Buy',
-                'amount': amount,
-                'category': category_name,
-                'asset_class': asset_class_name,
-                'tagged': True,
-                'funds': recommended_funds
-            })
-
-    # Calculate net difference
-    net = total_sells - total_buys
-
-    # Get untagged categories for balancing
+    # Also add untagged categories that need balancing
     untagged_categories = [cat for cat in all_categories if cat not in rebalance_categories]
 
-    # Balance the net difference
+    # Balance net difference
+    net = total_sells - total_buys
     if net > 0:
-        # More sells than buys - need to find categories to buy
-        # Start from most undersized untagged categories
+        # More sells than buys - add buy recommendations for untagged categories
         remaining = net
-        for cat in reversed(untagged_categories):  # Reverse to start from most undersized
+        for cat in reversed(untagged_categories):
             if remaining <= 0:
                 break
-
-            # Calculate how much we can buy up to target
             max_buy = cat['target_dollar'] - cat['actual_dollar']
             if max_buy > 0:
                 buy_amount = min(remaining, max_buy)
+                buy_list.append({
+                    'category': cat['category'],
+                    'asset_class': cat['asset_class'],
+                    'dollar_diff': buy_amount,
+                    'is_untagged': True
+                })
+                remaining -= buy_amount
 
-                # Get recommended funds for this category
+    elif net < 0:
+        # More buys than sells - add sell recommendations for untagged categories
+        remaining = abs(net)
+        for cat in untagged_categories:
+            if remaining <= 0:
+                break
+            max_sell = cat['actual_dollar'] - cat['target_dollar']
+            if max_sell > 0:
+                sell_amount = min(remaining, max_sell)
+
+                # Find funds in this category
+                category_funds = []
+                account_holdings = {}
+                for cat_detail in analysis_data['category_details']:
+                    if cat_detail['category'] == cat['category'] and cat_detail['asset_class'] == cat['asset_class']:
+                        symbols = cat_detail.get('symbols', [])
+                        for symbol_item in symbols:
+                            acct = symbol_item.get('account_number')
+                            value = symbol_item.get('value', 0)
+                            if acct not in account_holdings:
+                                account_holdings[acct] = 0
+                            account_holdings[acct] += value
+
+                        category_funds = sorted(symbols, key=lambda x: x.get('preference') if x.get('preference') is not None else 256, reverse=True)
+                        break
+
+                # Sort accounts by balance (largest first)
+                sorted_accounts = sorted(account_holdings.items(), key=lambda x: x[1], reverse=True)
+
+                # Allocate sells
+                account_allocations = []
+                remaining_to_sell = sell_amount
+                for account_number, account_balance in sorted_accounts:
+                    if remaining_to_sell <= 0:
+                        break
+                    sell_from_account = min(remaining_to_sell, account_balance)
+                    account_allocations.append({
+                        'account_number': account_number,
+                        'amount': round(sell_from_account, 2)
+                    })
+                    if account_number not in account_cash_available:
+                        account_cash_available[account_number] = 0
+                    account_cash_available[account_number] += sell_from_account
+                    remaining_to_sell -= sell_from_account
+
+                total_sells += sell_amount
+                recommendations.append({
+                    'action': 'Sell',
+                    'amount': round(sell_amount, 2),
+                    'category': cat['category'],
+                    'asset_class': cat['asset_class'],
+                    'tagged': False,
+                    'account_allocations': account_allocations,
+                    'funds': category_funds
+                })
+                remaining -= sell_amount
+
+    # Sort buy_list by deficit amount (largest first)
+    buy_list.sort(key=lambda x: x['dollar_diff'], reverse=True)
+
+    # Now allocate available cash to buys
+    # Sort accounts by available cash (smallest first)
+    sorted_accounts_by_cash = sorted(account_cash_available.items(), key=lambda x: x[1])
+
+    for account_number, available_cash in sorted_accounts_by_cash:
+        remaining_cash = available_cash
+
+        # Apply this account's cash to buy categories (starting with largest deficit)
+        for buy_cat in buy_list:
+            if remaining_cash <= 0:
+                break
+
+            buy_amount = buy_cat['dollar_diff']
+            # Check if this buy recommendation already exists
+            existing_rec = next((r for r in recommendations if r['action'] == 'Buy' and
+                               r['category'] == buy_cat['category'] and
+                               r['asset_class'] == buy_cat['asset_class']), None)
+
+            if existing_rec:
+                # Add to existing recommendation
+                if 'account_allocations' not in existing_rec:
+                    existing_rec['account_allocations'] = []
+
+                allocate_amount = min(remaining_cash, buy_amount)
+                existing_rec['account_allocations'].append({
+                    'account_number': account_number,
+                    'amount': round(allocate_amount, 2)
+                })
+                remaining_cash -= allocate_amount
+            else:
+                # Create new buy recommendation
+                allocate_amount = min(remaining_cash, buy_amount)
+
+                # Get recommended funds
                 recommended_funds = []
                 try:
                     from .models import AssetCategory
                     asset_category = AssetCategory.objects.filter(
-                        asset_class__name=cat['asset_class'],
-                        name=cat['category']
+                        asset_class__name=buy_cat['asset_class'],
+                        name=buy_cat['category']
                     ).prefetch_related('funds').first()
 
                     if asset_category:
@@ -664,54 +778,22 @@ def calculate_rebalance_recommendations(portfolio: Portfolio, tolerance: float) 
 
                 recommendations.append({
                     'action': 'Buy',
-                    'amount': buy_amount,
-                    'category': cat['category'],
-                    'asset_class': cat['asset_class'],
-                    'tagged': False,
+                    'amount': round(buy_amount, 2),
+                    'category': buy_cat['category'],
+                    'asset_class': buy_cat['asset_class'],
+                    'tagged': buy_cat.get('is_untagged', True),
+                    'account_allocations': [{
+                        'account_number': account_number,
+                        'amount': round(allocate_amount, 2)
+                    }],
                     'funds': recommended_funds
                 })
                 total_buys += buy_amount
-                remaining -= buy_amount
-
-    elif net < 0:
-        # More buys than sells - need to find categories to sell
-        # Start from most oversized untagged categories
-        remaining = abs(net)
-        for cat in untagged_categories:  # Already sorted from most oversized
-            if remaining <= 0:
-                break
-
-            # Calculate how much we can sell down to target
-            max_sell = cat['actual_dollar'] - cat['target_dollar']
-            if max_sell > 0:
-                sell_amount = min(remaining, max_sell)
-
-                # Get funds currently in portfolio for this category
-                category_funds = []
-                for cat_detail in analysis_data['category_details']:
-                    if cat_detail['category'] == cat['category'] and cat_detail['asset_class'] == cat['asset_class']:
-                        symbols = cat_detail.get('symbols', [])
-                        category_funds = sorted(
-                            symbols,
-                            key=lambda x: x.get('preference') if x.get('preference') is not None else 256,
-                            reverse=True  # Highest first (256→1)
-                        )
-                        break
-
-                recommendations.append({
-                    'action': 'Sell',
-                    'amount': sell_amount,
-                    'category': cat['category'],
-                    'asset_class': cat['asset_class'],
-                    'tagged': False,
-                    'funds': category_funds
-                })
-                total_sells += sell_amount
-                remaining -= sell_amount
+                remaining_cash -= allocate_amount
 
     return {
         'recommendations': recommendations,
         'total_buys': total_buys,
         'total_sells': total_sells,
-        'net_balanced': abs(total_sells - total_buys) < 0.01,  # Allow for rounding errors
+        'net_balanced': abs(total_sells - total_buys) < 0.01,
     }

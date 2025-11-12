@@ -177,6 +177,7 @@
                                 <table class="w-full text-sm">
                                     <thead class="bg-gray-100 border-b border-gray-300">
                                         <tr>
+                                            <th class="px-6 py-3 text-left font-medium text-gray-700">Account</th>
                                             <th class="px-6 py-3 text-left font-medium text-gray-700">Symbol</th>
                                             <th class="px-6 py-3 text-left font-medium text-gray-700">Fund Name</th>
                                             <th class="px-6 py-3 text-right font-medium text-gray-700">Quantity</th>
@@ -188,6 +189,7 @@
                                         <!-- Symbol Rows -->
                                         {% for symbol_item in category_group.symbols %}
                                         <tr class="border-b border-gray-200 hover:bg-gray-50">
+                                            <td class="px-6 py-3 text-gray-700 font-mono">{{ symbol_item.account_number }}</td>
                                             <td class="px-6 py-3 {% if not symbol_item.is_recommended %}text-red-600{% else %}text-gray-700{% endif %}">{{ symbol_item.ticker }}</td>
                                             <td class="px-6 py-3 {% if not symbol_item.is_recommended %}text-red-600{% else %}text-gray-700{% endif %}">{{ symbol_item.fund_name|default:"No Fund Mapping" }}</td>
                                             <td class="px-6 py-3 text-right text-gray-700 font-mono" data-quantity="{{ symbol_item.quantity }}"></td>
@@ -540,21 +542,45 @@
                     <h4 class="text-lg font-semibold text-gray-800 mb-4">Actions</h4>
                     <div class="space-y-2">
                         {% for rec in rebalance_data.recommendations %}
-                        <div class="p-3 {% if rec.action == 'Sell' %}bg-red-50 border-l-4 border-red-400{% else %}bg-green-50 border-l-4 border-green-400{% endif %} rounded">
-                            <div class="flex items-center gap-4 mb-2">
-                                <span class="font-semibold {% if rec.action == 'Sell' %}text-red-700{% else %}text-green-700{% endif %} min-w-[60px]">
+                        <div class="p-4 {% if rec.action == 'Sell' %}bg-red-50 border-l-4 border-red-400{% else %}bg-green-50 border-l-4 border-green-400{% endif %} rounded">
+                            <!-- Header with action, amount, and category -->
+                            <div class="flex items-start gap-4 mb-3">
+                                <span class="font-semibold {% if rec.action == 'Sell' %}text-red-700{% else %}text-green-700{% endif %} min-w-[60px] pt-1">
                                     {{ rec.action }}
                                 </span>
-                                <span class="font-mono text-gray-900">
-                                    ${{ rec.amount|floatformat:2 }}
-                                </span>
-                                <span class="text-gray-700">
-                                    in funds from <span class="font-semibold">{{ rec.asset_class }}: {{ rec.category }}</span>
-                                </span>
+                                <div class="flex-1">
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <span class="font-mono text-lg font-bold text-gray-900">
+                                                ${{ rec.amount|floatformat:2 }}
+                                            </span>
+                                            <span class="text-gray-700 ml-2">
+                                                in funds from <span class="font-semibold">{{ rec.asset_class }}: {{ rec.category }}</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
+
+                            <!-- Fund List (left justified) -->
                             {% if rec.funds %}
-                            <div class="ml-16 text-sm text-gray-600">
+                            <div class="ml-16 text-sm text-gray-600 mb-3">
                                 → {% for fund in rec.funds %}{% if fund.ticker %}<span class="{% if not fund.is_recommended %}text-red-600{% endif %}">{{ fund.ticker }}</span>{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}
+                            </div>
+                            {% endif %}
+
+                            <!-- Account Allocations (right justified) -->
+                            {% if rec.account_allocations %}
+                            <div class="space-y-1 mt-2">
+                                {% for alloc in rec.account_allocations %}
+                                <div class="flex justify-end text-sm">
+                                    <span class="text-gray-600">Account: </span>
+                                    <span class="text-gray-900 font-mono ml-2 mr-4">{{ alloc.account_number }}</span>
+                                    <span class="text-gray-900 font-mono font-semibold min-w-[80px] text-right">
+                                        ${{ alloc.amount|floatformat:2 }}
+                                    </span>
+                                </div>
+                                {% endfor %}
                             </div>
                             {% endif %}
                         </div>
