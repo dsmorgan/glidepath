@@ -11,12 +11,12 @@
             <h2 class="text-xl font-semibold text-gray-800">Manage Portfolios</h2>
         </div>
 
-        {% if portfolios %}
         <div class="flex gap-2 items-center">
             <a href="{% url 'portfolio_create' %}"
                class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-medium whitespace-nowrap">
                 Add Portfolio
             </a>
+            {% if portfolios %}
             <form method="get" class="flex-1" id="portfolio-form">
                 <input type="hidden" name="tolerance" id="portfolio-tolerance-input" value="{{ tolerance }}">
                 <select name="portfolio" onchange="this.form.submit()"
@@ -46,10 +46,10 @@
                 Download CSV
             </a>
             {% endif %}
+            {% else %}
+            <p class="text-gray-500 ml-4">No portfolios created yet. Click "Add Portfolio" to get started.</p>
+            {% endif %}
         </div>
-        {% else %}
-        <p class="text-gray-500">No portfolios created yet. Click "Add Portfolio" to get started.</p>
-        {% endif %}
     </div>
 
     <!-- Portfolio Output -->
