@@ -14,16 +14,16 @@ from .ticker_service import query_ticker as query_ticker_service
 from .account_services import import_fidelity_csv, get_portfolio_analysis, calculate_rebalance_recommendations
 
 DEFAULT_COLORS = [
-    "#4dc9f6",
-    "#f67019",
-    "#f53794",
-    "#537bc4",
-    "#acc236",
-    "#166a8f",
-    "#00a950",
-    "#58595b",
-    "#8549ba",
-    "#e5ae38",
+    "#FF6384",
+    "#36A2EB",
+    "#FFCE56",
+    "#4BC0C0",
+    "#9966FF",
+    "#FF9F40",
+    "#C9CBCF",
+    "#85C1E2",
+    "#F8B195",
+    "#C7B3A3",
 ]
 
 
