@@ -608,15 +608,15 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
         formatted_category_details.append({
             'category': details.get('category_name', category_key),  # Use category_name for display
             'asset_class': details['asset_class'],
-            'subtotal': subtotal_float,  # Convert Decimal to float for JSON serialization
+            'subtotal': round(subtotal_float, 2),  # Convert Decimal to float and round to 2 decimal places
             'current_pct': round(current_pct, 2),  # Always include current percentage
             'symbols': [
                 {
                     'account_number': symbol_data.get('account_number'),
                     'ticker': symbol_data.get('ticker'),
-                    'value': float(symbol_data.get('value', 0)),  # Convert to float
+                    'value': round(float(symbol_data.get('value', 0)), 2),  # Convert to float and round to 2 decimal places
                     'quantity': float(symbol_data.get('quantity', 0)),  # Convert to float
-                    'price': (float(symbol_data.get('value', 0)) / float(symbol_data.get('quantity', 0))) if symbol_data.get('quantity', 0) > 0 else 0,  # Calculate price
+                    'price': round((float(symbol_data.get('value', 0)) / float(symbol_data.get('quantity', 0))) if symbol_data.get('quantity', 0) > 0 else 0, 2),  # Calculate price and round to 2 decimal places
                     'fund_name': symbol_data.get('fund_name'),
                     'preference': symbol_data.get('preference'),
                     'is_recommended': symbol_data.get('is_recommended', False),
