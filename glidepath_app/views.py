@@ -11,7 +11,7 @@ from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm,
 from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, AccountPosition, Portfolio, PortfolioItem
 from .services import export_glidepath_rules, import_glidepath_rules
 from .ticker_service import query_ticker as query_ticker_service
-from .account_services import import_fidelity_csv, get_portfolio_analysis, calculate_rebalance_recommendations
+from .account_services import import_fidelity_csv, import_etrade_csv, get_portfolio_analysis, calculate_rebalance_recommendations
 
 DEFAULT_COLORS = [
     "#FF6384",
@@ -370,6 +370,9 @@ def accounts_view(request):
                 # Import based on type
                 if upload_type == 'fidelity':
                     upload = import_fidelity_csv(file_obj, current_user, filename)
+                    success = f"Successfully uploaded {upload.entry_count} positions from {filename}"
+                elif upload_type == 'etrade':
+                    upload = import_etrade_csv(file_obj, current_user, filename)
                     success = f"Successfully uploaded {upload.entry_count} positions from {filename}"
                 else:
                     error = f"Unsupported upload type: {upload_type}"

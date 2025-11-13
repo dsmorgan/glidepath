@@ -213,6 +213,7 @@ class AccountUpload(models.Model):
 
     UPLOAD_TYPE_CHOICES = [
         ('fidelity', 'Fidelity'),
+        ('etrade', 'E-Trade'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

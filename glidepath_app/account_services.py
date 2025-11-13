@@ -29,15 +29,20 @@ def extract_file_datetime(file_content: str) -> str:
     """
     Extract the file datetime string from the CSV content.
 
-    Expected format at the end of file:
-    "Date downloaded Nov-08-2025 7:54 p.m ET"
+    Supports both formats:
+    - Fidelity: "Date downloaded Nov-08-2025 7:54 p.m ET"
+    - E-Trade: "Generated at Nov 12 2025 05:44 PM ET"
     """
     lines = file_content.strip().split('\n')
 
     # Look for the date line in the last few lines
     for line in reversed(lines[-5:]):
+        # Check for Fidelity format
         if 'Date downloaded' in line:
-            # Remove quotes if present
+            date_str = line.strip().strip('"')
+            return date_str
+        # Check for E-Trade format
+        elif 'Generated at' in line:
             date_str = line.strip().strip('"')
             return date_str
 
@@ -147,6 +152,214 @@ def import_fidelity_csv(file_obj, user: User, filename: str) -> AccountUpload:
             cost_basis_total=(row.get('Cost Basis Total') or '').strip(),
             average_cost_basis=(row.get('Average Cost Basis') or '').strip(),
             type=(row.get('Type') or '').strip(),
+        )
+
+    return upload
+
+
+def extract_account_info_etrade(lines: list) -> tuple:
+    """
+    Extract account number and name from E-Trade CSV.
+
+    E-Trade format has account info on line 3 (index 2):
+    "Rollover IRA -5250",194737.20,...
+
+    Returns tuple of (account_number, account_name)
+    """
+    if len(lines) < 3:
+        raise ValueError("E-Trade file format is invalid: too few lines")
+
+    # Account info is on line 3 (index 2)
+    account_line = lines[2].strip()
+
+    # Remove quotes and extract the account info
+    account_info = account_line.split(',')[0].strip().strip('"')
+
+    # Full string is both account_number and account_name
+    return (account_info, account_info)
+
+
+def is_cash_like_symbol(symbol: str) -> bool:
+    """
+    Check if a symbol represents cash/money market positions.
+
+    These should be handled specially: quantity = value, all other fields blank.
+    """
+    cash_symbols = {'CASH', 'CORE', 'SPAXX', 'FDRXX', 'FCASH'}
+    return symbol.upper() in cash_symbols or symbol.endswith('**')
+
+
+def parse_etrade_positions(file_content: str) -> tuple:
+    """
+    Parse E-Trade CSV file and extract positions.
+
+    Returns tuple of (account_number, account_name, positions_list)
+
+    Positions list contains dicts with mapped fields.
+    """
+    lines = file_content.strip().split('\n')
+
+    # Extract account info from line 3 (index 2)
+    account_number, account_name = extract_account_info_etrade(lines)
+
+    # Find the actual data header line (has "Value $" column)
+    header_index = None
+    for i, line in enumerate(lines):
+        if 'Value $' in line and 'Symbol' in line:
+            header_index = i
+            break
+
+    if header_index is None:
+        raise ValueError("Could not find data header row in E-Trade file")
+
+    # Parse CSV from header line onwards
+    csv_content = '\n'.join(lines[header_index:])
+    csv_file = StringIO(csv_content)
+    reader = csv.DictReader(csv_file)
+
+    positions = []
+    for row in reader:
+        # Stop at blank lines (check if all values are empty)
+        symbol = (row.get('Symbol') or '').strip()
+        if not symbol:
+            break
+
+        # Skip TOTAL row
+        if symbol.upper() == 'TOTAL':
+            continue
+
+        # Skip if symbol doesn't look like a valid ticker (too many special chars)
+        # This helps filter out malformed rows from the end of file
+        if not all(c.isalnum() or c in '-.' for c in symbol):
+            continue
+
+        # Map E-Trade columns to our AccountPosition fields
+        value = (row.get('Value $') or '').strip()
+
+        # For cash-like symbols, quantity = value, everything else blank
+        if is_cash_like_symbol(symbol):
+            position = {
+                'account_number': account_number,
+                'account_name': account_name,
+                'symbol': normalize_symbol(symbol),
+                'description': '',
+                'quantity': value,  # Quantity = Value for cash
+                'last_price': '',
+                'last_price_change': '',
+                'current_value': value,
+                'todays_gain_loss_dollar': '',
+                'todays_gain_loss_percent': '',
+                'total_gain_loss_dollar': (row.get('Total Gain $') or '').strip() if not is_cash_like_symbol(symbol) else '',
+                'total_gain_loss_percent': (row.get('Total Gain %') or '').strip() if not is_cash_like_symbol(symbol) else '',
+                'percent_of_account': '',
+                'cost_basis_total': '',
+                'average_cost_basis': '',
+                'type': '',
+            }
+        else:
+            position = {
+                'account_number': account_number,
+                'account_name': account_name,
+                'symbol': normalize_symbol(symbol),
+                'description': '',
+                'quantity': (row.get('Quantity') or '').strip(),
+                'last_price': (row.get('Last Price $') or '').strip(),
+                'last_price_change': (row.get('Change $') or '').strip(),
+                'current_value': value,
+                'todays_gain_loss_dollar': (row.get('Day\'s Gain $') or '').strip(),
+                'todays_gain_loss_percent': (row.get('Change %') or '').strip(),
+                'total_gain_loss_dollar': (row.get('Total Gain $') or '').strip(),
+                'total_gain_loss_percent': (row.get('Total Gain %') or '').strip(),
+                'percent_of_account': '',
+                'cost_basis_total': '',
+                'average_cost_basis': (row.get('Price Paid $') or '').strip(),
+                'type': '',
+            }
+
+        positions.append(position)
+
+    return (account_number, account_name, positions)
+
+
+@transaction.atomic
+def import_etrade_csv(file_obj, user: User, filename: str) -> AccountUpload:
+    """
+    Import an E-Trade portfolio positions CSV file.
+
+    E-Trade format:
+    - Account summary on line 3
+    - Headers on line 11
+    - Data lines 12+ until blank line
+    - Date/time on last line
+
+    Args:
+        file_obj: File object containing CSV data
+        user: User who is uploading the file
+        filename: Original filename of the upload
+
+    Returns:
+        AccountUpload object
+
+    Raises:
+        ValueError: If CSV format is invalid or required data is missing
+    """
+    # Read the file content
+    try:
+        content = file_obj.read()
+        if isinstance(content, bytes):
+            content = content.decode('utf-8-sig')
+    except Exception as e:
+        raise ValueError(f"Error reading file: {str(e)}")
+
+    # Extract file datetime (supports both Fidelity and E-Trade formats)
+    file_datetime = extract_file_datetime(content)
+
+    # Parse positions
+    try:
+        account_number, account_name, positions = parse_etrade_positions(content)
+    except Exception as e:
+        raise ValueError(f"Error parsing E-Trade CSV: {str(e)}")
+
+    if not positions:
+        raise ValueError("No valid position data found in E-Trade CSV file")
+
+    # Check for duplicate upload - if exists, delete it first
+    existing_uploads = AccountUpload.objects.filter(
+        user=user,
+        upload_type='etrade',
+        filename=filename
+    )
+    existing_uploads.delete()
+
+    # Create AccountUpload record
+    upload = AccountUpload.objects.create(
+        user=user,
+        file_datetime=file_datetime,
+        upload_type='etrade',
+        filename=filename,
+        entry_count=len(positions)
+    )
+
+    # Create AccountPosition records
+    for position in positions:
+        AccountPosition.objects.create(
+            upload=upload,
+            account_number=position['account_number'],
+            account_name=position['account_name'],
+            symbol=position['symbol'],
+            description=position['description'],
+            quantity=position['quantity'],
+            last_price=position['last_price'],
+            last_price_change=position['last_price_change'],
+            current_value=position['current_value'],
+            todays_gain_loss_dollar=position['todays_gain_loss_dollar'],
+            todays_gain_loss_percent=position['todays_gain_loss_percent'],
+            total_gain_loss_dollar=position['total_gain_loss_dollar'],
+            total_gain_loss_percent=position['total_gain_loss_percent'],
+            percent_of_account=position['percent_of_account'],
+            cost_basis_total=position['cost_basis_total'],
+            average_cost_basis=position['average_cost_basis'],
+            type=position['type'],
         )
 
     return upload
