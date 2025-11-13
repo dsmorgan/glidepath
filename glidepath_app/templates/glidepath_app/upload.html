@@ -276,6 +276,11 @@ function updatePieChartSelection() {
     // Update charts and table
     updateCharts();
     updateTableYearAndAge();
+
+    // Update accordion year/age if the function exists (from rules.html)
+    if (typeof updateAccordionYearAge === 'function') {
+        updateAccordionYearAge();
+    }
 }
 
 function initializeCharts() {
@@ -452,6 +457,11 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeCharts();
     updateActions();
     updateTableYearAndAge();
+
+    // Update accordion year/age if the function exists (from rules.html)
+    if (typeof updateAccordionYearAge === 'function') {
+        updateAccordionYearAge();
+    }
 });
 
 // Re-initialize charts, table, and current year display when HTMX swaps the rules content
@@ -459,6 +469,13 @@ document.getElementById('rules').addEventListener('htmx:afterSwap', function() {
     setTimeout(updateCurrentYearDisplay, 50);
     setTimeout(initializeCharts, 50);
     setTimeout(updateTableYearAndAge, 50);
+
+    // Update accordion year/age if the function exists (from rules.html)
+    setTimeout(function() {
+        if (typeof updateAccordionYearAge === 'function') {
+            updateAccordionYearAge();
+        }
+    }, 50);
 });
 
 // Update button states based on selected ruleset

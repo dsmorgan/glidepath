@@ -251,36 +251,39 @@ def import_blackrock_assumptions(file_obj, user: User) -> AssumptionUpload:
     # Then combine with Row 3 specific columns
     for j in range(1, sheet.max_column + 1):
         cell3 = sheet.cell(row=3, column=j)
-        if cell3.value:
-            col_name = str(cell3.value).strip()
-            group = row2_groups.get(j, "")
+        col_name = str(cell3.value).strip() if cell3.value else ""
+        group = row2_groups.get(j, "")
 
-            # Special handling for basic columns
-            if col_name == "Currency":
-                col_mapping[j] = ("currency", None)
-            elif col_name == "Asset class":
-                col_mapping[j] = ("asset_class", None)
-            elif col_name == "Asset":
-                col_mapping[j] = ("asset", None)
-            elif col_name == "Index":
-                col_mapping[j] = ("index", None)
-            elif group == "Expected returns":
-                col_mapping[j] = ("expected_return", col_name)
-            elif group == "Lower interquartile range (25th percentile)":
-                col_mapping[j] = ("lower_iqr", col_name)
-            elif group == "Upper interquartile range (25th percentile)":
-                col_mapping[j] = ("upper_iqr", col_name)
-            elif group == "Lower mean uncertainty":
-                col_mapping[j] = ("lower_uncertainty", col_name)
-            elif group == "Upper mean uncertainty":
-                col_mapping[j] = ("upper_uncertainty", col_name)
-            elif group == "Volatility" and not col_name:
-                col_mapping[j] = ("volatility", None)
-            elif group == "Correlation":
-                if col_name == "Government bonds":
-                    col_mapping[j] = ("correlation_govt_bonds", None)
-                elif col_name == "Equities":
-                    col_mapping[j] = ("correlation_equities", None)
+        # Skip if both row 2 and row 3 are empty
+        if not col_name and not group:
+            continue
+
+        # Special handling for basic columns
+        if col_name == "Currency":
+            col_mapping[j] = ("currency", None)
+        elif col_name == "Asset class":
+            col_mapping[j] = ("asset_class", None)
+        elif col_name == "Asset":
+            col_mapping[j] = ("asset", None)
+        elif col_name == "Index":
+            col_mapping[j] = ("index", None)
+        elif group == "Expected returns" and col_name:
+            col_mapping[j] = ("expected_return", col_name)
+        elif group == "Lower interquartile range (25th percentile)" and col_name:
+            col_mapping[j] = ("lower_iqr", col_name)
+        elif group == "Upper interquartile range (25th percentile)" and col_name:
+            col_mapping[j] = ("upper_iqr", col_name)
+        elif group == "Lower mean uncertainty" and col_name:
+            col_mapping[j] = ("lower_uncertainty", col_name)
+        elif group == "Upper mean uncertainty" and col_name:
+            col_mapping[j] = ("upper_uncertainty", col_name)
+        elif group == "Volatility" and not col_name:
+            col_mapping[j] = ("volatility", None)
+        elif group == "Correlation":
+            if col_name == "Government bonds":
+                col_mapping[j] = ("correlation_govt_bonds", None)
+            elif col_name == "Equities":
+                col_mapping[j] = ("correlation_equities", None)
 
     # Map year names to field suffixes
     year_mapping = {
