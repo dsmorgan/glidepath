@@ -1,5 +1,5 @@
 from django import forms
-from .models import APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, Portfolio, RuleSet
+from .models import APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, Portfolio, RuleSet, AssumptionUpload
 from django.contrib.auth.hashers import make_password
 
 
@@ -19,6 +19,24 @@ class AccountUploadForm(forms.Form):
     upload_type = forms.ChoiceField(
         label="Type",
         choices=AccountUpload.UPLOAD_TYPE_CHOICES,
+        widget=forms.Select(attrs={
+            'class': 'w-full border border-gray-300 rounded-md p-2'
+        })
+    )
+
+
+class AssumptionUploadForm(forms.Form):
+    """Form for uploading market assumption XLSX files."""
+    file = forms.FileField(
+        label="XLSX/CSV File",
+        widget=forms.FileInput(attrs={
+            'class': 'border border-gray-300 rounded-md p-2 text-sm',
+            'accept': '.xlsx,.xls,.csv'
+        })
+    )
+    upload_type = forms.ChoiceField(
+        label="Type",
+        choices=AssumptionUpload.UPLOAD_TYPE_CHOICES,
         widget=forms.Select(attrs={
             'class': 'w-full border border-gray-300 rounded-md p-2'
         })

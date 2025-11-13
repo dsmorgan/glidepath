@@ -54,42 +54,157 @@ window.chartDataStaged = {
     </div>
 </div>
 
-<!-- Table Section - Now below charts -->
-<div class="overflow-x-auto">
-    <table class="min-w-full border">
-        <thead class="bg-gray-100">
-            <tr>
-                <th class="px-2 py-1 border">Year</th>
-                <th class="px-2 py-1 border">Age</th>
-                <th class="px-2 py-1 border">gt-retire-age</th>
-                <th class="px-2 py-1 border">lt-retire-age</th>
-                <th class="px-2 py-1 border">Classes</th>
-                <th class="px-2 py-1 border">Categories</th>
-            </tr>
-        </thead>
-        <tbody>
+<!-- Accordion Section - Rules breakdown -->
+<div class="mb-8">
+    <h3 class="text-2xl font-semibold text-gray-900 mb-6">Rules Breakdown</h3>
+
+    <div class="space-y-3">
         {% for rule in rules %}
-            <tr class="odd:bg-white even:bg-gray-50" data-gt-retire-age="{{ rule.gt_retire_age }}" data-lt-retire-age="{{ rule.lt_retire_age }}">
-                <td class="px-2 py-1 border align-top year-cell">-</td>
-                <td class="px-2 py-1 border align-top age-cell">-</td>
-                <td class="px-2 py-1 border align-top">{{ rule.gt_retire_age }}</td>
-                <td class="px-2 py-1 border align-top">{{ rule.lt_retire_age }}</td>
-                <td class="px-2 py-1 border align-top">
-                    <div class="max-h-[4.5em] overflow-y-auto leading-tight">
-                        {% for ca in rule.class_allocations.all %}
-                            {{ ca.asset_class.name }}: {{ ca.percentage }}%<br>
-                        {% endfor %}
+        <div class="border border-gray-300 rounded-lg overflow-hidden"
+             data-gt-retire-age="{{ rule.gt_retire_age }}"
+             data-lt-retire-age="{{ rule.lt_retire_age }}">
+            <!-- Accordion Header -->
+            <button type="button"
+                    class="accordion-btn w-full bg-blue-50 hover:bg-blue-100 px-6 py-4 text-left flex justify-between items-center"
+                    onclick="toggleAccordion(this)">
+                <div class="flex flex-1 items-center justify-between">
+                    <!-- Left side: Year, Age -->
+                    <div class="flex items-baseline gap-4">
+                        <span class="text-xl font-bold text-gray-900 year-display">
+                            Year: <span class="year-value">-</span>, Age: <span class="age-value">-</span>
+                        </span>
                     </div>
-                </td>
-                <td class="px-2 py-1 border align-top">
-                    <div class="max-h-[4.5em] overflow-y-auto leading-tight">
-                        {% for ca in rule.category_allocations.all %}
-                            {{ ca.asset_category.asset_class.name }}:{{ ca.asset_category.name }}: {{ ca.percentage }}%<br>
-                        {% endfor %}
-                    </div>
-                </td>
-            </tr>
+                    <!-- Right side: gt-retire-age to lt-retire-age -->
+                    <span class="text-sm italic text-gray-600 mr-8">
+                        {{ rule.gt_retire_age }} to {{ rule.lt_retire_age }}
+                    </span>
+                </div>
+                <svg class="w-5 h-5 transform transition-transform flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+                </svg>
+            </button>
+
+            <!-- Accordion Content -->
+            <div class="accordion-content hidden bg-white border-t border-gray-200">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-100 border-b border-gray-300">
+                            <tr>
+                                <th class="px-6 py-3 text-left font-medium text-gray-700">Class</th>
+                                <th class="px-6 py-3 text-right font-medium text-gray-700">Class %</th>
+                                <th class="px-6 py-3 text-left font-medium text-gray-700">Category</th>
+                                <th class="px-6 py-3 text-right font-medium text-gray-700">Category %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% regroup rule.category_allocations.all by asset_category.asset_class as class_groups %}
+                            {% for class_group in class_groups %}
+                                {% with class_allocations=rule.class_allocations.all %}
+                                {% for class_alloc in class_allocations %}
+                                    {% if class_alloc.asset_class == class_group.grouper %}
+                                        <!-- Rows for this class -->
+                                        {% if class_group.grouper.name == "Other" %}
+                                            <!-- Other class has no categories -->
+                                            <tr class="border-b border-gray-200 hover:bg-gray-50">
+                                                <td class="px-6 py-3 text-gray-900 font-semibold">{{ class_group.grouper.name }}</td>
+                                                <td class="px-6 py-3 text-right text-gray-900 font-semibold">{{ class_alloc.percentage }}%</td>
+                                                <td class="px-6 py-3 text-gray-500"></td>
+                                                <td class="px-6 py-3 text-right text-gray-500"></td>
+                                            </tr>
+                                        {% else %}
+                                            <!-- Class with categories -->
+                                            {% for category_alloc in class_group.list %}
+                                                <tr class="border-b border-gray-200 hover:bg-gray-50">
+                                                    {% if forloop.first %}
+                                                        <!-- First category: show class name and percentage -->
+                                                        <td class="px-6 py-3 text-gray-900 font-semibold">{{ class_group.grouper.name }}</td>
+                                                        <td class="px-6 py-3 text-right text-gray-900 font-semibold">{{ class_alloc.percentage }}%</td>
+                                                    {% else %}
+                                                        <!-- Subsequent categories: leave class columns blank -->
+                                                        <td class="px-6 py-3"></td>
+                                                        <td class="px-6 py-3"></td>
+                                                    {% endif %}
+                                                    <td class="px-6 py-3 text-gray-700">{{ category_alloc.asset_category.name }}</td>
+                                                    <td class="px-6 py-3 text-right text-gray-700">{{ category_alloc.percentage }}%</td>
+                                                </tr>
+                                            {% endfor %}
+                                        {% endif %}
+                                    {% endif %}
+                                {% endfor %}
+                                {% endwith %}
+                            {% empty %}
+                                <!-- No categories, just show class allocations -->
+                                {% for class_alloc in rule.class_allocations.all %}
+                                    <tr class="border-b border-gray-200 hover:bg-gray-50">
+                                        <td class="px-6 py-3 text-gray-900 font-semibold">{{ class_alloc.asset_class.name }}</td>
+                                        <td class="px-6 py-3 text-right text-gray-900 font-semibold">{{ class_alloc.percentage }}%</td>
+                                        <td class="px-6 py-3 text-gray-500"></td>
+                                        <td class="px-6 py-3 text-right text-gray-500"></td>
+                                    </tr>
+                                {% endfor %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
         {% endfor %}
-        </tbody>
-    </table>
+    </div>
 </div>
+
+<script>
+// Accordion toggle function
+function toggleAccordion(button) {
+    const content = button.nextElementSibling;
+    content.classList.toggle('hidden');
+
+    // Rotate arrow icon
+    const arrow = button.querySelector('svg');
+    if (content.classList.contains('hidden')) {
+        arrow.style.transform = 'rotate(0deg)';
+    } else {
+        arrow.style.transform = 'rotate(180deg)';
+    }
+}
+
+// Function to update year and age values in accordion headers
+function updateAccordionYearAge() {
+    const currentYear = parseInt(document.getElementById('currentYearSelect').value) || new Date().getFullYear();
+    const yearBorn = parseInt(document.getElementById('yearBornSelect').value);
+    const retirementAge = parseInt(document.getElementById('retirementAgeSelect').value);
+
+    if (!yearBorn || !retirementAge) return;
+
+    const retirementYear = yearBorn + retirementAge;
+
+    // Update each accordion header
+    document.querySelectorAll('[data-gt-retire-age]').forEach(accordion => {
+        const gtRetireAge = parseInt(accordion.getAttribute('data-gt-retire-age'));
+        const ltRetireAge = parseInt(accordion.getAttribute('data-lt-retire-age'));
+
+        // Calculate year and age (use midpoint of range)
+        const midRetireAge = (gtRetireAge + ltRetireAge) / 2;
+        const year = Math.round(retirementYear + midRetireAge);
+        const age = Math.round(retirementAge + midRetireAge);
+
+        // Update display
+        const yearValue = accordion.querySelector('.year-value');
+        const ageValue = accordion.querySelector('.age-value');
+
+        if (yearValue && ageValue) {
+            yearValue.textContent = year;
+            ageValue.textContent = age;
+        }
+    });
+}
+
+// Update accordion values when dropdowns change
+document.addEventListener('DOMContentLoaded', function() {
+    // Set initial values
+    updateAccordionYearAge();
+
+    // Add event listeners to dropdowns
+    document.getElementById('yearBornSelect').addEventListener('change', updateAccordionYearAge);
+    document.getElementById('retirementAgeSelect').addEventListener('change', updateAccordionYearAge);
+});
+</script>

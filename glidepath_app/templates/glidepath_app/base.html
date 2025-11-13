@@ -30,6 +30,9 @@
                         <a href="{% url 'funds' %}" class="{% if request.resolver_match.url_name == 'funds' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                             Funds
                         </a>
+                        <a href="{% url 'assumptions' %}" class="{% if request.resolver_match.url_name == 'assumptions' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Assumptions
+                        </a>
                         <a href="{% url 'accounts' %}" class="{% if request.resolver_match.url_name == 'accounts' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                             Accounts
                         </a>

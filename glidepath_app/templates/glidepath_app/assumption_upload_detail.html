@@ -1,0 +1,172 @@
+{% extends 'glidepath_app/base.html' %}
+{% block title %}Glidepath - Assumption Upload Details{% endblock %}
+{% block content %}
+<div class="bg-white shadow rounded-lg p-8">
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">Assumption Upload Details</h1>
+        <div class="text-sm text-gray-600">
+            <p><strong>Uploaded:</strong> <span class="upload-datetime" data-utc="{{ upload.upload_datetime.isoformat }}">{{ upload.upload_datetime|date:"Y-m-d H:i:s" }} UTC</span></p>
+            <p><strong>File Date:</strong> {{ upload.file_datetime }}</p>
+            <p><strong>Type:</strong> {{ upload.get_upload_type_display }}</p>
+            <p><strong>Filename:</strong> {{ upload.filename }}</p>
+            <p><strong>Number of Entries:</strong> {{ upload.entry_count }}</p>
+        </div>
+    </div>
+
+    <div class="mb-6">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Market Assumptions Data (USD)</h2>
+        {% if data_rows %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 border text-xs">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10">Asset Class</th>
+                        <th scope="col" class="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10" style="left: 100px;">Asset</th>
+                        <th scope="col" class="px-2 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">Index</th>
+                        <th scope="col" colspan="7" class="px-2 py-2 text-center font-medium text-gray-500 uppercase tracking-wider bg-blue-50">Expected Returns</th>
+                        <th scope="col" colspan="7" class="px-2 py-2 text-center font-medium text-gray-500 uppercase tracking-wider bg-green-50">Lower IQR (25th %)</th>
+                        <th scope="col" colspan="7" class="px-2 py-2 text-center font-medium text-gray-500 uppercase tracking-wider bg-green-50">Upper IQR (75th %)</th>
+                        <th scope="col" colspan="7" class="px-2 py-2 text-center font-medium text-gray-500 uppercase tracking-wider bg-yellow-50">Lower Uncertainty</th>
+                        <th scope="col" colspan="7" class="px-2 py-2 text-center font-medium text-gray-500 uppercase tracking-wider bg-yellow-50">Upper Uncertainty</th>
+                        <th scope="col" class="px-2 py-2 text-center font-medium text-gray-500 uppercase tracking-wider bg-purple-50">Volatility</th>
+                        <th scope="col" colspan="2" class="px-2 py-2 text-center font-medium text-gray-500 uppercase tracking-wider bg-red-50">Correlations</th>
+                    </tr>
+                    <tr class="text-xs">
+                        <th scope="col" class="px-2 py-1 text-left font-medium text-gray-500 sticky left-0 bg-gray-50 z-10"></th>
+                        <th scope="col" class="px-2 py-1 text-left font-medium text-gray-500 sticky left-0 bg-gray-50 z-10" style="left: 100px;"></th>
+                        <th scope="col" class="px-2 py-1 text-left font-medium text-gray-500"></th>
+                        <!-- Expected Returns years -->
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-blue-50">5yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-blue-50">7yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-blue-50">10yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-blue-50">15yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-blue-50">20yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-blue-50">25yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-blue-50">30yr</th>
+                        <!-- Lower IQR years -->
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-green-50">5yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-green-50">7yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-green-50">10yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-green-50">15yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-green-50">20yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-green-50">25yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-green-50">30yr</th>
+                        <!-- Upper IQR years -->
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-green-50">5yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-green-50">7yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-green-50">10yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-green-50">15yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-green-50">20yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-green-50">25yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-green-50">30yr</th>
+                        <!-- Lower Uncertainty years -->
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-yellow-50">5yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-yellow-50">7yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-yellow-50">10yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-yellow-50">15yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-yellow-50">20yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-yellow-50">25yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-yellow-50">30yr</th>
+                        <!-- Upper Uncertainty years -->
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-yellow-50">5yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-yellow-50">7yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-yellow-50">10yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-yellow-50">15yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-yellow-50">20yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-yellow-50">25yr</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-yellow-50">30yr</th>
+                        <!-- Volatility -->
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-purple-50">Value</th>
+                        <!-- Correlations -->
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-red-50">Govt Bonds</th>
+                        <th scope="col" class="px-2 py-1 text-right font-medium text-gray-500 bg-red-50">Equities</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for row in data_rows %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-2 py-2 whitespace-nowrap sticky left-0 bg-white">{{ row.asset_class }}</td>
+                        <td class="px-2 py-2 sticky left-0 bg-white" style="left: 100px;">{{ row.asset }}</td>
+                        <td class="px-2 py-2 text-xs">{{ row.index }}</td>
+                        <!-- Expected Returns -->
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.expected_return_5yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.expected_return_7yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.expected_return_10yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.expected_return_15yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.expected_return_20yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.expected_return_25yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.expected_return_30yr|default:"-" }}</td>
+                        <!-- Lower IQR -->
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.lower_iqr_5yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.lower_iqr_7yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.lower_iqr_10yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.lower_iqr_15yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.lower_iqr_20yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.lower_iqr_25yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.lower_iqr_30yr|default:"-" }}</td>
+                        <!-- Upper IQR -->
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.upper_iqr_5yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.upper_iqr_7yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.upper_iqr_10yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.upper_iqr_15yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.upper_iqr_20yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.upper_iqr_25yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.upper_iqr_30yr|default:"-" }}</td>
+                        <!-- Lower Uncertainty -->
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.lower_uncertainty_5yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.lower_uncertainty_7yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.lower_uncertainty_10yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.lower_uncertainty_15yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.lower_uncertainty_20yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.lower_uncertainty_25yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.lower_uncertainty_30yr|default:"-" }}</td>
+                        <!-- Upper Uncertainty -->
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.upper_uncertainty_5yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.upper_uncertainty_7yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.upper_uncertainty_10yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.upper_uncertainty_15yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.upper_uncertainty_20yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.upper_uncertainty_25yr|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.upper_uncertainty_30yr|default:"-" }}</td>
+                        <!-- Volatility -->
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.volatility|default:"-" }}</td>
+                        <!-- Correlations -->
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.correlation_govt_bonds|default:"-" }}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-right">{{ row.correlation_equities|default:"-" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-8 text-gray-500">
+            No data found in this upload.
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="mt-8">
+        <a href="{% url 'assumptions' %}" class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+            </svg>
+            Back to Assumptions
+        </a>
+    </div>
+</div>
+
+<!-- JavaScript to convert UTC to local time -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const datetimeElements = document.querySelectorAll('.upload-datetime');
+    datetimeElements.forEach(function(element) {
+        const utcDateStr = element.getAttribute('data-utc');
+        if (utcDateStr) {
+            const date = new Date(utcDateStr);
+            const localDateStr = date.toLocaleString();
+            element.textContent = localDateStr;
+        }
+    });
+});
+</script>
+{% endblock %}

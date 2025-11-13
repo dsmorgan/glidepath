@@ -7,9 +7,9 @@ from django.shortcuts import render, redirect
 from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
-from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm, IdentityProviderForm, AccountUploadForm, PortfolioForm
-from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, AccountPosition, Portfolio, PortfolioItem
-from .services import export_glidepath_rules, import_glidepath_rules
+from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm, IdentityProviderForm, AccountUploadForm, PortfolioForm, AssumptionUploadForm
+from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, AccountPosition, Portfolio, PortfolioItem, AssumptionUpload, AssumptionData
+from .services import export_glidepath_rules, import_glidepath_rules, import_blackrock_assumptions
 from .ticker_service import query_ticker as query_ticker_service
 from .account_services import import_fidelity_csv, import_etrade_csv, get_portfolio_analysis, calculate_rebalance_recommendations
 
@@ -425,6 +425,88 @@ def delete_account_upload(request, upload_id):
     except AccountUpload.DoesNotExist:
         pass
     return redirect('accounts')
+
+
+def assumptions_view(request):
+    """Assumptions management view - manage market assumptions."""
+    error = None
+    success = None
+
+    # Determine which user's data to show
+    selected_user_id = request.session.get('selected_user_id')
+    if selected_user_id:
+        try:
+            current_user = User.objects.get(id=selected_user_id)
+        except User.DoesNotExist:
+            # Fall back to first user if selected user doesn't exist
+            current_user = User.objects.first()
+    else:
+        # Default to first user
+        current_user = User.objects.first()
+
+    if request.method == "POST":
+        form = AssumptionUploadForm(request.POST, request.FILES)
+        if form.is_valid():
+            try:
+                upload_type = form.cleaned_data['upload_type']
+                file_obj = form.cleaned_data['file']
+                filename = file_obj.name
+
+                # Import based on type
+                if upload_type == 'blackrock':
+                    upload = import_blackrock_assumptions(file_obj, current_user)
+                    success = f"Successfully uploaded {upload.entry_count} entries from {filename}"
+                else:
+                    error = f"Unsupported upload type: {upload_type}"
+
+            except ValueError as exc:
+                error = str(exc)
+            except Exception as exc:
+                error = f"Error uploading file: {str(exc)}"
+    else:
+        form = AssumptionUploadForm()
+
+    # Get all uploads for the current user
+    if current_user:
+        uploads = AssumptionUpload.objects.filter(user=current_user).order_by('-upload_datetime')
+    else:
+        uploads = AssumptionUpload.objects.none()
+
+    context = {
+        'form': form,
+        'error': error,
+        'success': success,
+        'uploads': uploads,
+        'current_user': current_user,
+    }
+
+    return render(request, "glidepath_app/assumptions.html", context)
+
+
+def view_assumption_upload(request, upload_id):
+    """View details of a specific assumption upload."""
+    try:
+        upload = AssumptionUpload.objects.get(id=upload_id)
+        data_rows = AssumptionData.objects.filter(upload=upload).order_by('asset_class', 'asset')
+
+        context = {
+            'upload': upload,
+            'data_rows': data_rows,
+        }
+        return render(request, "glidepath_app/assumption_upload_detail.html", context)
+    except AssumptionUpload.DoesNotExist:
+        return redirect('assumptions')
+
+
+@require_POST
+def delete_assumption_upload(request, upload_id):
+    """Delete an assumption upload and all its data rows."""
+    try:
+        upload = AssumptionUpload.objects.get(id=upload_id)
+        upload.delete()
+    except AssumptionUpload.DoesNotExist:
+        pass
+    return redirect('assumptions')
 
 
 def portfolios_view(request):
