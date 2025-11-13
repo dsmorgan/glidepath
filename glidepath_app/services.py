@@ -3,8 +3,9 @@ import io
 import os
 import re
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Dict
+from typing import Dict, Optional
 
+import openpyxl
 from django.db import transaction
 
 from .models import (
@@ -14,6 +15,9 @@ from .models import (
     ClassAllocation,
     GlidepathRule,
     RuleSet,
+    AssumptionUpload,
+    AssumptionData,
+    User,
 )
 
 ASSET_CLASSES = ["Stocks", "Bonds", "Crypto", "Other"]
@@ -196,3 +200,209 @@ def export_glidepath_rules(ruleset: RuleSet) -> str:
             row[key] = f"{category_map.get(key, Decimal('0'))}%"
         writer.writerow(row)
     return output.getvalue()
+
+
+def _parse_decimal(value) -> Optional[Decimal]:
+    """Parse a cell value to Decimal, handling None and various formats."""
+    if value is None or value == "":
+        return None
+    try:
+        return Decimal(str(value))
+    except:
+        return None
+
+
+def import_blackrock_assumptions(file_obj, user: User) -> AssumptionUpload:
+    """
+    Parse a BlackRock Capital Market Assumptions XLSX file.
+
+    Expected structure:
+    - Row 1: Title
+    - Row 2: File date/time in column A, grouped column headers (e.g., "Expected returns")
+    - Row 3: Specific column names (e.g., "5 year", "7 year", etc.)
+    - Row 4+: Data rows (filter for Currency == "USD")
+
+    If a file with the same file_datetime already exists, it will be replaced.
+    """
+    filename = os.path.basename(getattr(file_obj, "name", "") or "assumptions.xlsx")
+
+    # Load the workbook
+    wb = openpyxl.load_workbook(file_obj)
+    sheet = wb[wb.sheetnames[0]]  # First sheet only
+
+    # Extract file date/time from A2
+    file_datetime = str(sheet.cell(row=2, column=1).value or "").strip()
+    if not file_datetime:
+        raise ValueError("Could not extract date/time from file (Cell A2)")
+
+    # Parse headers from rows 2 and 3
+    # Build a mapping of column index to field name
+    col_mapping = {}
+
+    # First, get Row 2 grouped headers
+    row2_groups = {}
+    current_group = ""
+    for j in range(1, sheet.max_column + 1):
+        cell = sheet.cell(row=2, column=j)
+        if cell.value:
+            current_group = str(cell.value).strip()
+        row2_groups[j] = current_group
+
+    # Then combine with Row 3 specific columns
+    for j in range(1, sheet.max_column + 1):
+        cell3 = sheet.cell(row=3, column=j)
+        if cell3.value:
+            col_name = str(cell3.value).strip()
+            group = row2_groups.get(j, "")
+
+            # Special handling for basic columns
+            if col_name == "Currency":
+                col_mapping[j] = ("currency", None)
+            elif col_name == "Asset class":
+                col_mapping[j] = ("asset_class", None)
+            elif col_name == "Asset":
+                col_mapping[j] = ("asset", None)
+            elif col_name == "Index":
+                col_mapping[j] = ("index", None)
+            elif group == "Expected returns":
+                col_mapping[j] = ("expected_return", col_name)
+            elif group == "Lower interquartile range (25th percentile)":
+                col_mapping[j] = ("lower_iqr", col_name)
+            elif group == "Upper interquartile range (25th percentile)":
+                col_mapping[j] = ("upper_iqr", col_name)
+            elif group == "Lower mean uncertainty":
+                col_mapping[j] = ("lower_uncertainty", col_name)
+            elif group == "Upper mean uncertainty":
+                col_mapping[j] = ("upper_uncertainty", col_name)
+            elif group == "Volatility" and not col_name:
+                col_mapping[j] = ("volatility", None)
+            elif group == "Correlation":
+                if col_name == "Government bonds":
+                    col_mapping[j] = ("correlation_govt_bonds", None)
+                elif col_name == "Equities":
+                    col_mapping[j] = ("correlation_equities", None)
+
+    # Map year names to field suffixes
+    year_mapping = {
+        "5 year": "5yr",
+        "7 year": "7yr",
+        "10 year": "10yr",
+        "15 year": "15yr",
+        "20 year": "20yr",
+        "25 year": "25yr",
+        "30 year": "30yr",
+    }
+
+    # Parse data rows (starting from row 4)
+    data_rows = []
+    for i in range(4, sheet.max_row + 1):
+        # Check if this is a USD row
+        currency_col = None
+        for col_idx, (field_type, _) in col_mapping.items():
+            if field_type == "currency":
+                currency_col = col_idx
+                break
+
+        if currency_col is None:
+            continue
+
+        currency = sheet.cell(row=i, column=currency_col).value
+        if str(currency).strip().upper() != "USD":
+            continue
+
+        # Extract all values for this row
+        row_data = {
+            "currency": None,
+            "asset_class": None,
+            "asset": None,
+            "index": None,
+        }
+
+        for col_idx, (field_type, year_name) in col_mapping.items():
+            cell_value = sheet.cell(row=i, column=col_idx).value
+
+            if field_type in ["currency", "asset_class", "asset", "index"]:
+                row_data[field_type] = str(cell_value or "").strip()
+            elif field_type == "volatility":
+                row_data["volatility"] = _parse_decimal(cell_value)
+            elif field_type == "correlation_govt_bonds":
+                row_data["correlation_govt_bonds"] = _parse_decimal(cell_value)
+            elif field_type == "correlation_equities":
+                row_data["correlation_equities"] = _parse_decimal(cell_value)
+            elif year_name and year_name in year_mapping:
+                suffix = year_mapping[year_name]
+                field_name = f"{field_type}_{suffix}"
+                row_data[field_name] = _parse_decimal(cell_value)
+
+        # Only add row if it has at least an asset
+        if row_data.get("asset"):
+            data_rows.append(row_data)
+
+    if not data_rows:
+        raise ValueError("No USD data rows found in file")
+
+    # Check if upload with this file_datetime already exists
+    with transaction.atomic():
+        existing_upload = AssumptionUpload.objects.filter(file_datetime=file_datetime).first()
+        if existing_upload:
+            # Delete existing upload (cascade will delete data rows)
+            existing_upload.delete()
+
+        # Create new upload
+        upload = AssumptionUpload.objects.create(
+            user=user,
+            file_datetime=file_datetime,
+            upload_type="blackrock",
+            filename=filename,
+            entry_count=len(data_rows),
+        )
+
+        # Create data rows
+        for row_data in data_rows:
+            AssumptionData.objects.create(
+                upload=upload,
+                currency=row_data.get("currency", ""),
+                asset_class=row_data.get("asset_class", ""),
+                asset=row_data.get("asset", ""),
+                index=row_data.get("index", ""),
+                expected_return_5yr=row_data.get("expected_return_5yr"),
+                expected_return_7yr=row_data.get("expected_return_7yr"),
+                expected_return_10yr=row_data.get("expected_return_10yr"),
+                expected_return_15yr=row_data.get("expected_return_15yr"),
+                expected_return_20yr=row_data.get("expected_return_20yr"),
+                expected_return_25yr=row_data.get("expected_return_25yr"),
+                expected_return_30yr=row_data.get("expected_return_30yr"),
+                lower_iqr_5yr=row_data.get("lower_iqr_5yr"),
+                lower_iqr_7yr=row_data.get("lower_iqr_7yr"),
+                lower_iqr_10yr=row_data.get("lower_iqr_10yr"),
+                lower_iqr_15yr=row_data.get("lower_iqr_15yr"),
+                lower_iqr_20yr=row_data.get("lower_iqr_20yr"),
+                lower_iqr_25yr=row_data.get("lower_iqr_25yr"),
+                lower_iqr_30yr=row_data.get("lower_iqr_30yr"),
+                upper_iqr_5yr=row_data.get("upper_iqr_5yr"),
+                upper_iqr_7yr=row_data.get("upper_iqr_7yr"),
+                upper_iqr_10yr=row_data.get("upper_iqr_10yr"),
+                upper_iqr_15yr=row_data.get("upper_iqr_15yr"),
+                upper_iqr_20yr=row_data.get("upper_iqr_20yr"),
+                upper_iqr_25yr=row_data.get("upper_iqr_25yr"),
+                upper_iqr_30yr=row_data.get("upper_iqr_30yr"),
+                lower_uncertainty_5yr=row_data.get("lower_uncertainty_5yr"),
+                lower_uncertainty_7yr=row_data.get("lower_uncertainty_7yr"),
+                lower_uncertainty_10yr=row_data.get("lower_uncertainty_10yr"),
+                lower_uncertainty_15yr=row_data.get("lower_uncertainty_15yr"),
+                lower_uncertainty_20yr=row_data.get("lower_uncertainty_20yr"),
+                lower_uncertainty_25yr=row_data.get("lower_uncertainty_25yr"),
+                lower_uncertainty_30yr=row_data.get("lower_uncertainty_30yr"),
+                upper_uncertainty_5yr=row_data.get("upper_uncertainty_5yr"),
+                upper_uncertainty_7yr=row_data.get("upper_uncertainty_7yr"),
+                upper_uncertainty_10yr=row_data.get("upper_uncertainty_10yr"),
+                upper_uncertainty_15yr=row_data.get("upper_uncertainty_15yr"),
+                upper_uncertainty_20yr=row_data.get("upper_uncertainty_20yr"),
+                upper_uncertainty_25yr=row_data.get("upper_uncertainty_25yr"),
+                upper_uncertainty_30yr=row_data.get("upper_uncertainty_30yr"),
+                volatility=row_data.get("volatility"),
+                correlation_govt_bonds=row_data.get("correlation_govt_bonds"),
+                correlation_equities=row_data.get("correlation_equities"),
+            )
+
+    return upload

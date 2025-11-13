@@ -296,3 +296,94 @@ class PortfolioItem(models.Model):
 
     def __str__(self) -> str:
         return f"{self.portfolio.name} - {self.account_number} - {self.symbol}"
+
+
+class AssumptionUpload(models.Model):
+    """Stores metadata about uploaded market assumption XLSX files."""
+
+    UPLOAD_TYPE_CHOICES = [
+        ('blackrock', 'BlackRock Market Assumptions XLSX'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="assumption_uploads")
+    upload_datetime = models.DateTimeField(auto_now_add=True)
+    file_datetime = models.CharField(max_length=200, unique=True, help_text="Date/time string from file (e.g., 'November 2025, data as of 30 September 2025')")
+    upload_type = models.CharField(max_length=50, choices=UPLOAD_TYPE_CHOICES)
+    filename = models.CharField(max_length=255)
+    entry_count = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ["-upload_datetime"]
+
+    def __str__(self) -> str:
+        return f"{self.user.username} - {self.filename} ({self.upload_datetime})"
+
+
+class AssumptionData(models.Model):
+    """Stores individual market assumption data records from uploaded XLSX files."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    upload = models.ForeignKey(AssumptionUpload, on_delete=models.CASCADE, related_name="data_rows")
+
+    # Basic identification fields
+    currency = models.CharField(max_length=10)
+    asset_class = models.CharField(max_length=100)
+    asset = models.CharField(max_length=200)
+    index = models.CharField(max_length=200)
+
+    # Expected returns (7 time horizons)
+    expected_return_5yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    expected_return_7yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    expected_return_10yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    expected_return_15yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    expected_return_20yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    expected_return_25yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    expected_return_30yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+
+    # Lower interquartile range (25th percentile)
+    lower_iqr_5yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    lower_iqr_7yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    lower_iqr_10yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    lower_iqr_15yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    lower_iqr_20yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    lower_iqr_25yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    lower_iqr_30yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+
+    # Upper interquartile range (75th percentile)
+    upper_iqr_5yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    upper_iqr_7yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    upper_iqr_10yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    upper_iqr_15yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    upper_iqr_20yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    upper_iqr_25yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    upper_iqr_30yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+
+    # Lower mean uncertainty
+    lower_uncertainty_5yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    lower_uncertainty_7yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    lower_uncertainty_10yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    lower_uncertainty_15yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    lower_uncertainty_20yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    lower_uncertainty_25yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    lower_uncertainty_30yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+
+    # Upper mean uncertainty
+    upper_uncertainty_5yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    upper_uncertainty_7yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    upper_uncertainty_10yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    upper_uncertainty_15yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    upper_uncertainty_20yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    upper_uncertainty_25yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    upper_uncertainty_30yr = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+
+    # Volatility and correlations
+    volatility = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    correlation_govt_bonds = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+    correlation_equities = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)
+
+    class Meta:
+        ordering = ["upload", "asset_class", "asset"]
+
+    def __str__(self) -> str:
+        return f"{self.asset} ({self.currency})"
