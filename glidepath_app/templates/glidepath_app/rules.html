@@ -67,19 +67,31 @@ window.chartDataStaged = {
             <button type="button"
                     class="accordion-btn w-full bg-blue-50 hover:bg-blue-100 px-6 py-4 text-left flex justify-between items-center"
                     onclick="toggleAccordion(this)">
-                <div class="flex flex-1 items-center justify-between">
+                <div class="flex flex-1 items-center gap-6">
                     <!-- Left side: Year, Age -->
-                    <div class="flex items-baseline gap-4">
+                    <div class="flex items-baseline">
                         <span class="text-xl font-bold text-gray-900 year-display">
                             Year: <span class="year-value">-</span>, Age: <span class="age-value">-</span>
                         </span>
                     </div>
+
+                    <!-- Middle: Class allocations -->
+                    <div class="flex items-center gap-4 text-sm flex-1">
+                        {% for ca in rule.class_allocations.all %}
+                            {% if ca.percentage > 0 %}
+                                <span class="text-gray-700">
+                                    <span class="font-medium">{{ ca.asset_class.name }}:</span> {{ ca.percentage }}%
+                                </span>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+
                     <!-- Right side: gt-retire-age to lt-retire-age -->
-                    <span class="text-sm italic text-gray-600 mr-8">
+                    <span class="text-sm italic text-gray-600 whitespace-nowrap">
                         {{ rule.gt_retire_age }} to {{ rule.lt_retire_age }}
                     </span>
                 </div>
-                <svg class="w-5 h-5 transform transition-transform flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5 transform transition-transform flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
                 </svg>
             </button>
@@ -198,13 +210,6 @@ function updateAccordionYearAge() {
     });
 }
 
-// Update accordion values when dropdowns change
-document.addEventListener('DOMContentLoaded', function() {
-    // Set initial values
-    updateAccordionYearAge();
-
-    // Add event listeners to dropdowns
-    document.getElementById('yearBornSelect').addEventListener('change', updateAccordionYearAge);
-    document.getElementById('retirementAgeSelect').addEventListener('change', updateAccordionYearAge);
-});
+// Note: Initial values are set by upload.html's initializeCharts()
+// Event listeners for dropdowns are handled by upload.html's updatePieChartSelection()
 </script>
