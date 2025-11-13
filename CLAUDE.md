@@ -383,18 +383,42 @@ The script will:
 - Enable users by default
 - Report whether user was created or updated
 
+**Container Runtime Support:**
+The script automatically detects and uses available container runtimes in priority order:
+1. docker-compose
+2. podman-compose (works on systems using Podman)
+3. docker (direct commands, builds image if needed)
+4. podman (direct commands, builds image if needed)
+5. python3 (fallback with warning)
+
+No local Python installation required when using containers.
+
 See `scripts/README.md` for complete documentation.
 
 **Django management command:**
 ```bash
-# Via Docker
+# Via Docker Compose
 docker-compose run --rm web python manage.py manage_user \
   --username admin \
   --email admin@example.com \
   --role admin \
   --name "Admin User"
 
-# Locally
+# Via Podman Compose
+podman-compose run --rm web python manage.py manage_user \
+  --username admin \
+  --email admin@example.com \
+  --role admin \
+  --name "Admin User"
+
+# Via direct Podman
+podman run --rm -it -v $(pwd):/app:z -w /app glidepath-web \
+  python manage.py manage_user \
+  --username admin \
+  --email admin@example.com \
+  --role admin
+
+# Locally (if Django environment is set up)
 python manage.py manage_user \
   --username admin \
   --email admin@example.com \

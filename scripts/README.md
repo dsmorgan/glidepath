@@ -78,14 +78,25 @@ To change a user's password, role, or email, simply run the script with the exis
 4. **Internal Users**: All users created via this script are internal (not linked to OAuth providers)
 5. **Enabled by Default**: All users are created/updated as enabled accounts
 
-### Docker Usage
+### Container Runtime Support
 
-The script automatically detects if Docker Compose is available and uses it to run the management command:
+The script automatically detects available container runtimes in the following priority order:
 
+1. **docker-compose** - Standard Docker Compose
+2. **podman-compose** - Podman Compose (drop-in replacement)
+3. **docker** - Direct Docker commands (builds image if needed)
+4. **podman** - Direct Podman commands (builds image if needed)
+5. **python3** - Local Python (fallback with warning, not recommended)
+
+**Usage** (same command works with all runtimes):
 ```bash
-# With Docker Compose (automatic)
 ./scripts/manage_user.sh --username admin --email admin@example.com --role admin
 ```
+
+The script will automatically:
+- Detect the best available container runtime
+- Find or build the required container image
+- Execute the command with proper volume mounts and settings
 
 ### Direct Django Management Command
 
@@ -99,8 +110,23 @@ docker-compose run --rm web python manage.py manage_user \
   --role admin \
   --name "Admin User"
 
-# Or locally (if Django environment is set up)
-python manage.py manage_user \
+# Via Podman Compose
+podman-compose run --rm web python manage.py manage_user \
+  --username admin \
+  --email admin@example.com \
+  --role admin \
+  --name "Admin User"
+
+# Via direct Podman
+podman run --rm -it -v $(pwd):/app:z -w /app glidepath-web \
+  python manage.py manage_user \
+  --username admin \
+  --email admin@example.com \
+  --role admin \
+  --name "Admin User"
+
+# Or locally (if Django environment is set up, not recommended)
+python3 manage.py manage_user \
   --username admin \
   --email admin@example.com \
   --role admin \
@@ -138,6 +164,16 @@ The script provides clear feedback:
 - **Administrator** (`--role admin`): Full system access, can manage other users and system settings
 - **User** (`--role user`): Standard user access, can manage their own portfolios and data
 
+### System Requirements
+
+The script works with any of the following container runtimes:
+- **Podman** (recommended for rootless containers)
+- **Docker**
+- **Podman Compose** (easiest for existing docker-compose.yml files)
+- **Docker Compose**
+
+No local Python installation is required when using containers.
+
 ### Troubleshooting
 
 **Script not executable:**
@@ -145,11 +181,37 @@ The script provides clear feedback:
 chmod +x scripts/manage_user.sh
 ```
 
+**No container runtime found:**
+```
+ERROR: No suitable runtime found!
+This script requires one of the following:
+  - docker-compose
+  - podman-compose
+  - docker
+  - podman
+```
+Install podman or docker to resolve. For Fedora/RHEL:
+```bash
+sudo dnf install podman
+```
+
+**No image available:**
+If using direct podman/docker commands, the script will automatically build the image from the Dockerfile. This may take a few minutes on first run.
+
+**SELinux volume mount issues (podman):**
+The script uses `:z` flag for SELinux compatibility with Podman. If you encounter permission issues, check SELinux status:
+```bash
+getenforce
+```
+
 **Email validation error:**
 Ensure the email address is in valid format (user@domain.com)
 
 **Password mismatch:**
 The passwords entered must match exactly. Re-run the script if they don't match.
+
+**Python fallback warning:**
+If you see warnings about using Python fallback, install a container runtime (podman/docker) for proper isolated execution.
 
 ### Initial System Setup
 
