@@ -70,8 +70,8 @@ window.chartDataStaged = {
                 <div class="flex flex-1 items-center gap-6">
                     <!-- Left side: Year, Age -->
                     <div class="flex items-baseline">
-                        <span class="text-xl font-bold text-gray-900 year-display">
-                            Year: <span class="year-value">-</span>, Age: <span class="age-value">-</span>
+                        <span class="text-xl font-bold year-display">
+                            Year: <span class="year-value">-</span><span class="current-year-star ml-1 hidden">⭐</span>, Age: <span class="age-value">-</span>
                         </span>
                     </div>
 
@@ -187,25 +187,54 @@ function updateAccordionYearAge() {
 
     if (!yearBorn || !retirementAge) return;
 
-    const retirementYear = yearBorn + retirementAge;
-
     // Update each accordion header
     document.querySelectorAll('[data-gt-retire-age]').forEach(accordion => {
         const gtRetireAge = parseInt(accordion.getAttribute('data-gt-retire-age'));
         const ltRetireAge = parseInt(accordion.getAttribute('data-lt-retire-age'));
 
-        // Calculate year and age (use midpoint of range)
-        const midRetireAge = (gtRetireAge + ltRetireAge) / 2;
-        const year = Math.round(retirementYear + midRetireAge);
-        const age = Math.round(retirementAge + midRetireAge);
+        // Calculate year and age using gt-retire-age
+        // Year = Year Born + Retirement Age + gt-retire-age
+        // Age = Retirement Age + gt-retire-age
+        const year = yearBorn + retirementAge + gtRetireAge;
+        const age = retirementAge + gtRetireAge;
 
         // Update display
         const yearValue = accordion.querySelector('.year-value');
         const ageValue = accordion.querySelector('.age-value');
+        const yearDisplay = accordion.querySelector('.year-display');
+        const starIcon = accordion.querySelector('.current-year-star');
+        const accordionBtn = accordion.querySelector('.accordion-btn');
 
-        if (yearValue && ageValue) {
-            yearValue.textContent = year;
-            ageValue.textContent = age;
+        if (yearValue && ageValue && yearDisplay) {
+            // Handle special boundary cases
+            if (gtRetireAge === -100) {
+                yearValue.textContent = 'Earlier';
+                ageValue.textContent = 'Younger';
+            } else if (ltRetireAge === 100) {
+                yearValue.textContent = 'Later';
+                ageValue.textContent = 'Older';
+            } else {
+                yearValue.textContent = year;
+                ageValue.textContent = age;
+            }
+
+            // Highlight retirement year (gt-retire-age = 0) with red text
+            if (gtRetireAge === 0) {
+                yearDisplay.classList.add('text-red-600');
+                yearDisplay.classList.remove('text-gray-900');
+            } else {
+                yearDisplay.classList.add('text-gray-900');
+                yearDisplay.classList.remove('text-red-600');
+            }
+
+            // Show star icon if this year matches the current year
+            if (starIcon) {
+                if (year === currentYear && gtRetireAge !== -100 && ltRetireAge !== 100) {
+                    starIcon.classList.remove('hidden');
+                } else {
+                    starIcon.classList.add('hidden');
+                }
+            }
         }
     });
 }
