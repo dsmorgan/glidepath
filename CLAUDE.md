@@ -29,7 +29,13 @@ glidepath/
 │   ├── tests.py             # Unit tests
 │   ├── migrations/          # Database migrations
 │   ├── templates/           # HTML templates
-│   └── static/              # Static assets
+│   ├── static/              # Static assets
+│   └── management/          # Django management commands
+│       └── commands/        # Custom management commands
+│           └── manage_user.py  # User administration command
+├── scripts/                 # Administration scripts
+│   ├── manage_user.sh       # User management wrapper script
+│   └── README.md            # Scripts documentation
 └── manage.py                # Django management script
 ```
 
@@ -335,6 +341,65 @@ docker-compose run --rm web python manage.py shell
 
 # View SQL for a migration
 docker-compose run --rm web python manage.py sqlmigrate glidepath_app [migration_number]
+```
+
+## User Administration
+
+### Managing Users with the Admin Script
+
+The `scripts/manage_user.sh` script provides a secure way to create and manage internal user accounts. This is essential for initial system setup when authentication is enabled.
+
+**Create an admin user:**
+```bash
+./scripts/manage_user.sh \
+  --username admin \
+  --email admin@example.com \
+  --role admin \
+  --name "System Administrator"
+```
+
+**Create a regular user:**
+```bash
+./scripts/manage_user.sh \
+  --username john \
+  --email john@example.com \
+  --role user \
+  --name "John Doe"
+```
+
+**Update existing user (change password/role):**
+```bash
+./scripts/manage_user.sh \
+  --username john \
+  --email john@example.com \
+  --role admin
+```
+
+The script will:
+- Prompt for password securely (hidden input)
+- Require password confirmation
+- Hash passwords using Django's secure password hashing (PBKDF2)
+- Create internal users only (not linked to OAuth providers)
+- Enable users by default
+- Report whether user was created or updated
+
+See `scripts/README.md` for complete documentation.
+
+**Django management command:**
+```bash
+# Via Docker
+docker-compose run --rm web python manage.py manage_user \
+  --username admin \
+  --email admin@example.com \
+  --role admin \
+  --name "Admin User"
+
+# Locally
+python manage.py manage_user \
+  --username admin \
+  --email admin@example.com \
+  --role admin \
+  --name "Admin User"
 ```
 
 ## Architecture Notes
