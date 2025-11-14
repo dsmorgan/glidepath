@@ -306,7 +306,7 @@ class AssumptionUpload(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="assumption_uploads")
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="assumption_uploads")
     upload_datetime = models.DateTimeField(auto_now_add=True)
     file_datetime = models.CharField(max_length=200, unique=True, help_text="Date/time string from file (e.g., 'November 2025, data as of 30 September 2025')")
     upload_type = models.CharField(max_length=50, choices=UPLOAD_TYPE_CHOICES)
@@ -317,7 +317,8 @@ class AssumptionUpload(models.Model):
         ordering = ["-upload_datetime"]
 
     def __str__(self) -> str:
-        return f"{self.user.username} - {self.filename} ({self.upload_datetime})"
+        username = self.user.username if self.user else "Unknown"
+        return f"{username} - {self.filename} ({self.upload_datetime})"
 
 
 class AssumptionData(models.Model):
