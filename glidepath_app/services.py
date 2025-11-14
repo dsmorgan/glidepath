@@ -212,7 +212,7 @@ def _parse_decimal(value) -> Optional[Decimal]:
         return None
 
 
-def import_blackrock_assumptions(file_obj, user: User) -> AssumptionUpload:
+def import_blackrock_assumptions(file_obj, user: Optional[User] = None) -> AssumptionUpload:
     """
     Parse a BlackRock Capital Market Assumptions XLSX file.
 

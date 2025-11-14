@@ -428,11 +428,11 @@ def delete_account_upload(request, upload_id):
 
 
 def assumptions_view(request):
-    """Assumptions management view - manage market assumptions."""
+    """Assumptions management view - manage market assumptions (global, admin-only upload/delete)."""
     error = None
     success = None
 
-    # Determine which user's data to show
+    # Determine current user
     selected_user_id = request.session.get('selected_user_id')
     if selected_user_id:
         try:
@@ -444,33 +444,37 @@ def assumptions_view(request):
         # Default to first user
         current_user = User.objects.first()
 
+    # Check if user is admin
+    is_admin = current_user and current_user.is_admin()
+
     if request.method == "POST":
-        form = AssumptionUploadForm(request.POST, request.FILES)
-        if form.is_valid():
-            try:
-                upload_type = form.cleaned_data['upload_type']
-                file_obj = form.cleaned_data['file']
-                filename = file_obj.name
+        # Only admins can upload
+        if not is_admin:
+            error = "Only administrators can upload assumptions."
+        else:
+            form = AssumptionUploadForm(request.POST, request.FILES)
+            if form.is_valid():
+                try:
+                    upload_type = form.cleaned_data['upload_type']
+                    file_obj = form.cleaned_data['file']
+                    filename = file_obj.name
 
-                # Import based on type
-                if upload_type == 'blackrock':
-                    upload = import_blackrock_assumptions(file_obj, current_user)
-                    success = f"Successfully uploaded {upload.entry_count} entries from {filename}"
-                else:
-                    error = f"Unsupported upload type: {upload_type}"
+                    # Import based on type
+                    if upload_type == 'blackrock':
+                        upload = import_blackrock_assumptions(file_obj, current_user)
+                        success = f"Successfully uploaded {upload.entry_count} entries from {filename}"
+                    else:
+                        error = f"Unsupported upload type: {upload_type}"
 
-            except ValueError as exc:
-                error = str(exc)
-            except Exception as exc:
-                error = f"Error uploading file: {str(exc)}"
+                except ValueError as exc:
+                    error = str(exc)
+                except Exception as exc:
+                    error = f"Error uploading file: {str(exc)}"
     else:
         form = AssumptionUploadForm()
 
-    # Get all uploads for the current user
-    if current_user:
-        uploads = AssumptionUpload.objects.filter(user=current_user).order_by('-upload_datetime')
-    else:
-        uploads = AssumptionUpload.objects.none()
+    # Get all uploads (global - not filtered by user)
+    uploads = AssumptionUpload.objects.all().order_by('-upload_datetime')
 
     context = {
         'form': form,
@@ -478,6 +482,7 @@ def assumptions_view(request):
         'success': success,
         'uploads': uploads,
         'current_user': current_user,
+        'is_admin': is_admin,
     }
 
     return render(request, "glidepath_app/assumptions.html", context)
@@ -500,12 +505,25 @@ def view_assumption_upload(request, upload_id):
 
 @require_POST
 def delete_assumption_upload(request, upload_id):
-    """Delete an assumption upload and all its data rows."""
-    try:
-        upload = AssumptionUpload.objects.get(id=upload_id)
-        upload.delete()
-    except AssumptionUpload.DoesNotExist:
-        pass
+    """Delete an assumption upload and all its data rows (admin only)."""
+    # Determine current user
+    selected_user_id = request.session.get('selected_user_id')
+    if selected_user_id:
+        try:
+            current_user = User.objects.get(id=selected_user_id)
+        except User.DoesNotExist:
+            current_user = User.objects.first()
+    else:
+        current_user = User.objects.first()
+
+    # Check if user is admin
+    if current_user and current_user.is_admin():
+        try:
+            upload = AssumptionUpload.objects.get(id=upload_id)
+            upload.delete()
+        except AssumptionUpload.DoesNotExist:
+            pass
+
     return redirect('assumptions')
 
 
