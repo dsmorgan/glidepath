@@ -281,6 +281,60 @@ class Portfolio(models.Model):
     def __str__(self) -> str:
         return f"{self.user.username} - {self.name}"
 
+    def get_balance_info(self):
+        """
+        Returns portfolio balance and metadata.
+        Reuses existing get_portfolio_analysis() logic.
+
+        Returns:
+            dict with keys: total_balance, allocation, upload_date, days_since_upload, unmapped_positions
+        """
+        from .account_services import get_portfolio_analysis
+        from django.utils import timezone
+
+        analysis = get_portfolio_analysis(self)
+
+        # Find most recent upload date across all accounts in this portfolio
+        latest_upload = AccountUpload.objects.filter(
+            user=self.user,
+            positions__portfolioitem__portfolio=self
+        ).order_by('-upload_datetime').first()
+
+        upload_date = latest_upload.upload_datetime if latest_upload else None
+        days_since_upload = (timezone.now() - upload_date).days if upload_date else None
+
+        return {
+            'total_balance': analysis.get('total_value', 0),
+            'allocation': analysis.get('allocation', {}),
+            'upload_date': upload_date,
+            'days_since_upload': days_since_upload,
+            'unmapped_positions': analysis.get('unmapped_positions', [])
+        }
+
+    def get_current_age(self):
+        """
+        Calculate current age from year_born.
+
+        Returns:
+            int: current age, or None if year_born not set
+        """
+        if not self.year_born:
+            return None
+        from datetime import datetime
+        return datetime.now().year - self.year_born
+
+    def get_years_to_retirement(self):
+        """
+        Calculate years until retirement.
+
+        Returns:
+            int: years to retirement, or None if age data not available
+        """
+        current_age = self.get_current_age()
+        if current_age is None or self.retirement_age is None:
+            return None
+        return self.retirement_age - current_age
+
 
 class PortfolioItem(models.Model):
     """Stores which account+symbol combinations are included in a portfolio."""

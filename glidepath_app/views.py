@@ -1146,3 +1146,120 @@ def upload_funds_csv(request):
         request.session['funds_upload_error'] = f'Error processing CSV: {str(e)}'
 
     return redirect('settings')
+
+
+def modeling_view(request):
+    """Monte Carlo retirement modeling page."""
+    from .services.monte_carlo import run_monte_carlo_simulation
+    from decimal import Decimal, InvalidOperation
+
+    # Determine which user's data to show
+    selected_user_id = request.session.get('selected_user_id')
+    if selected_user_id:
+        try:
+            current_user = User.objects.get(id=selected_user_id)
+        except User.DoesNotExist:
+            current_user = User.objects.first()
+    else:
+        current_user = User.objects.first()
+
+    if not current_user:
+        return render(request, 'glidepath_app/modeling.html', {
+            'portfolios': Portfolio.objects.none(),
+            'selected_portfolio': None,
+            'balance_info': None,
+            'simulation_results': None,
+            'errors': ['No user selected']
+        })
+
+    # Get all portfolios for the current user
+    portfolios = Portfolio.objects.filter(user=current_user)
+
+    # Handle portfolio selection
+    selected_portfolio_id = request.GET.get('portfolio') or request.POST.get('portfolio')
+    selected_portfolio = None
+    balance_info = None
+    simulation_results = None
+    errors = []
+
+    if selected_portfolio_id:
+        try:
+            selected_portfolio = portfolios.get(id=selected_portfolio_id)
+        except Portfolio.DoesNotExist:
+            errors.append("Selected portfolio not found.")
+
+    if selected_portfolio:
+        # Get balance info
+        balance_info = selected_portfolio.get_balance_info()
+
+        # Validation checks
+        if balance_info['unmapped_positions']:
+            unmapped_count = len(balance_info['unmapped_positions'])
+            unmapped_list = ', '.join([f"{pos['symbol']} ({pos['account_number']})"
+                                      for pos in balance_info['unmapped_positions'][:5]])
+            if unmapped_count > 5:
+                unmapped_list += f" and {unmapped_count - 5} more"
+            errors.append(
+                f"Cannot run simulation: {unmapped_count} position(s) are not mapped to asset categories. "
+                f"Unmapped positions: {unmapped_list}. "
+                f"Please map all positions on the Portfolio page before running simulation."
+            )
+
+        if not selected_portfolio.ruleset:
+            errors.append("Cannot run simulation: Portfolio does not have a glidepath ruleset assigned. "
+                        "Please assign a ruleset on the Portfolio page.")
+
+        if not selected_portfolio.year_born or not selected_portfolio.retirement_age:
+            errors.append("Cannot run simulation: Portfolio is missing birth year or retirement age. "
+                        "Please configure these on the Portfolio page.")
+
+        if balance_info['total_balance'] <= 0:
+            errors.append("Cannot run simulation: Portfolio has no balance. "
+                        "Please upload account positions on the Accounts page.")
+
+        # If form submitted and no errors, run simulation
+        if request.method == 'POST' and not errors:
+            try:
+                annual_contribution = Decimal(request.POST.get('annual_contribution', '0'))
+                withdrawal_mode = request.POST.get('withdrawal_mode', 'percent')
+                withdrawal_amount = float(request.POST.get('withdrawal_amount', '4.0'))
+                inflation_rate = float(request.POST.get('inflation_rate', '3.0')) / 100  # Convert to decimal
+
+                # Validate inputs
+                if annual_contribution < 0:
+                    errors.append("Annual contribution cannot be negative.")
+                if withdrawal_amount <= 0:
+                    errors.append("Withdrawal amount must be greater than zero.")
+                if inflation_rate < 0 or inflation_rate > 1:
+                    errors.append("Inflation rate must be between 0% and 100%.")
+
+                if not errors:
+                    simulation_results = run_monte_carlo_simulation(
+                        selected_portfolio,
+                        annual_contribution,
+                        withdrawal_mode,
+                        withdrawal_amount,
+                        inflation_rate
+                    )
+
+                    # Prepare chart data
+                    simulation_results['chart_data'] = json.dumps({
+                        'percentile_10': simulation_results['percentile_10'],
+                        'percentile_50': simulation_results['percentile_50'],
+                        'percentile_90': simulation_results['percentile_90'],
+                    })
+            except (ValueError, InvalidOperation) as e:
+                errors.append(f"Invalid input: {str(e)}")
+            except Exception as e:
+                errors.append(f"Error running simulation: {str(e)}")
+
+    context = {
+        'portfolios': portfolios,
+        'selected_portfolio': selected_portfolio,
+        'balance_info': balance_info,
+        'simulation_results': simulation_results,
+        'errors': errors,
+        'current_user': current_user,
+    }
+
+    return render(request, 'glidepath_app/modeling.html', context)
