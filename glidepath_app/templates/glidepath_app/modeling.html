@@ -127,7 +127,7 @@
                     <div class="flex-1">
                         <div class="relative">
                             <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500" id="withdrawal-prefix">
-                                {{ request.POST.withdrawal_mode|default:'percent' == 'percent'|yesno:'%,$' }}
+                                {% if request.POST.withdrawal_mode == 'dollar' %}${% else %}%{% endif %}
                             </span>
                             <input type="number" name="withdrawal_amount" id="withdrawal_amount"
                                    value="{{ request.POST.withdrawal_amount|default:'4.0' }}"
