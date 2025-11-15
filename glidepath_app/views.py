@@ -560,10 +560,6 @@ def portfolios_view(request):
             except Portfolio.DoesNotExist:
                 pass
 
-        # Default to first portfolio if none selected
-        if not selected_portfolio and portfolios.exists():
-            selected_portfolio = portfolios.first()
-
         # Get portfolio analysis if a portfolio is selected
         if selected_portfolio:
             analysis_data = get_portfolio_analysis(selected_portfolio)

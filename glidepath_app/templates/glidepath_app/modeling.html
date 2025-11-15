@@ -136,17 +136,6 @@
                 </div>
 
                 <div>
-                    <label for="expected_lifespan" class="block text-sm font-medium text-gray-700 mb-2">
-                        Expected Lifespan
-                    </label>
-                    <input type="number" name="expected_lifespan" id="expected_lifespan"
-                           value="{{ simulation_params.expected_lifespan|default:'95' }}"
-                           min="50" max="120" step="1"
-                           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                    <p class="mt-1 text-xs text-gray-500">Age in years</p>
-                </div>
-
-                <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">
                         Withdrawal Mode
                     </label>
@@ -168,6 +157,17 @@
                     </div>
                     <p class="mt-1 text-xs text-gray-500">&nbsp;</p>
                 </div>
+
+                <div>
+                    <label for="expected_lifespan" class="block text-sm font-medium text-gray-700 mb-2">
+                        Expected Lifespan
+                    </label>
+                    <input type="number" name="expected_lifespan" id="expected_lifespan"
+                           value="{{ simulation_params.expected_lifespan|default:'95' }}"
+                           min="50" max="120" step="1"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    <p class="mt-1 text-xs text-gray-500">Age in years</p>
+                </div>
             </div>
 
             <div class="flex justify-end">
@@ -186,16 +186,26 @@
         <h2 class="text-xl font-semibold text-gray-800 mb-6">Monte Carlo Simulation Results</h2>
 
         <!-- Key Metrics -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
             <div class="bg-green-50 p-4 rounded-lg">
                 <p class="text-sm text-gray-600">Probability of Success</p>
                 <p class="text-3xl font-bold text-green-600">{{ simulation_results.probability_of_success|floatformat:1 }}%</p>
                 <p class="text-xs text-gray-500 mt-1">Portfolio never runs out of money</p>
             </div>
+            <div class="bg-indigo-50 p-4 rounded-lg">
+                <p class="text-sm text-gray-600">Additional Contribution</p>
+                <p class="text-2xl font-bold text-indigo-600 font-mono">${{ simulation_results.total_additional_contributions|floatformat:2|intcomma }}</p>
+                <p class="text-xs text-gray-500 mt-1">Total contributions until retirement</p>
+            </div>
             <div class="bg-blue-50 p-4 rounded-lg">
                 <p class="text-sm text-gray-600">Expected Balance at Retirement</p>
                 <p class="text-2xl font-bold text-blue-600 font-mono">${{ simulation_results.expected_balance_at_retirement|floatformat:2|intcomma }}</p>
                 <p class="text-xs text-gray-500 mt-1">Median across all simulations</p>
+            </div>
+            <div class="bg-orange-50 p-4 rounded-lg">
+                <p class="text-sm text-gray-600">Annual Withdrawal</p>
+                <p class="text-2xl font-bold text-orange-600 font-mono">${{ simulation_results.annual_withdrawal_at_retirement|floatformat:2|intcomma }}</p>
+                <p class="text-xs text-gray-500 mt-1">At retirement (inflation-adjusted)</p>
             </div>
             <div class="bg-purple-50 p-4 rounded-lg">
                 <p class="text-sm text-gray-600">Expected Balance at Age {{ simulation_params.expected_lifespan|default:'95' }}</p>
