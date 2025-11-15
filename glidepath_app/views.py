@@ -1217,13 +1217,25 @@ def modeling_view(request):
             errors.append("Cannot run simulation: Portfolio has no balance. "
                         "Please upload account positions on the Accounts page.")
 
+        # Prepare simulation_params dictionary to persist form values
+        simulation_params = {}
+        if request.method == 'POST':
+            simulation_params = {
+                'annual_contribution': request.POST.get('annual_contribution', '0'),
+                'withdrawal_mode': request.POST.get('withdrawal_mode', 'percent'),
+                'withdrawal_amount': request.POST.get('withdrawal_amount', '4.0'),
+                'inflation_rate': request.POST.get('inflation_rate', '3.0'),
+                'expected_lifespan': request.POST.get('expected_lifespan', '95'),
+            }
+
         # If form submitted and no errors, run simulation
         if request.method == 'POST' and not errors:
             try:
-                annual_contribution = Decimal(request.POST.get('annual_contribution', '0'))
-                withdrawal_mode = request.POST.get('withdrawal_mode', 'percent')
-                withdrawal_amount = float(request.POST.get('withdrawal_amount', '4.0'))
-                inflation_rate = float(request.POST.get('inflation_rate', '3.0')) / 100  # Convert to decimal
+                annual_contribution = Decimal(simulation_params['annual_contribution'])
+                withdrawal_mode = simulation_params['withdrawal_mode']
+                withdrawal_amount = float(simulation_params['withdrawal_amount'])
+                inflation_rate = float(simulation_params['inflation_rate']) / 100  # Convert to decimal
+                expected_lifespan = int(simulation_params['expected_lifespan'])
 
                 # Validate inputs
                 if annual_contribution < 0:
@@ -1232,6 +1244,8 @@ def modeling_view(request):
                     errors.append("Withdrawal amount must be greater than zero.")
                 if inflation_rate < 0 or inflation_rate > 1:
                     errors.append("Inflation rate must be between 0% and 100%.")
+                if expected_lifespan < 50 or expected_lifespan > 120:
+                    errors.append("Expected lifespan must be between 50 and 120.")
 
                 if not errors:
                     simulation_results = run_monte_carlo_simulation(
@@ -1239,7 +1253,8 @@ def modeling_view(request):
                         annual_contribution,
                         withdrawal_mode,
                         withdrawal_amount,
-                        inflation_rate
+                        inflation_rate,
+                        end_age=expected_lifespan
                     )
 
                     # Prepare chart data
@@ -1258,6 +1273,7 @@ def modeling_view(request):
         'selected_portfolio': selected_portfolio,
         'balance_info': balance_info,
         'simulation_results': simulation_results,
+        'simulation_params': simulation_params,
         'errors': errors,
         'current_user': current_user,
     }
