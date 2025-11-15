@@ -1169,6 +1169,7 @@ def modeling_view(request):
             'selected_portfolio': None,
             'balance_info': None,
             'simulation_results': None,
+            'simulation_params': {},
             'errors': ['No user selected']
         })
 
@@ -1180,6 +1181,7 @@ def modeling_view(request):
     selected_portfolio = None
     balance_info = None
     simulation_results = None
+    simulation_params = {}
     errors = []
 
     if selected_portfolio_id:
@@ -1217,8 +1219,7 @@ def modeling_view(request):
             errors.append("Cannot run simulation: Portfolio has no balance. "
                         "Please upload account positions on the Accounts page.")
 
-        # Prepare simulation_params dictionary to persist form values
-        simulation_params = {}
+        # Populate simulation_params dictionary to persist form values
         if request.method == 'POST':
             simulation_params = {
                 'annual_contribution': request.POST.get('annual_contribution', '0'),
