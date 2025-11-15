@@ -64,7 +64,7 @@ def run_monte_carlo_simulation(
     Returns:
         dict with simulation results including percentile paths and metrics
     """
-    from ..account_services import get_portfolio_analysis
+    from .account_services import get_portfolio_analysis
 
     # Get current portfolio state
     analysis = get_portfolio_analysis(portfolio)
@@ -77,7 +77,7 @@ def run_monte_carlo_simulation(
     years_to_retirement = retirement_age - current_age
 
     # Get most recent upload date
-    from ..models import AccountUpload
+    from .models import AccountUpload
     latest_upload = AccountUpload.objects.filter(
         user=portfolio.user,
         positions__portfolioitem__portfolio=portfolio
@@ -153,7 +153,7 @@ def _get_rules_by_retirement_age(ruleset):
     Returns:
         dict mapping retirement_age -> allocation percentages by asset class
     """
-    from ..models import GlidepathRule
+    from .models import GlidepathRule
 
     rules = GlidepathRule.objects.filter(ruleset=ruleset).prefetch_related('class_allocations__asset_class')
 
