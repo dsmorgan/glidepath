@@ -1,43 +1,370 @@
 {% extends 'glidepath_app/base.html' %}
-{% block title %}Glidepath - Modeling{% endblock %}
+{% block title %}Glidepath - Retirement Modeling{% endblock %}
 {% block content %}
 <div class="bg-white shadow rounded-lg p-8">
-    <h1 class="text-3xl font-bold text-gray-900 mb-6">Investment Modeling</h1>
+    <h1 class="text-3xl font-bold text-gray-900 mb-6">Retirement Modeling</h1>
 
-    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+    <!-- Portfolio Selection -->
+    <div class="bg-gray-50 p-6 rounded-lg mb-8">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold text-gray-800">Portfolio Selection</h2>
+        </div>
+
+        {% if portfolios %}
+        <form method="get" class="flex-1" id="portfolio-form">
+            <select name="portfolio" onchange="this.form.submit()"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                <option value="">-- Select Portfolio --</option>
+                {% for portfolio in portfolios %}
+                <option value="{{ portfolio.id }}" {% if selected_portfolio and selected_portfolio.id == portfolio.id %}selected{% endif %}>
+                    {{ portfolio.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </form>
+        {% else %}
+        <p class="text-gray-500">No portfolios available. Please create a portfolio first.</p>
+        {% endif %}
+    </div>
+
+    <!-- Error Messages -->
+    {% if errors %}
+    <div class="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
         <div class="flex">
-            <div class="flex-shrink-0">
-                <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                </svg>
-            </div>
             <div class="ml-3">
-                <p class="text-sm text-yellow-700">
-                    This section is under development. Modeling features will be available soon.
-                </p>
+                <h3 class="text-sm font-medium text-red-800">Errors</h3>
+                <div class="mt-2 text-sm text-red-700">
+                    <ul class="list-disc list-inside space-y-1">
+                        {% for error in errors %}
+                        <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
             </div>
         </div>
     </div>
+    {% endif %}
 
-    <div class="prose max-w-none">
-        <h2 class="text-xl font-semibold text-gray-800 mb-4">Planned Features</h2>
-        <ul class="list-disc list-inside space-y-2 text-gray-700">
-            <li>Run Monte Carlo simulations for retirement scenarios</li>
-            <li>Model different glidepath strategies and compare outcomes</li>
-            <li>Analyze portfolio performance under various market conditions</li>
-            <li>Visualize projected growth and drawdown scenarios</li>
-            <li>Calculate success probabilities for retirement goals</li>
-            <li>Test sensitivity to different assumptions (returns, inflation, etc.)</li>
-        </ul>
+    {% if selected_portfolio %}
+    <!-- Portfolio Information -->
+    <div class="bg-blue-50 p-6 rounded-lg mb-8">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Portfolio Information</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+                <p class="text-sm text-gray-600">Current Balance</p>
+                <p class="text-2xl font-bold text-indigo-600 font-mono">${{ balance_info.total_balance|floatformat:2 }}</p>
+                {% if balance_info.upload_date %}
+                <p class="text-xs text-gray-500 mt-1">
+                    As of {{ balance_info.upload_date|date:"M d, Y" }}
+                    {% if balance_info.days_since_upload > 30 %}
+                    <span class="text-amber-600 font-semibold">⚠ {{ balance_info.days_since_upload }} days old</span>
+                    {% endif %}
+                </p>
+                {% endif %}
+            </div>
+            <div>
+                <p class="text-sm text-gray-600">Current Age</p>
+                <p class="text-2xl font-bold text-gray-800">{{ selected_portfolio.get_current_age }}</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-600">Retirement Age</p>
+                <p class="text-2xl font-bold text-gray-800">{{ selected_portfolio.retirement_age }}</p>
+            </div>
+        </div>
+        <div class="mt-4">
+            <p class="text-sm text-gray-600">Years to Retirement</p>
+            <p class="text-lg font-semibold text-gray-800">{{ selected_portfolio.get_years_to_retirement }} years</p>
+        </div>
+        <div class="mt-4">
+            <p class="text-sm text-gray-600">Glidepath Ruleset</p>
+            <p class="text-lg font-semibold text-gray-800">{{ selected_portfolio.ruleset.name|default:"Not assigned" }}</p>
+        </div>
     </div>
 
-    <div class="mt-8">
-        <a href="{% url 'home' %}" class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-            <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-            </svg>
-            Back to Home
-        </a>
+    <!-- Simulation Parameters -->
+    {% if not errors %}
+    <div class="bg-gray-50 p-6 rounded-lg mb-8">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Simulation Parameters</h2>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="portfolio" value="{{ selected_portfolio.id }}">
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div>
+                    <label for="annual_contribution" class="block text-sm font-medium text-gray-700 mb-2">
+                        Annual Contribution (until retirement)
+                    </label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span>
+                        <input type="number" name="annual_contribution" id="annual_contribution"
+                               value="{{ request.POST.annual_contribution|default:'0' }}"
+                               min="0" step="1000"
+                               class="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500">Annual amount you plan to contribute before retirement</p>
+                </div>
+
+                <div>
+                    <label for="inflation_rate" class="block text-sm font-medium text-gray-700 mb-2">
+                        Inflation Rate
+                    </label>
+                    <div class="relative">
+                        <input type="number" name="inflation_rate" id="inflation_rate"
+                               value="{{ request.POST.inflation_rate|default:'3.0' }}"
+                               min="0" max="100" step="0.1"
+                               class="w-full pr-8 pl-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        <span class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500">%</span>
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500">Expected annual inflation rate (default: 3%)</p>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    Annual Withdrawal (in retirement)
+                </label>
+                <div class="flex gap-4 items-end">
+                    <div class="flex-1">
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500" id="withdrawal-prefix">
+                                {{ request.POST.withdrawal_mode|default:'percent' == 'percent'|yesno:'%,$' }}
+                            </span>
+                            <input type="number" name="withdrawal_amount" id="withdrawal_amount"
+                                   value="{{ request.POST.withdrawal_amount|default:'4.0' }}"
+                                   min="0" step="0.1"
+                                   class="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <label class="inline-flex items-center">
+                            <input type="radio" name="withdrawal_mode" value="percent"
+                                   {% if request.POST.withdrawal_mode == 'percent' or not request.POST.withdrawal_mode %}checked{% endif %}
+                                   onchange="updateWithdrawalPrefix()"
+                                   class="form-radio h-4 w-4 text-indigo-600">
+                            <span class="ml-2 text-sm text-gray-700">Percent</span>
+                        </label>
+                        <label class="inline-flex items-center">
+                            <input type="radio" name="withdrawal_mode" value="dollar"
+                                   {% if request.POST.withdrawal_mode == 'dollar' %}checked{% endif %}
+                                   onchange="updateWithdrawalPrefix()"
+                                   class="form-radio h-4 w-4 text-indigo-600">
+                            <span class="ml-2 text-sm text-gray-700">Dollars</span>
+                        </label>
+                    </div>
+                </div>
+                <p class="mt-1 text-xs text-gray-500" id="withdrawal-help">
+                    <span id="withdrawal-help-percent" {% if request.POST.withdrawal_mode == 'dollar' %}style="display:none"{% endif %}>
+                        Percentage of retirement balance (4% rule is common). Adjusted annually for inflation.
+                    </span>
+                    <span id="withdrawal-help-dollar" {% if request.POST.withdrawal_mode != 'dollar' %}style="display:none"{% endif %}>
+                        Fixed dollar amount in today's dollars. Will be inflation-adjusted to retirement, then annually thereafter.
+                    </span>
+                </p>
+            </div>
+
+            <div class="flex justify-end">
+                <button type="submit"
+                        class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-medium">
+                    Run Simulation
+                </button>
+            </div>
+        </form>
     </div>
+    {% endif %}
+
+    <!-- Simulation Results -->
+    {% if simulation_results %}
+    <div class="bg-white p-6 rounded-lg mb-8 border border-gray-200">
+        <h2 class="text-xl font-semibold text-gray-800 mb-6">Monte Carlo Simulation Results</h2>
+
+        <!-- Key Metrics -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-green-50 p-4 rounded-lg">
+                <p class="text-sm text-gray-600">Probability of Success</p>
+                <p class="text-3xl font-bold text-green-600">{{ simulation_results.probability_of_success|floatformat:1 }}%</p>
+                <p class="text-xs text-gray-500 mt-1">Portfolio never runs out of money</p>
+            </div>
+            <div class="bg-blue-50 p-4 rounded-lg">
+                <p class="text-sm text-gray-600">Expected Balance at Retirement</p>
+                <p class="text-2xl font-bold text-blue-600 font-mono">${{ simulation_results.expected_balance_at_retirement|floatformat:0 }}</p>
+                <p class="text-xs text-gray-500 mt-1">Median across all simulations</p>
+            </div>
+            <div class="bg-purple-50 p-4 rounded-lg">
+                <p class="text-sm text-gray-600">Expected Balance at Age 95</p>
+                <p class="text-2xl font-bold text-purple-600 font-mono">${{ simulation_results.expected_balance_at_end|floatformat:0 }}</p>
+                <p class="text-xs text-gray-500 mt-1">Median across all simulations</p>
+            </div>
+        </div>
+
+        <!-- Chart -->
+        <div class="bg-white p-4 rounded-lg border border-gray-200">
+            <canvas id="monteCarloChart" height="100"></canvas>
+        </div>
+
+        <!-- Disclaimer -->
+        <div class="mt-6 bg-yellow-50 border-l-4 border-yellow-400 p-4">
+            <p class="text-sm text-yellow-800">
+                <strong>Important Disclaimer:</strong> This simulation is for educational purposes only and should not be considered financial advice.
+                Past performance does not guarantee future results. The simulation does not account for taxes, fees, or life changes.
+                Please consult a qualified financial advisor for personalized retirement planning.
+            </p>
+        </div>
+
+        <!-- Assumptions -->
+        <div class="mt-6 bg-gray-50 p-4 rounded-lg">
+            <h3 class="text-sm font-semibold text-gray-800 mb-2">Simulation Assumptions</h3>
+            <ul class="text-xs text-gray-600 space-y-1">
+                <li><strong>Asset Class Returns (Mean / Std Dev):</strong></li>
+                <li class="ml-4">• Stocks: 10% / 18% (based on historical S&P 500, 1926-2024)</li>
+                <li class="ml-4">• Bonds: 4% / 6% (based on 10-year Treasury bonds)</li>
+                <li class="ml-4">• Crypto: 15% / 60% (highly speculative, limited history)</li>
+                <li class="ml-4">• Other: 3% / 5% (cash equivalents)</li>
+                <li><strong>Number of Simulations:</strong> 1,000</li>
+                <li><strong>Rebalancing:</strong> Annual rebalancing to glidepath target allocation</li>
+                <li><strong>Returns Distribution:</strong> Normal (Gaussian) distribution</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Chart rendering
+        {% if simulation_results.chart_data %}
+        const chartData = {{ simulation_results.chart_data|safe }};
+        const ctx = document.getElementById('monteCarloChart').getContext('2d');
+
+        const ages = chartData.percentile_50.map(point => point[0]);
+        const p10_values = chartData.percentile_10.map(point => point[1]);
+        const p50_values = chartData.percentile_50.map(point => point[1]);
+        const p90_values = chartData.percentile_90.map(point => point[1]);
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ages,
+                datasets: [
+                    {
+                        label: '90th Percentile (Optimistic)',
+                        data: p90_values,
+                        borderColor: 'rgba(34, 197, 94, 0.8)',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        fill: '+1',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                    },
+                    {
+                        label: '50th Percentile (Median)',
+                        data: p50_values,
+                        borderColor: 'rgba(59, 130, 246, 0.8)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: '+1',
+                        borderWidth: 3,
+                        pointRadius: 0,
+                    },
+                    {
+                        label: '10th Percentile (Pessimistic)',
+                        data: p10_values,
+                        borderColor: 'rgba(239, 68, 68, 0.8)',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        fill: false,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                    },
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Portfolio Balance Projection',
+                        font: {
+                            size: 16,
+                            weight: 'bold'
+                        }
+                    },
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += '$' + context.parsed.y.toLocaleString(undefined, {
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 0
+                                });
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Age',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            }
+                        },
+                        grid: {
+                            display: false
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Portfolio Balance ($)',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            }
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return '$' + value.toLocaleString(undefined, {
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 0
+                                });
+                            }
+                        },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+        {% endif %}
+    </script>
+    {% endif %}
+
+    <script>
+        function updateWithdrawalPrefix() {
+            const withdrawalMode = document.querySelector('input[name="withdrawal_mode"]:checked').value;
+            const prefix = document.getElementById('withdrawal-prefix');
+            const helpPercent = document.getElementById('withdrawal-help-percent');
+            const helpDollar = document.getElementById('withdrawal-help-dollar');
+
+            if (withdrawalMode === 'percent') {
+                prefix.textContent = '%';
+                helpPercent.style.display = 'inline';
+                helpDollar.style.display = 'none';
+            } else {
+                prefix.textContent = '$';
+                helpPercent.style.display = 'none';
+                helpDollar.style.display = 'inline';
+            }
+        }
+    </script>
+    {% endif %}
 </div>
 {% endblock %}
