@@ -295,9 +295,13 @@ class Portfolio(models.Model):
         analysis = get_portfolio_analysis(self)
 
         # Find most recent upload date across all accounts in this portfolio
+        # Get account numbers from portfolio items
+        account_numbers = self.items.values_list('account_number', flat=True).distinct()
+
+        # Find most recent upload for any of these accounts
         latest_upload = AccountUpload.objects.filter(
             user=self.user,
-            positions__portfolioitem__portfolio=self
+            positions__account_number__in=account_numbers
         ).order_by('-upload_datetime').first()
 
         upload_date = latest_upload.upload_datetime if latest_upload else None
