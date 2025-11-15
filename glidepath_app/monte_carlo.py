@@ -78,9 +78,13 @@ def run_monte_carlo_simulation(
 
     # Get most recent upload date
     from .models import AccountUpload
+    # Get account numbers from portfolio items
+    account_numbers = portfolio.items.values_list('account_number', flat=True).distinct()
+
+    # Find most recent upload for any of these accounts
     latest_upload = AccountUpload.objects.filter(
         user=portfolio.user,
-        positions__portfolioitem__portfolio=portfolio
+        positions__account_number__in=account_numbers
     ).order_by('-upload_datetime').first()
 
     upload_date = latest_upload.upload_datetime if latest_upload else None
