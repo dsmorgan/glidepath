@@ -1150,7 +1150,7 @@ def upload_funds_csv(request):
 
 def modeling_view(request):
     """Monte Carlo retirement modeling page."""
-    from .services.monte_carlo import run_monte_carlo_simulation
+    from .monte_carlo import run_monte_carlo_simulation
     from decimal import Decimal, InvalidOperation
 
     # Determine which user's data to show
