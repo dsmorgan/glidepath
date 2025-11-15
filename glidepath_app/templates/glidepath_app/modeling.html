@@ -1,4 +1,5 @@
 {% extends 'glidepath_app/base.html' %}
+{% load humanize %}
 {% block title %}Glidepath - Retirement Modeling{% endblock %}
 {% block content %}
 <div class="bg-white shadow rounded-lg p-8">
@@ -49,10 +50,10 @@
     <!-- Portfolio Information -->
     <div class="bg-blue-50 p-6 rounded-lg mb-8">
         <h2 class="text-xl font-semibold text-gray-800 mb-4">Portfolio Information</h2>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
                 <p class="text-sm text-gray-600">Current Balance</p>
-                <p class="text-2xl font-bold text-indigo-600 font-mono">${{ balance_info.total_balance|floatformat:2 }}</p>
+                <p class="text-xl font-bold text-indigo-600 font-mono">${{ balance_info.total_balance|floatformat:2|intcomma }}</p>
                 {% if balance_info.upload_date %}
                 <p class="text-xs text-gray-500 mt-1">
                     As of {{ balance_info.upload_date|date:"M d, Y" }}
@@ -64,20 +65,20 @@
             </div>
             <div>
                 <p class="text-sm text-gray-600">Current Age</p>
-                <p class="text-2xl font-bold text-gray-800">{{ selected_portfolio.get_current_age }}</p>
+                <p class="text-xl font-bold text-gray-800">{{ selected_portfolio.get_current_age }}</p>
             </div>
             <div>
                 <p class="text-sm text-gray-600">Retirement Age</p>
-                <p class="text-2xl font-bold text-gray-800">{{ selected_portfolio.retirement_age }}</p>
+                <p class="text-xl font-bold text-gray-800">{{ selected_portfolio.retirement_age }}</p>
             </div>
-        </div>
-        <div class="mt-4">
-            <p class="text-sm text-gray-600">Years to Retirement</p>
-            <p class="text-lg font-semibold text-gray-800">{{ selected_portfolio.get_years_to_retirement }} years</p>
-        </div>
-        <div class="mt-4">
-            <p class="text-sm text-gray-600">Glidepath Ruleset</p>
-            <p class="text-lg font-semibold text-gray-800">{{ selected_portfolio.ruleset.name|default:"Not assigned" }}</p>
+            <div>
+                <p class="text-sm text-gray-600">Years to Retirement</p>
+                <p class="text-xl font-bold text-gray-800">{{ selected_portfolio.get_years_to_retirement }} years</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-600">Glidepath Ruleset</p>
+                <p class="text-xl font-bold text-gray-800">{{ selected_portfolio.ruleset.name|default:"Not assigned" }}</p>
+            </div>
         </div>
     </div>
 
@@ -89,19 +90,19 @@
             {% csrf_token %}
             <input type="hidden" name="portfolio" value="{{ selected_portfolio.id }}">
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6">
                 <div>
                     <label for="annual_contribution" class="block text-sm font-medium text-gray-700 mb-2">
-                        Annual Contribution (until retirement)
+                        Annual Contribution
                     </label>
                     <div class="relative">
                         <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span>
                         <input type="number" name="annual_contribution" id="annual_contribution"
-                               value="{{ request.POST.annual_contribution|default:'0' }}"
+                               value="{{ simulation_params.annual_contribution|default:'0' }}"
                                min="0" step="1000"
                                class="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
                     </div>
-                    <p class="mt-1 text-xs text-gray-500">Annual amount you plan to contribute before retirement</p>
+                    <p class="mt-1 text-xs text-gray-500">Until retirement</p>
                 </div>
 
                 <div>
@@ -110,56 +111,63 @@
                     </label>
                     <div class="relative">
                         <input type="number" name="inflation_rate" id="inflation_rate"
-                               value="{{ request.POST.inflation_rate|default:'3.0' }}"
+                               value="{{ simulation_params.inflation_rate|default:'3.0' }}"
                                min="0" max="100" step="0.1"
                                class="w-full pr-8 pl-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
                         <span class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500">%</span>
                     </div>
-                    <p class="mt-1 text-xs text-gray-500">Expected annual inflation rate (default: 3%)</p>
+                    <p class="mt-1 text-xs text-gray-500">Annual rate</p>
                 </div>
-            </div>
 
-            <div class="mb-6">
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                    Annual Withdrawal (in retirement)
-                </label>
-                <div class="flex gap-4 items-end">
-                    <div class="flex-1">
-                        <div class="relative">
-                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500" id="withdrawal-prefix">
-                                {% if request.POST.withdrawal_mode == 'dollar' %}${% else %}%{% endif %}
-                            </span>
-                            <input type="number" name="withdrawal_amount" id="withdrawal_amount"
-                                   value="{{ request.POST.withdrawal_amount|default:'4.0' }}"
-                                   min="0" step="0.1"
-                                   class="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                        </div>
+                <div>
+                    <label for="withdrawal_amount" class="block text-sm font-medium text-gray-700 mb-2">
+                        Annual Withdrawal
+                    </label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500" id="withdrawal-prefix">
+                            {% if simulation_params.withdrawal_mode == 'dollar' %}${% else %}%{% endif %}
+                        </span>
+                        <input type="number" name="withdrawal_amount" id="withdrawal_amount"
+                               value="{{ simulation_params.withdrawal_amount|default:'4.0' }}"
+                               min="0" step="0.1"
+                               class="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
                     </div>
-                    <div class="flex gap-2">
+                    <p class="mt-1 text-xs text-gray-500">In retirement</p>
+                </div>
+
+                <div>
+                    <label for="expected_lifespan" class="block text-sm font-medium text-gray-700 mb-2">
+                        Expected Lifespan
+                    </label>
+                    <input type="number" name="expected_lifespan" id="expected_lifespan"
+                           value="{{ simulation_params.expected_lifespan|default:'95' }}"
+                           min="50" max="120" step="1"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    <p class="mt-1 text-xs text-gray-500">Age in years</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Withdrawal Mode
+                    </label>
+                    <div class="flex gap-2 mt-2">
                         <label class="inline-flex items-center">
                             <input type="radio" name="withdrawal_mode" value="percent"
-                                   {% if request.POST.withdrawal_mode == 'percent' or not request.POST.withdrawal_mode %}checked{% endif %}
+                                   {% if simulation_params.withdrawal_mode == 'percent' or not simulation_params.withdrawal_mode %}checked{% endif %}
                                    onchange="updateWithdrawalPrefix()"
                                    class="form-radio h-4 w-4 text-indigo-600">
-                            <span class="ml-2 text-sm text-gray-700">Percent</span>
+                            <span class="ml-1 text-sm text-gray-700">%</span>
                         </label>
                         <label class="inline-flex items-center">
                             <input type="radio" name="withdrawal_mode" value="dollar"
-                                   {% if request.POST.withdrawal_mode == 'dollar' %}checked{% endif %}
+                                   {% if simulation_params.withdrawal_mode == 'dollar' %}checked{% endif %}
                                    onchange="updateWithdrawalPrefix()"
                                    class="form-radio h-4 w-4 text-indigo-600">
-                            <span class="ml-2 text-sm text-gray-700">Dollars</span>
+                            <span class="ml-1 text-sm text-gray-700">$</span>
                         </label>
                     </div>
+                    <p class="mt-1 text-xs text-gray-500">&nbsp;</p>
                 </div>
-                <p class="mt-1 text-xs text-gray-500" id="withdrawal-help">
-                    <span id="withdrawal-help-percent" {% if request.POST.withdrawal_mode == 'dollar' %}style="display:none"{% endif %}>
-                        Percentage of retirement balance (4% rule is common). Adjusted annually for inflation.
-                    </span>
-                    <span id="withdrawal-help-dollar" {% if request.POST.withdrawal_mode != 'dollar' %}style="display:none"{% endif %}>
-                        Fixed dollar amount in today's dollars. Will be inflation-adjusted to retirement, then annually thereafter.
-                    </span>
-                </p>
             </div>
 
             <div class="flex justify-end">
@@ -186,12 +194,12 @@
             </div>
             <div class="bg-blue-50 p-4 rounded-lg">
                 <p class="text-sm text-gray-600">Expected Balance at Retirement</p>
-                <p class="text-2xl font-bold text-blue-600 font-mono">${{ simulation_results.expected_balance_at_retirement|floatformat:0 }}</p>
+                <p class="text-2xl font-bold text-blue-600 font-mono">${{ simulation_results.expected_balance_at_retirement|floatformat:2|intcomma }}</p>
                 <p class="text-xs text-gray-500 mt-1">Median across all simulations</p>
             </div>
             <div class="bg-purple-50 p-4 rounded-lg">
-                <p class="text-sm text-gray-600">Expected Balance at Age 95</p>
-                <p class="text-2xl font-bold text-purple-600 font-mono">${{ simulation_results.expected_balance_at_end|floatformat:0 }}</p>
+                <p class="text-sm text-gray-600">Expected Balance at Age {{ simulation_params.expected_lifespan|default:'95' }}</p>
+                <p class="text-2xl font-bold text-purple-600 font-mono">${{ simulation_results.expected_balance_at_end|floatformat:2|intcomma }}</p>
                 <p class="text-xs text-gray-500 mt-1">Median across all simulations</p>
             </div>
         </div>
@@ -351,17 +359,11 @@
         function updateWithdrawalPrefix() {
             const withdrawalMode = document.querySelector('input[name="withdrawal_mode"]:checked').value;
             const prefix = document.getElementById('withdrawal-prefix');
-            const helpPercent = document.getElementById('withdrawal-help-percent');
-            const helpDollar = document.getElementById('withdrawal-help-dollar');
 
             if (withdrawalMode === 'percent') {
                 prefix.textContent = '%';
-                helpPercent.style.display = 'inline';
-                helpDollar.style.display = 'none';
             } else {
                 prefix.textContent = '$';
-                helpPercent.style.display = 'none';
-                helpDollar.style.display = 'inline';
             }
         }
     </script>
