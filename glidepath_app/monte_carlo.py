@@ -135,8 +135,18 @@ def run_monte_carlo_simulation(
     retirement_balances = [path[years_to_retirement][1] for path in all_paths]
     end_balances = [path[-1][1] for path in all_paths]
 
-    # Calculate total additional contributions (sum of all contributions until retirement)
-    total_additional_contributions = float(annual_contribution) * years_to_retirement
+    # Calculate total additional contributions (sum of all inflation-adjusted contributions until retirement)
+    # This is a geometric series: contribution * sum((1+inflation)^i for i in 0..years-1)
+    # Formula: contribution * ((1+r)^n - 1) / r
+    if inflation_rate > 0 and years_to_retirement > 0:
+        total_additional_contributions = float(annual_contribution) * (
+            ((1 + inflation_rate) ** years_to_retirement - 1) / inflation_rate
+        )
+    elif years_to_retirement > 0:
+        # If inflation is 0, just multiply
+        total_additional_contributions = float(annual_contribution) * years_to_retirement
+    else:
+        total_additional_contributions = 0
 
     # Calculate inflation-adjusted annual withdrawal at retirement
     median_retirement_balance = np.median(retirement_balances)
@@ -211,6 +221,9 @@ def _run_single_simulation(
     # Track the withdrawal amount (for inflation adjustment)
     current_withdrawal = base_withdrawal_amount
 
+    # Track the contribution amount (for inflation adjustment)
+    current_contribution = annual_contribution
+
     for age in range(current_age + 1, end_age + 1):
         years_from_retirement = age - retirement_age
 
@@ -225,8 +238,10 @@ def _run_single_simulation(
 
         # Handle contributions (pre-retirement) or withdrawals (post-retirement)
         if age < retirement_age:
-            # Add annual contribution
-            balance += annual_contribution
+            # Add annual contribution (inflation-adjusted)
+            balance += current_contribution
+            # Inflate contribution for next year
+            current_contribution = current_contribution * (1 + inflation_rate)
         elif age >= retirement_age:
             # Calculate withdrawal amount
             if withdrawal_mode == 'percent':

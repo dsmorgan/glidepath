@@ -86,7 +86,7 @@
     {% if not errors %}
     <div class="bg-gray-50 p-6 rounded-lg mb-8">
         <h2 class="text-xl font-semibold text-gray-800 mb-4">Simulation Parameters</h2>
-        <form method="post">
+        <form method="post" id="simulation-form">
             {% csrf_token %}
             <input type="hidden" name="portfolio" value="{{ selected_portfolio.id }}">
 
@@ -171,9 +171,13 @@
             </div>
 
             <div class="flex justify-end">
-                <button type="submit"
-                        class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-medium">
-                    Run Simulation
+                <button type="submit" id="run-simulation-btn"
+                        class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-medium inline-flex items-center">
+                    <span id="btn-text">Run Simulation</span>
+                    <svg id="btn-spinner" class="hidden animate-spin ml-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
                 </button>
             </div>
         </form>
@@ -249,11 +253,56 @@
         {% if simulation_results.chart_data %}
         const chartData = {{ simulation_results.chart_data|safe }};
         const ctx = document.getElementById('monteCarloChart').getContext('2d');
+        const currentAge = {{ simulation_results.current_age }};
+        const retirementAge = {{ simulation_results.retirement_age }};
 
         const ages = chartData.percentile_50.map(point => point[0]);
         const p10_values = chartData.percentile_10.map(point => point[1]);
         const p50_values = chartData.percentile_50.map(point => point[1]);
         const p90_values = chartData.percentile_90.map(point => point[1]);
+
+        // Custom plugin to draw retirement line
+        const retirementLinePlugin = {
+            id: 'retirementLine',
+            afterDraw: function(chart) {
+                // Only draw if retirement is in the future
+                if (currentAge >= retirementAge) {
+                    return;
+                }
+
+                const ctx = chart.ctx;
+                const xAxis = chart.scales.x;
+                const yAxis = chart.scales.y;
+
+                // Find the x position for the retirement age
+                const retirementIndex = ages.indexOf(retirementAge);
+                if (retirementIndex === -1) {
+                    return; // Retirement age not in the data
+                }
+
+                const x = xAxis.getPixelForValue(retirementAge);
+                const topY = yAxis.top;
+                const bottomY = yAxis.bottom;
+
+                // Draw the vertical line
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(x, topY);
+                ctx.lineTo(x, bottomY);
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = 'rgba(239, 68, 68, 0.8)'; // Red color
+                ctx.setLineDash([5, 5]); // Dashed line
+                ctx.stroke();
+
+                // Draw the label
+                ctx.font = 'bold 12px sans-serif';
+                ctx.fillStyle = 'rgba(239, 68, 68, 1)';
+                ctx.textAlign = 'center';
+                ctx.fillText('Retirement', x, topY - 5);
+
+                ctx.restore();
+            }
+        };
 
         new Chart(ctx, {
             type: 'line',
@@ -359,7 +408,8 @@
                         beginAtZero: true
                     }
                 }
-            }
+            },
+            plugins: [retirementLinePlugin]
         });
         {% endif %}
     </script>
@@ -376,6 +426,26 @@
                 prefix.textContent = '$';
             }
         }
+
+        // Handle form submission to show loading state
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('simulation-form');
+            if (form) {
+                form.addEventListener('submit', function() {
+                    const btn = document.getElementById('run-simulation-btn');
+                    const btnText = document.getElementById('btn-text');
+                    const btnSpinner = document.getElementById('btn-spinner');
+
+                    if (btn && btnText && btnSpinner) {
+                        btn.disabled = true;
+                        btn.classList.add('opacity-75', 'cursor-not-allowed');
+                        btn.classList.remove('hover:bg-indigo-700');
+                        btnText.textContent = 'Running Simulation...';
+                        btnSpinner.classList.remove('hidden');
+                    }
+                });
+            }
+        });
     </script>
     {% endif %}
 </div>
