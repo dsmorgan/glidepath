@@ -264,9 +264,10 @@
         // Custom plugin to draw retirement line
         const retirementLinePlugin = {
             id: 'retirementLine',
-            afterDraw: function(chart) {
+            afterDatasetsDraw: function(chart) {
                 // Only draw if retirement is in the future
                 if (currentAge >= retirementAge) {
+                    console.log('Retirement line not shown: already retired or at retirement age');
                     return;
                 }
 
@@ -274,15 +275,21 @@
                 const xAxis = chart.scales.x;
                 const yAxis = chart.scales.y;
 
-                // Find the x position for the retirement age
-                const retirementIndex = ages.indexOf(retirementAge);
+                // Find the retirement age index in the labels
+                const retirementIndex = chart.data.labels.indexOf(retirementAge);
+                console.log('Retirement age:', retirementAge, 'Index:', retirementIndex, 'Labels:', chart.data.labels);
+
                 if (retirementIndex === -1) {
+                    console.log('Retirement age not found in labels');
                     return; // Retirement age not in the data
                 }
 
-                const x = xAxis.getPixelForValue(retirementAge);
+                // Get the pixel position for the retirement age
+                const x = xAxis.getPixelForValue(retirementIndex);
                 const topY = yAxis.top;
                 const bottomY = yAxis.bottom;
+
+                console.log('Drawing retirement line at x:', x, 'from y:', topY, 'to y:', bottomY);
 
                 // Draw the vertical line
                 ctx.save();
