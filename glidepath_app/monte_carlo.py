@@ -135,18 +135,32 @@ def run_monte_carlo_simulation(
     retirement_balances = [path[years_to_retirement][1] for path in all_paths]
     end_balances = [path[-1][1] for path in all_paths]
 
+    # Calculate total additional contributions (sum of all contributions until retirement)
+    total_additional_contributions = float(annual_contribution) * years_to_retirement
+
+    # Calculate inflation-adjusted annual withdrawal at retirement
+    median_retirement_balance = np.median(retirement_balances)
+    if withdrawal_mode == 'dollar':
+        # Already calculated as base_withdrawal_amount
+        annual_withdrawal_at_retirement = base_withdrawal_amount
+    else:
+        # Percentage mode: calculate based on median retirement balance
+        annual_withdrawal_at_retirement = median_retirement_balance * withdrawal_percentage
+
     return {
         'percentile_10': percentile_10,
         'percentile_50': percentile_50,
         'percentile_90': percentile_90,
         'probability_of_success': (successful_runs / num_simulations) * 100,
-        'expected_balance_at_retirement': np.median(retirement_balances),
+        'expected_balance_at_retirement': median_retirement_balance,
         'expected_balance_at_end': np.median(end_balances),
         'starting_balance': starting_balance,
         'current_age': current_age,
         'retirement_age': retirement_age,
         'upload_date': upload_date,
-        'days_since_upload': days_since_upload
+        'days_since_upload': days_since_upload,
+        'total_additional_contributions': total_additional_contributions,
+        'annual_withdrawal_at_retirement': annual_withdrawal_at_retirement
     }
 
 
