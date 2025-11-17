@@ -476,6 +476,38 @@ def assumptions_view(request):
     # Get all uploads (global - not filtered by user)
     uploads = AssumptionUpload.objects.all().order_by('-upload_datetime')
 
+    # Get asset class assumptions mapping
+    from .monte_carlo import ASSET_CLASS_ASSUMPTIONS
+
+    # Get all asset classes and categories from the database
+    asset_classes = AssetCategory.objects.values_list('asset_class__name', flat=True).distinct().order_by('asset_class__name')
+
+    # Build mapping data structure
+    assumptions_mapping = []
+
+    # First, add asset classes with their assumptions
+    for class_name in asset_classes:
+        if class_name in ASSET_CLASS_ASSUMPTIONS:
+            assumptions = ASSET_CLASS_ASSUMPTIONS[class_name]
+            assumptions_mapping.append({
+                'type': 'class',
+                'name': class_name,
+                'mean_return': f"{assumptions['mean_return'] * 100:.1f}%",
+                'std_dev': f"{assumptions['std_dev'] * 100:.1f}%",
+                'description': assumptions.get('description', '')
+            })
+
+            # Add categories under this class
+            categories = AssetCategory.objects.filter(asset_class__name=class_name).order_by('name')
+            for category in categories:
+                assumptions_mapping.append({
+                    'type': 'category',
+                    'name': f"{class_name}:{category.name}",
+                    'mean_return': f"{assumptions['mean_return'] * 100:.1f}%",
+                    'std_dev': f"{assumptions['std_dev'] * 100:.1f}%",
+                    'description': f"Inherits from {class_name}"
+                })
+
     context = {
         'form': form,
         'error': error,
@@ -483,6 +515,7 @@ def assumptions_view(request):
         'uploads': uploads,
         'current_user': current_user,
         'is_admin': is_admin,
+        'assumptions_mapping': assumptions_mapping,
     }
 
     return render(request, "glidepath_app/assumptions.html", context)
@@ -1223,6 +1256,8 @@ def modeling_view(request):
                 'withdrawal_amount': request.POST.get('withdrawal_amount', '4.0'),
                 'inflation_rate': request.POST.get('inflation_rate', '3.0'),
                 'expected_lifespan': request.POST.get('expected_lifespan', '95'),
+                'pessimistic_percentile': request.POST.get('pessimistic_percentile', '30'),
+                'optimistic_percentile': request.POST.get('optimistic_percentile', '70'),
             }
 
         # If form submitted and no errors, run simulation
@@ -1233,6 +1268,8 @@ def modeling_view(request):
                 withdrawal_amount = float(simulation_params['withdrawal_amount'])
                 inflation_rate = float(simulation_params['inflation_rate']) / 100  # Convert to decimal
                 expected_lifespan = int(simulation_params['expected_lifespan'])
+                pessimistic_percentile = int(simulation_params['pessimistic_percentile'])
+                optimistic_percentile = int(simulation_params['optimistic_percentile'])
 
                 # Validate inputs
                 if annual_contribution < 0:
@@ -1243,6 +1280,12 @@ def modeling_view(request):
                     errors.append("Inflation rate must be between 0% and 100%.")
                 if expected_lifespan < 50 or expected_lifespan > 120:
                     errors.append("Expected lifespan must be between 50 and 120.")
+                if pessimistic_percentile < 1 or pessimistic_percentile > 49:
+                    errors.append("Pessimistic percentile must be between 1 and 49.")
+                if optimistic_percentile < 51 or optimistic_percentile > 99:
+                    errors.append("Optimistic percentile must be between 51 and 99.")
+                if pessimistic_percentile >= optimistic_percentile:
+                    errors.append("Pessimistic percentile must be less than optimistic percentile.")
 
                 if not errors:
                     simulation_results = run_monte_carlo_simulation(
@@ -1251,14 +1294,18 @@ def modeling_view(request):
                         withdrawal_mode,
                         withdrawal_amount,
                         inflation_rate,
-                        end_age=expected_lifespan
+                        end_age=expected_lifespan,
+                        pessimistic_percentile=pessimistic_percentile,
+                        optimistic_percentile=optimistic_percentile
                     )
 
                     # Prepare chart data
                     simulation_results['chart_data'] = json.dumps({
-                        'percentile_10': simulation_results['percentile_10'],
+                        'percentile_pessimistic': simulation_results['percentile_pessimistic'],
                         'percentile_50': simulation_results['percentile_50'],
-                        'percentile_90': simulation_results['percentile_90'],
+                        'percentile_optimistic': simulation_results['percentile_optimistic'],
+                        'pessimistic_label': f'{pessimistic_percentile}th Percentile (Pessimistic)',
+                        'optimistic_label': f'{optimistic_percentile}th Percentile (Optimistic)',
                     })
             except (ValueError, InvalidOperation) as e:
                 errors.append(f"Invalid input: {str(e)}")

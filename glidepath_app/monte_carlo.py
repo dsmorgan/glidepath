@@ -47,7 +47,9 @@ def run_monte_carlo_simulation(
     withdrawal_amount,
     inflation_rate=0.03,
     num_simulations=1000,
-    end_age=95
+    end_age=95,
+    pessimistic_percentile=30,
+    optimistic_percentile=70
 ):
     """
     Run Monte Carlo simulation for retirement planning.
@@ -127,9 +129,9 @@ def run_monte_carlo_simulation(
             successful_runs += 1
 
     # Calculate percentiles
-    percentile_10 = _calculate_percentile_path(all_paths, 10)
+    percentile_pessimistic = _calculate_percentile_path(all_paths, pessimistic_percentile)
     percentile_50 = _calculate_percentile_path(all_paths, 50)
-    percentile_90 = _calculate_percentile_path(all_paths, 90)
+    percentile_optimistic = _calculate_percentile_path(all_paths, optimistic_percentile)
 
     # Calculate expected balances at key milestones
     retirement_balances = [path[years_to_retirement][1] for path in all_paths]
@@ -158,9 +160,9 @@ def run_monte_carlo_simulation(
         annual_withdrawal_at_retirement = median_retirement_balance * withdrawal_percentage
 
     return {
-        'percentile_10': percentile_10,
+        'percentile_pessimistic': percentile_pessimistic,
         'percentile_50': percentile_50,
-        'percentile_90': percentile_90,
+        'percentile_optimistic': percentile_optimistic,
         'probability_of_success': (successful_runs / num_simulations) * 100,
         'expected_balance_at_retirement': median_retirement_balance,
         'expected_balance_at_end': np.median(end_balances),
