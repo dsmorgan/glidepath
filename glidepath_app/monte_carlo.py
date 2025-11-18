@@ -6,7 +6,7 @@ It simulates portfolio growth and drawdown based on:
 - User's current portfolio balance and allocation
 - Glidepath rules (dynamic asset allocation by age)
 - Contribution and withdrawal patterns
-- Stochastic returns based on historical asset class statistics
+- Stochastic returns based on historical asset class statistics or custom mappings
 """
 
 import numpy as np
@@ -40,6 +40,40 @@ ASSET_CLASS_ASSUMPTIONS = {
 }
 
 
+def get_category_assumptions(category):
+    """
+    Get mean return and standard deviation for a category.
+
+    Uses custom mapping if available, otherwise falls back to asset class defaults.
+
+    Args:
+        category: AssetCategory instance
+
+    Returns:
+        tuple: (mean_return, std_dev) as floats (e.g., 0.10 for 10%)
+    """
+    from .models import CategoryAssumptionMapping
+
+    try:
+        mapping = CategoryAssumptionMapping.objects.get(category=category)
+        mean_return = mapping.get_mean_return()
+        std_dev = mapping.get_std_dev()
+
+        if mean_return is not None and std_dev is not None:
+            return (float(mean_return), float(std_dev))
+    except CategoryAssumptionMapping.DoesNotExist:
+        pass
+
+    # Fall back to asset class defaults
+    class_name = category.asset_class.name
+    if class_name in ASSET_CLASS_ASSUMPTIONS:
+        assumptions = ASSET_CLASS_ASSUMPTIONS[class_name]
+        return (assumptions['mean_return'], assumptions['std_dev'])
+
+    # Ultimate fallback (should not happen)
+    return (0.05, 0.10)
+
+
 def run_monte_carlo_simulation(
     portfolio,
     annual_contribution,
@@ -47,7 +81,9 @@ def run_monte_carlo_simulation(
     withdrawal_amount,
     inflation_rate=0.03,
     num_simulations=1000,
-    end_age=95
+    end_age=95,
+    pessimistic_percentile=30,
+    optimistic_percentile=70
 ):
     """
     Run Monte Carlo simulation for retirement planning.
@@ -60,6 +96,8 @@ def run_monte_carlo_simulation(
         inflation_rate: float, annual inflation rate (default 0.03 for 3%)
         num_simulations: int, number of Monte Carlo runs (default 1000)
         end_age: int, age to simulate until (default 95)
+        pessimistic_percentile: int, lower percentile for chart (default 30)
+        optimistic_percentile: int, upper percentile for chart (default 70)
 
     Returns:
         dict with simulation results including percentile paths and metrics
@@ -103,6 +141,9 @@ def run_monte_carlo_simulation(
     ruleset = portfolio.ruleset
     rules_by_age = _get_rules_by_retirement_age(ruleset)
 
+    # PRE-LOAD all category assumptions to avoid database queries in simulation loop
+    category_assumptions_cache = _build_category_assumptions_cache(rules_by_age)
+
     # Run simulations
     all_paths = []
     successful_runs = 0
@@ -118,7 +159,8 @@ def run_monte_carlo_simulation(
             base_withdrawal_amount=base_withdrawal_amount,
             withdrawal_percentage=withdrawal_percentage if withdrawal_mode == 'percent' else None,
             inflation_rate=inflation_rate,
-            rules_by_age=rules_by_age
+            rules_by_age=rules_by_age,
+            category_assumptions_cache=category_assumptions_cache
         )
         all_paths.append(path)
 
@@ -127,9 +169,9 @@ def run_monte_carlo_simulation(
             successful_runs += 1
 
     # Calculate percentiles
-    percentile_10 = _calculate_percentile_path(all_paths, 10)
+    percentile_pessimistic = _calculate_percentile_path(all_paths, pessimistic_percentile)
     percentile_50 = _calculate_percentile_path(all_paths, 50)
-    percentile_90 = _calculate_percentile_path(all_paths, 90)
+    percentile_optimistic = _calculate_percentile_path(all_paths, optimistic_percentile)
 
     # Calculate expected balances at key milestones
     retirement_balances = [path[years_to_retirement][1] for path in all_paths]
@@ -158,9 +200,9 @@ def run_monte_carlo_simulation(
         annual_withdrawal_at_retirement = median_retirement_balance * withdrawal_percentage
 
     return {
-        'percentile_10': percentile_10,
+        'percentile_pessimistic': percentile_pessimistic,
         'percentile_50': percentile_50,
-        'percentile_90': percentile_90,
+        'percentile_optimistic': percentile_optimistic,
         'probability_of_success': (successful_runs / num_simulations) * 100,
         'expected_balance_at_retirement': median_retirement_balance,
         'expected_balance_at_end': np.median(end_balances),
@@ -174,25 +216,100 @@ def run_monte_carlo_simulation(
     }
 
 
+def _build_category_assumptions_cache(rules_by_age):
+    """
+    Build a cache of all category assumptions to avoid database queries during simulation.
+
+    Args:
+        rules_by_age: dict from _get_rules_by_retirement_age()
+
+    Returns:
+        dict mapping category.id -> (mean_return, std_dev)
+    """
+    from .models import CategoryAssumptionMapping
+
+    cache = {}
+
+    # Collect all unique categories from rules
+    unique_categories = set()
+    for age_data in rules_by_age.values():
+        for (class_name, category) in age_data.get('categories', {}).keys():
+            unique_categories.add(category)
+
+    # Pre-fetch all mappings for these categories in a single query
+    if unique_categories:
+        category_ids = [cat.id for cat in unique_categories]
+        mappings = CategoryAssumptionMapping.objects.filter(
+            category_id__in=category_ids
+        ).select_related('assumption_data', 'category__asset_class')
+
+        # Build mapping dict
+        mapping_dict = {mapping.category.id: mapping for mapping in mappings}
+
+        # Build cache for each category
+        for category in unique_categories:
+            if category.id in mapping_dict:
+                mapping = mapping_dict[category.id]
+                mean_return = mapping.get_mean_return()
+                std_dev = mapping.get_std_dev()
+
+                if mean_return is not None and std_dev is not None:
+                    cache[category.id] = (float(mean_return), float(std_dev))
+                else:
+                    # Fall back to class defaults
+                    class_name = category.asset_class.name
+                    if class_name in ASSET_CLASS_ASSUMPTIONS:
+                        assumptions = ASSET_CLASS_ASSUMPTIONS[class_name]
+                        cache[category.id] = (assumptions['mean_return'], assumptions['std_dev'])
+                    else:
+                        cache[category.id] = (0.05, 0.10)
+            else:
+                # No mapping exists, use class defaults
+                class_name = category.asset_class.name
+                if class_name in ASSET_CLASS_ASSUMPTIONS:
+                    assumptions = ASSET_CLASS_ASSUMPTIONS[class_name]
+                    cache[category.id] = (assumptions['mean_return'], assumptions['std_dev'])
+                else:
+                    cache[category.id] = (0.05, 0.10)
+
+    return cache
+
+
 def _get_rules_by_retirement_age(ruleset):
     """
     Extract glidepath rules and create a lookup by retirement age.
 
     Returns:
-        dict mapping retirement_age -> allocation percentages by asset class
+        dict mapping retirement_age -> allocation dict with:
+            - 'class': dict of class_name -> percentage
+            - 'categories': dict of (class_name, category_obj) -> percentage
     """
     from .models import GlidepathRule
 
-    rules = GlidepathRule.objects.filter(ruleset=ruleset).prefetch_related('class_allocations__asset_class')
+    rules = GlidepathRule.objects.filter(ruleset=ruleset).prefetch_related(
+        'class_allocations__asset_class',
+        'category_allocations__asset_category__asset_class'
+    )
 
     rules_by_age = {}
     for rule in rules:
         # For each age in the band, store the allocation
         for age in range(rule.gt_retire_age, rule.lt_retire_age + 1):
-            allocation = {}
+            # Class-level allocations
+            class_allocation = {}
             for class_alloc in rule.class_allocations.all():
-                allocation[class_alloc.asset_class.name] = float(class_alloc.percentage) / 100.0
-            rules_by_age[age] = allocation
+                class_allocation[class_alloc.asset_class.name] = float(class_alloc.percentage) / 100.0
+
+            # Category-level allocations
+            category_allocation = {}
+            for cat_alloc in rule.category_allocations.all():
+                class_name = cat_alloc.asset_category.asset_class.name
+                category_allocation[(class_name, cat_alloc.asset_category)] = float(cat_alloc.percentage) / 100.0
+
+            rules_by_age[age] = {
+                'class': class_allocation,
+                'categories': category_allocation
+            }
 
     return rules_by_age
 
@@ -207,7 +324,8 @@ def _run_single_simulation(
     base_withdrawal_amount,
     withdrawal_percentage,
     inflation_rate,
-    rules_by_age
+    rules_by_age,
+    category_assumptions_cache
 ):
     """
     Run a single Monte Carlo simulation path.
@@ -231,7 +349,7 @@ def _run_single_simulation(
         allocation = rules_by_age.get(years_from_retirement, {})
 
         # Sample returns for this year based on allocation
-        portfolio_return = _sample_portfolio_return(allocation)
+        portfolio_return = _sample_portfolio_return(allocation, category_assumptions_cache)
 
         # Apply return to balance
         balance = balance * (1 + portfolio_return)
@@ -267,29 +385,57 @@ def _run_single_simulation(
     return path
 
 
-def _sample_portfolio_return(allocation):
+def _sample_portfolio_return(allocation, category_assumptions_cache):
     """
     Sample a single year's return based on portfolio allocation.
 
-    Assumes returns are normally distributed and independent across asset classes.
+    Assumes returns are normally distributed and independent across asset classes/categories.
 
     Args:
-        allocation: dict mapping asset class name -> percentage (as decimal)
+        allocation: dict with:
+            - 'class': dict mapping class_name -> percentage (as decimal)
+            - 'categories': dict mapping (class_name, category_obj) -> percentage
+        category_assumptions_cache: dict mapping category.id -> (mean_return, std_dev)
 
     Returns:
         float: portfolio return for the year
     """
     portfolio_return = 0.0
 
-    for asset_class, weight in allocation.items():
-        if asset_class in ASSET_CLASS_ASSUMPTIONS:
-            assumptions = ASSET_CLASS_ASSUMPTIONS[asset_class]
+    # Check if we have category-level allocations
+    categories = allocation.get('categories', {})
+    class_allocation = allocation.get('class', {})
+
+    if categories:
+        # Use category-level allocations with cached assumptions
+        for (class_name, category), weight in categories.items():
+            # Look up cached assumptions (no database query!)
+            if category.id in category_assumptions_cache:
+                mean_return, std_dev = category_assumptions_cache[category.id]
+            else:
+                # Fallback if not in cache (shouldn't happen)
+                if class_name in ASSET_CLASS_ASSUMPTIONS:
+                    assumptions = ASSET_CLASS_ASSUMPTIONS[class_name]
+                    mean_return = assumptions['mean_return']
+                    std_dev = assumptions['std_dev']
+                else:
+                    mean_return = 0.05
+                    std_dev = 0.10
+
             # Sample from normal distribution
-            class_return = np.random.normal(
-                assumptions['mean_return'],
-                assumptions['std_dev']
-            )
-            portfolio_return += weight * class_return
+            category_return = np.random.normal(mean_return, std_dev)
+            portfolio_return += weight * category_return
+    else:
+        # Use class-level allocations with default assumptions
+        for asset_class, weight in class_allocation.items():
+            if asset_class in ASSET_CLASS_ASSUMPTIONS:
+                assumptions = ASSET_CLASS_ASSUMPTIONS[asset_class]
+                # Sample from normal distribution
+                class_return = np.random.normal(
+                    assumptions['mean_return'],
+                    assumptions['std_dev']
+                )
+                portfolio_return += weight * class_return
 
     return portfolio_return
 

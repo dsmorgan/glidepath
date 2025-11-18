@@ -95,9 +95,6 @@
                             Type
                         </th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Uploaded By
-                        </th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Number of Entries
                         </th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -120,13 +117,6 @@
                             {{ upload.get_upload_type_display }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {% if upload.user %}
-                                {{ upload.user.username }}
-                            {% else %}
-                                <span class="text-gray-500 italic">Unknown</span>
-                            {% endif %}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {{ upload.entry_count }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
@@ -146,6 +136,113 @@
         {% else %}
         <div class="text-center py-8 text-gray-500">
             No uploads yet. Upload your first XLSX/CSV file above.
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Class/Category to Assumptions Mapping -->
+    <div class="mt-8">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Class/Category to Assumptions Mapping</h2>
+        {% if assumptions_mapping %}
+        <form method="post" id="mappings-form">
+            {% csrf_token %}
+            <input type="hidden" name="save_mappings" value="1">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 border" id="mappings-table">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Class / Category
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Mean Return
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Standard Deviation
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Mapping
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for item in assumptions_mapping %}
+                        <tr class="{% if item.type == 'class' %}bg-blue-50{% endif %}" data-category-id="{{ item.category_id|default:'' }}" data-class-name="{{ item.class_name }}">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm {% if item.type == 'class' %}font-semibold text-gray-900{% else %}text-gray-700 pl-12{% endif %}">
+                                {{ item.name }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                <span class="mean-return-display">{{ item.mean_return|floatformat:1 }}</span>%
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                <span class="std-dev-display">{{ item.std_dev|floatformat:1 }}</span>%
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-600">
+                                {% if item.type == 'class' %}
+                                    {{ item.description }}
+                                {% else %}
+                                    {% if is_admin %}
+                                    <div class="flex flex-col gap-2">
+                                        <select name="mapping_{{ item.category_id }}"
+                                                class="mapping-select w-full px-2 py-1 border border-gray-300 rounded-md text-sm"
+                                                data-category-id="{{ item.category_id }}"
+                                                data-class-name="{{ item.class_name }}">
+                                            <option value="default" {% if item.current_mapping == 'default' %}selected{% endif %}>
+                                                Inherits from {{ item.class_name }}
+                                            </option>
+                                            {% for ad in item.available_data %}
+                                            <option value="{{ ad.id }}" {% if item.current_mapping == ad.id|stringformat:"s" %}selected{% endif %}>
+                                                {{ ad.asset_class }} - {{ ad.asset }} - {{ ad.index }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                        <select name="horizon_{{ item.category_id }}"
+                                                class="horizon-select w-full px-2 py-1 border border-gray-300 rounded-md text-sm {% if item.current_mapping == 'default' %}hidden{% endif %}"
+                                                data-category-id="{{ item.category_id }}">
+                                            <option value="5yr" {% if item.current_horizon == '5yr' %}selected{% endif %}>5 Year</option>
+                                            <option value="7yr" {% if item.current_horizon == '7yr' %}selected{% endif %}>7 Year</option>
+                                            <option value="10yr" {% if item.current_horizon == '10yr' %}selected{% endif %}>10 Year</option>
+                                            <option value="15yr" {% if item.current_horizon == '15yr' %}selected{% endif %}>15 Year</option>
+                                            <option value="20yr" {% if item.current_horizon == '20yr' %}selected{% endif %}>20 Year</option>
+                                            <option value="25yr" {% if item.current_horizon == '25yr' %}selected{% endif %}>25 Year</option>
+                                            <option value="30yr" {% if item.current_horizon == '30yr' %}selected{% endif %}>30 Year</option>
+                                        </select>
+                                    </div>
+                                    {% else %}
+                                    {% if item.current_mapping == 'default' %}
+                                        Inherits from {{ item.class_name }}
+                                    {% else %}
+                                        {% for ad in item.available_data %}
+                                            {% if item.current_mapping == ad.id|stringformat:"s" %}
+                                                {{ ad.asset_class }} - {{ ad.asset }} - {{ ad.index }} ({{ item.current_horizon }})
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% endif %}
+                                    {% endif %}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if is_admin %}
+            <div class="mt-4 flex justify-end">
+                <button type="submit" class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-medium">
+                    Save Changes
+                </button>
+            </div>
+            {% endif %}
+        </form>
+        <div class="mt-4 bg-blue-50 border-l-4 border-blue-400 p-4">
+            <p class="text-sm text-blue-800">
+                <strong>Note:</strong> Asset categories can be mapped to specific market assumption data or inherit from their parent asset class.
+                When mapped, you can select the expected return horizon (5-30 years). Changes take effect on the next simulation run.
+            </p>
+        </div>
+        {% else %}
+        <div class="text-center py-8 text-gray-500">
+            No asset classes or categories found in the database.
         </div>
         {% endif %}
     </div>
@@ -172,6 +269,66 @@ document.addEventListener('DOMContentLoaded', function() {
             element.textContent = localDateStr;
         }
     });
+
+    // Assumption mapping JavaScript
+    const assumptionData = {{ assumption_data_json|safe }};
+    const defaultAssumptions = {{ default_assumptions_json|safe }};
+
+    // Handle mapping select changes
+    document.querySelectorAll('.mapping-select').forEach(function(select) {
+        select.addEventListener('change', function() {
+            const categoryId = this.dataset.categoryId;
+            const className = this.dataset.className;
+            const selectedValue = this.value;
+            const row = this.closest('tr');
+            const horizonSelect = row.querySelector('.horizon-select');
+            const meanReturnDisplay = row.querySelector('.mean-return-display');
+            const stdDevDisplay = row.querySelector('.std-dev-display');
+
+            if (selectedValue === 'default') {
+                // Hide horizon dropdown
+                horizonSelect.classList.add('hidden');
+                // Use default values from asset class
+                if (defaultAssumptions[className]) {
+                    meanReturnDisplay.textContent = defaultAssumptions[className].mean_return.toFixed(1);
+                    stdDevDisplay.textContent = defaultAssumptions[className].std_dev.toFixed(1);
+                }
+            } else {
+                // Show horizon dropdown
+                horizonSelect.classList.remove('hidden');
+                // Update values based on selected assumption and horizon
+                updateValuesFromMapping(selectedValue, horizonSelect.value, meanReturnDisplay, stdDevDisplay);
+            }
+        });
+    });
+
+    // Handle horizon select changes
+    document.querySelectorAll('.horizon-select').forEach(function(select) {
+        select.addEventListener('change', function() {
+            const row = this.closest('tr');
+            const mappingSelect = row.querySelector('.mapping-select');
+            const selectedMapping = mappingSelect.value;
+            const selectedHorizon = this.value;
+            const meanReturnDisplay = row.querySelector('.mean-return-display');
+            const stdDevDisplay = row.querySelector('.std-dev-display');
+
+            if (selectedMapping !== 'default') {
+                updateValuesFromMapping(selectedMapping, selectedHorizon, meanReturnDisplay, stdDevDisplay);
+            }
+        });
+    });
+
+    function updateValuesFromMapping(assumptionId, horizon, meanReturnDisplay, stdDevDisplay) {
+        if (assumptionData[assumptionId]) {
+            const data = assumptionData[assumptionId];
+            const expectedReturn = data.returns[horizon] || 0;
+            const volatility = data.volatility || 0;
+
+            // Convert from decimal to percentage and display
+            meanReturnDisplay.textContent = (expectedReturn * 100).toFixed(1);
+            stdDevDisplay.textContent = (volatility * 100).toFixed(1);
+        }
+    }
 });
 </script>
 {% endblock %}

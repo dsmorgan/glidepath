@@ -469,6 +469,9 @@ def delete_account_upload(request, upload_id):
 
 def assumptions_view(request):
     """Assumptions management view - manage market assumptions (global, admin-only upload/delete)."""
+    from .monte_carlo import ASSET_CLASS_ASSUMPTIONS
+    from .models import CategoryAssumptionMapping, AssumptionData, AssumptionUpload
+
     error = None
     success = None
 
@@ -478,10 +481,8 @@ def assumptions_view(request):
         try:
             current_user = User.objects.get(id=selected_user_id)
         except User.DoesNotExist:
-            # Fall back to first user if selected user doesn't exist
             current_user = User.objects.first()
     else:
-        # Default to first user
         current_user = User.objects.first()
 
     # Check if user is admin
@@ -494,27 +495,157 @@ def assumptions_view(request):
         else:
             form = AssumptionUploadForm(request.POST, request.FILES)
             if form.is_valid():
+        # Check if this is a mapping save or file upload
+        if 'save_mappings' in request.POST:
+            # Only admins can save mappings
+            if not is_admin:
+                error = "Only administrators can modify assumption mappings."
+            else:
                 try:
-                    upload_type = form.cleaned_data['upload_type']
-                    file_obj = form.cleaned_data['file']
-                    filename = file_obj.name
+                    # Process mapping updates
+                    saved_count = 0
+                    for key, value in request.POST.items():
+                        if key.startswith('mapping_'):
+                            # Format: mapping_{category_id}
+                            category_id = key.split('_')[1]
+                            horizon_key = f'horizon_{category_id}'
+                            horizon = request.POST.get(horizon_key, '10yr')
 
-                    # Import based on type
-                    if upload_type == 'blackrock':
-                        upload = import_blackrock_assumptions(file_obj, current_user)
-                        success = f"Successfully uploaded {upload.entry_count} entries from {filename}"
-                    else:
-                        error = f"Unsupported upload type: {upload_type}"
+                            try:
+                                category = AssetCategory.objects.get(id=category_id)
 
-                except ValueError as exc:
-                    error = str(exc)
+                                # Get or create mapping
+                                mapping, created = CategoryAssumptionMapping.objects.get_or_create(
+                                    category=category,
+                                    defaults={'horizon': '10yr'}
+                                )
+
+                                if value == 'default':
+                                    # Use default (no assumption data)
+                                    mapping.assumption_data = None
+                                    mapping.horizon = '10yr'
+                                else:
+                                    # value is assumption_data ID
+                                    assumption_data = AssumptionData.objects.get(id=value)
+                                    mapping.assumption_data = assumption_data
+                                    mapping.horizon = horizon
+
+                                mapping.save()
+                                saved_count += 1
+                            except (AssetCategory.DoesNotExist, AssumptionData.DoesNotExist):
+                                continue
+
+                    success = f"Successfully saved {saved_count} category mapping(s)."
                 except Exception as exc:
-                    error = f"Error uploading file: {str(exc)}"
-    else:
-        form = AssumptionUploadForm()
+                    error = f"Error saving mappings: {str(exc)}"
+        else:
+            # File upload
+            if not is_admin:
+                error = "Only administrators can upload assumptions."
+            else:
+                form = AssumptionUploadForm(request.POST, request.FILES)
+                if form.is_valid():
+                    try:
+                        upload_type = form.cleaned_data['upload_type']
+                        file_obj = form.cleaned_data['file']
+                        filename = file_obj.name
+
+                        if upload_type == 'blackrock':
+                            upload = import_blackrock_assumptions(file_obj, current_user)
+                            success = f"Successfully uploaded {upload.entry_count} entries from {filename}"
+                        else:
+                            error = f"Unsupported upload type: {upload_type}"
+
+                    except ValueError as exc:
+                        error = str(exc)
+                    except Exception as exc:
+                        error = f"Error uploading file: {str(exc)}"
+
+    form = AssumptionUploadForm()
 
     # Get all uploads (global - not filtered by user)
     uploads = AssumptionUpload.objects.all().order_by('-upload_datetime')
+
+    # Get latest upload for assumption data
+    latest_upload = uploads.first()
+
+    # Get all assumption data from latest upload (USD only)
+    assumption_data_list = []
+    assumption_data_json = {}
+    if latest_upload:
+        assumption_data_qs = AssumptionData.objects.filter(
+            upload=latest_upload,
+            currency='USD'
+        ).order_by('asset_class', 'asset')
+
+        for ad in assumption_data_qs:
+            assumption_data_list.append(ad)
+            # Build JSON structure for JavaScript
+            assumption_data_json[str(ad.id)] = {
+                'id': str(ad.id),
+                'label': f"{ad.asset_class} - {ad.asset} - {ad.index}",
+                'asset_class': ad.asset_class,
+                'asset': ad.asset,
+                'index': ad.index,
+                'volatility': float(ad.volatility) if ad.volatility else 0,
+                'returns': {
+                    '5yr': float(ad.expected_return_5yr) if ad.expected_return_5yr else 0,
+                    '7yr': float(ad.expected_return_7yr) if ad.expected_return_7yr else 0,
+                    '10yr': float(ad.expected_return_10yr) if ad.expected_return_10yr else 0,
+                    '15yr': float(ad.expected_return_15yr) if ad.expected_return_15yr else 0,
+                    '20yr': float(ad.expected_return_20yr) if ad.expected_return_20yr else 0,
+                    '25yr': float(ad.expected_return_25yr) if ad.expected_return_25yr else 0,
+                    '30yr': float(ad.expected_return_30yr) if ad.expected_return_30yr else 0,
+                }
+            }
+
+    # Get all asset classes and categories from the database
+    asset_classes = AssetCategory.objects.values_list('asset_class__name', flat=True).distinct().order_by('asset_class__name')
+
+    # Build mapping data structure
+    assumptions_mapping = []
+
+    # Add asset classes and categories with their mappings
+    for class_name in asset_classes:
+        if class_name in ASSET_CLASS_ASSUMPTIONS:
+            assumptions = ASSET_CLASS_ASSUMPTIONS[class_name]
+            assumptions_mapping.append({
+                'type': 'class',
+                'name': class_name,
+                'class_name': class_name,
+                'mean_return': assumptions['mean_return'] * 100,
+                'std_dev': assumptions['std_dev'] * 100,
+                'description': assumptions.get('description', '')
+            })
+
+            # Add categories under this class
+            categories = AssetCategory.objects.filter(asset_class__name=class_name).order_by('name')
+            for category in categories:
+                # Get existing mapping if any
+                try:
+                    mapping = CategoryAssumptionMapping.objects.get(category=category)
+                    current_mapping_id = str(mapping.assumption_data.id) if mapping.assumption_data else 'default'
+                    current_horizon = mapping.horizon
+                    mean_return = float(mapping.get_mean_return() or 0) * 100
+                    std_dev = float(mapping.get_std_dev() or 0) * 100
+                except CategoryAssumptionMapping.DoesNotExist:
+                    current_mapping_id = 'default'
+                    current_horizon = '10yr'
+                    mean_return = assumptions['mean_return'] * 100
+                    std_dev = assumptions['std_dev'] * 100
+
+                assumptions_mapping.append({
+                    'type': 'category',
+                    'category_id': str(category.id),
+                    'name': f"{class_name}:{category.name}",
+                    'class_name': class_name,
+                    'category_name': category.name,
+                    'mean_return': mean_return,
+                    'std_dev': std_dev,
+                    'current_mapping': current_mapping_id,
+                    'current_horizon': current_horizon,
+                    'available_data': assumption_data_list,
+                })
 
     context = {
         'form': form,
@@ -523,6 +654,15 @@ def assumptions_view(request):
         'uploads': uploads,
         'current_user': current_user,
         'is_admin': is_admin,
+        'assumptions_mapping': assumptions_mapping,
+        'assumption_data_json': json.dumps(assumption_data_json),
+        'default_assumptions_json': json.dumps({
+            class_name: {
+                'mean_return': assump['mean_return'] * 100,
+                'std_dev': assump['std_dev'] * 100
+            }
+            for class_name, assump in ASSET_CLASS_ASSUMPTIONS.items()
+        }),
     }
 
     return render(request, "glidepath_app/assumptions.html", context)
@@ -1325,6 +1465,8 @@ def modeling_view(request):
                 'withdrawal_amount': request.POST.get('withdrawal_amount', '4.0'),
                 'inflation_rate': request.POST.get('inflation_rate', '3.0'),
                 'expected_lifespan': request.POST.get('expected_lifespan', '95'),
+                'pessimistic_percentile': request.POST.get('pessimistic_percentile', '30'),
+                'optimistic_percentile': request.POST.get('optimistic_percentile', '70'),
             }
 
         # If form submitted and no errors, run simulation
@@ -1335,6 +1477,8 @@ def modeling_view(request):
                 withdrawal_amount = float(simulation_params['withdrawal_amount'])
                 inflation_rate = float(simulation_params['inflation_rate']) / 100  # Convert to decimal
                 expected_lifespan = int(simulation_params['expected_lifespan'])
+                pessimistic_percentile = int(simulation_params['pessimistic_percentile'])
+                optimistic_percentile = int(simulation_params['optimistic_percentile'])
 
                 # Validate inputs
                 if annual_contribution < 0:
@@ -1345,6 +1489,12 @@ def modeling_view(request):
                     errors.append("Inflation rate must be between 0% and 100%.")
                 if expected_lifespan < 50 or expected_lifespan > 120:
                     errors.append("Expected lifespan must be between 50 and 120.")
+                if pessimistic_percentile < 1 or pessimistic_percentile > 49:
+                    errors.append("Pessimistic percentile must be between 1 and 49.")
+                if optimistic_percentile < 51 or optimistic_percentile > 99:
+                    errors.append("Optimistic percentile must be between 51 and 99.")
+                if pessimistic_percentile >= optimistic_percentile:
+                    errors.append("Pessimistic percentile must be less than optimistic percentile.")
 
                 if not errors:
                     simulation_results = run_monte_carlo_simulation(
@@ -1353,14 +1503,18 @@ def modeling_view(request):
                         withdrawal_mode,
                         withdrawal_amount,
                         inflation_rate,
-                        end_age=expected_lifespan
+                        end_age=expected_lifespan,
+                        pessimistic_percentile=pessimistic_percentile,
+                        optimistic_percentile=optimistic_percentile
                     )
 
                     # Prepare chart data
                     simulation_results['chart_data'] = json.dumps({
-                        'percentile_10': simulation_results['percentile_10'],
+                        'percentile_pessimistic': simulation_results['percentile_pessimistic'],
                         'percentile_50': simulation_results['percentile_50'],
-                        'percentile_90': simulation_results['percentile_90'],
+                        'percentile_optimistic': simulation_results['percentile_optimistic'],
+                        'pessimistic_label': f'{pessimistic_percentile}th Percentile (Pessimistic)',
+                        'optimistic_label': f'{optimistic_percentile}th Percentile (Optimistic)',
                     })
             except (ValueError, InvalidOperation) as e:
                 errors.append(f"Invalid input: {str(e)}")
