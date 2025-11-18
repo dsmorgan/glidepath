@@ -495,71 +495,71 @@ def assumptions_view(request):
         else:
             form = AssumptionUploadForm(request.POST, request.FILES)
             if form.is_valid():
-        # Check if this is a mapping save or file upload
-        if 'save_mappings' in request.POST:
-            # Only admins can save mappings
-            if not is_admin:
-                error = "Only administrators can modify assumption mappings."
-            else:
-                try:
-                    # Process mapping updates
-                    saved_count = 0
-                    for key, value in request.POST.items():
-                        if key.startswith('mapping_'):
-                            # Format: mapping_{category_id}
-                            category_id = key.split('_')[1]
-                            horizon_key = f'horizon_{category_id}'
-                            horizon = request.POST.get(horizon_key, '10yr')
+                # Check if this is a mapping save or file upload
+                if 'save_mappings' in request.POST:
+                    # Only admins can save mappings
+                    if not is_admin:
+                        error = "Only administrators can modify assumption mappings."
+                    else:
+                        try:
+                            # Process mapping updates
+                            saved_count = 0
+                            for key, value in request.POST.items():
+                                if key.startswith('mapping_'):
+                                    # Format: mapping_{category_id}
+                                    category_id = key.split('_')[1]
+                                    horizon_key = f'horizon_{category_id}'
+                                    horizon = request.POST.get(horizon_key, '10yr')
 
+                                    try:
+                                        category = AssetCategory.objects.get(id=category_id)
+
+                                        # Get or create mapping
+                                        mapping, created = CategoryAssumptionMapping.objects.get_or_create(
+                                            category=category,
+                                            defaults={'horizon': '10yr'}
+                                        )
+
+                                        if value == 'default':
+                                            # Use default (no assumption data)
+                                            mapping.assumption_data = None
+                                            mapping.horizon = '10yr'
+                                        else:
+                                            # value is assumption_data ID
+                                            assumption_data = AssumptionData.objects.get(id=value)
+                                            mapping.assumption_data = assumption_data
+                                            mapping.horizon = horizon
+
+                                        mapping.save()
+                                        saved_count += 1
+                                    except (AssetCategory.DoesNotExist, AssumptionData.DoesNotExist):
+                                        continue
+
+                            success = f"Successfully saved {saved_count} category mapping(s)."
+                        except Exception as exc:
+                            error = f"Error saving mappings: {str(exc)}"
+                else:
+                    # File upload
+                    if not is_admin:
+                        error = "Only administrators can upload assumptions."
+                    else:
+                        form = AssumptionUploadForm(request.POST, request.FILES)
+                        if form.is_valid():
                             try:
-                                category = AssetCategory.objects.get(id=category_id)
+                                upload_type = form.cleaned_data['upload_type']
+                                file_obj = form.cleaned_data['file']
+                                filename = file_obj.name
 
-                                # Get or create mapping
-                                mapping, created = CategoryAssumptionMapping.objects.get_or_create(
-                                    category=category,
-                                    defaults={'horizon': '10yr'}
-                                )
-
-                                if value == 'default':
-                                    # Use default (no assumption data)
-                                    mapping.assumption_data = None
-                                    mapping.horizon = '10yr'
+                                if upload_type == 'blackrock':
+                                    upload = import_blackrock_assumptions(file_obj, current_user)
+                                    success = f"Successfully uploaded {upload.entry_count} entries from {filename}"
                                 else:
-                                    # value is assumption_data ID
-                                    assumption_data = AssumptionData.objects.get(id=value)
-                                    mapping.assumption_data = assumption_data
-                                    mapping.horizon = horizon
+                                    error = f"Unsupported upload type: {upload_type}"
 
-                                mapping.save()
-                                saved_count += 1
-                            except (AssetCategory.DoesNotExist, AssumptionData.DoesNotExist):
-                                continue
-
-                    success = f"Successfully saved {saved_count} category mapping(s)."
-                except Exception as exc:
-                    error = f"Error saving mappings: {str(exc)}"
-        else:
-            # File upload
-            if not is_admin:
-                error = "Only administrators can upload assumptions."
-            else:
-                form = AssumptionUploadForm(request.POST, request.FILES)
-                if form.is_valid():
-                    try:
-                        upload_type = form.cleaned_data['upload_type']
-                        file_obj = form.cleaned_data['file']
-                        filename = file_obj.name
-
-                        if upload_type == 'blackrock':
-                            upload = import_blackrock_assumptions(file_obj, current_user)
-                            success = f"Successfully uploaded {upload.entry_count} entries from {filename}"
-                        else:
-                            error = f"Unsupported upload type: {upload_type}"
-
-                    except ValueError as exc:
-                        error = str(exc)
-                    except Exception as exc:
-                        error = f"Error uploading file: {str(exc)}"
+                            except ValueError as exc:
+                                error = str(exc)
+                            except Exception as exc:
+                                error = f"Error uploading file: {str(exc)}"
 
     form = AssumptionUploadForm()
 
