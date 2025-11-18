@@ -185,12 +185,21 @@
                                 {% endif %}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                                {% if is_admin %}
                                 <a href="{% url 'fund_detail' %}?ticker={{ fund.ticker }}" class="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                                     Edit
                                 </a>
                                 <button onclick="confirmDelete('{{ fund.ticker }}', {{ fund.id }})" class="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
                                     Delete
                                 </button>
+                                {% else %}
+                                <button disabled class="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-gray-500 bg-gray-300 cursor-not-allowed" title="Administrator privileges required">
+                                    Edit
+                                </button>
+                                <button disabled class="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-gray-500 bg-gray-300 cursor-not-allowed" title="Administrator privileges required">
+                                    Delete
+                                </button>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
