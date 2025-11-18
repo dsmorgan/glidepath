@@ -6,7 +6,7 @@ It simulates portfolio growth and drawdown based on:
 - User's current portfolio balance and allocation
 - Glidepath rules (dynamic asset allocation by age)
 - Contribution and withdrawal patterns
-- Stochastic returns based on historical asset class statistics
+- Stochastic returns based on historical asset class statistics or custom mappings
 """
 
 import numpy as np
@@ -38,6 +38,40 @@ ASSET_CLASS_ASSUMPTIONS = {
         'description': 'Cash equivalents, money market funds, and other low-risk assets'
     }
 }
+
+
+def get_category_assumptions(category):
+    """
+    Get mean return and standard deviation for a category.
+
+    Uses custom mapping if available, otherwise falls back to asset class defaults.
+
+    Args:
+        category: AssetCategory instance
+
+    Returns:
+        tuple: (mean_return, std_dev) as floats (e.g., 0.10 for 10%)
+    """
+    from .models import CategoryAssumptionMapping
+
+    try:
+        mapping = CategoryAssumptionMapping.objects.get(category=category)
+        mean_return = mapping.get_mean_return()
+        std_dev = mapping.get_std_dev()
+
+        if mean_return is not None and std_dev is not None:
+            return (float(mean_return), float(std_dev))
+    except CategoryAssumptionMapping.DoesNotExist:
+        pass
+
+    # Fall back to asset class defaults
+    class_name = category.asset_class.name
+    if class_name in ASSET_CLASS_ASSUMPTIONS:
+        assumptions = ASSET_CLASS_ASSUMPTIONS[class_name]
+        return (assumptions['mean_return'], assumptions['std_dev'])
+
+    # Ultimate fallback (should not happen)
+    return (0.05, 0.10)
 
 
 def run_monte_carlo_simulation(
@@ -181,20 +215,36 @@ def _get_rules_by_retirement_age(ruleset):
     Extract glidepath rules and create a lookup by retirement age.
 
     Returns:
-        dict mapping retirement_age -> allocation percentages by asset class
+        dict mapping retirement_age -> allocation dict with:
+            - 'class': dict of class_name -> percentage
+            - 'categories': dict of (class_name, category_obj) -> percentage
     """
     from .models import GlidepathRule
 
-    rules = GlidepathRule.objects.filter(ruleset=ruleset).prefetch_related('class_allocations__asset_class')
+    rules = GlidepathRule.objects.filter(ruleset=ruleset).prefetch_related(
+        'class_allocations__asset_class',
+        'category_allocations__asset_category__asset_class'
+    )
 
     rules_by_age = {}
     for rule in rules:
         # For each age in the band, store the allocation
         for age in range(rule.gt_retire_age, rule.lt_retire_age + 1):
-            allocation = {}
+            # Class-level allocations
+            class_allocation = {}
             for class_alloc in rule.class_allocations.all():
-                allocation[class_alloc.asset_class.name] = float(class_alloc.percentage) / 100.0
-            rules_by_age[age] = allocation
+                class_allocation[class_alloc.asset_class.name] = float(class_alloc.percentage) / 100.0
+
+            # Category-level allocations
+            category_allocation = {}
+            for cat_alloc in rule.category_allocations.all():
+                class_name = cat_alloc.asset_category.asset_class.name
+                category_allocation[(class_name, cat_alloc.asset_category)] = float(cat_alloc.percentage) / 100.0
+
+            rules_by_age[age] = {
+                'class': class_allocation,
+                'categories': category_allocation
+            }
 
     return rules_by_age
 
@@ -273,25 +323,40 @@ def _sample_portfolio_return(allocation):
     """
     Sample a single year's return based on portfolio allocation.
 
-    Assumes returns are normally distributed and independent across asset classes.
+    Assumes returns are normally distributed and independent across asset classes/categories.
 
     Args:
-        allocation: dict mapping asset class name -> percentage (as decimal)
+        allocation: dict with:
+            - 'class': dict mapping class_name -> percentage (as decimal)
+            - 'categories': dict mapping (class_name, category_obj) -> percentage
 
     Returns:
         float: portfolio return for the year
     """
     portfolio_return = 0.0
 
-    for asset_class, weight in allocation.items():
-        if asset_class in ASSET_CLASS_ASSUMPTIONS:
-            assumptions = ASSET_CLASS_ASSUMPTIONS[asset_class]
+    # Check if we have category-level allocations
+    categories = allocation.get('categories', {})
+    class_allocation = allocation.get('class', {})
+
+    if categories:
+        # Use category-level allocations with custom mappings
+        for (class_name, category), weight in categories.items():
+            mean_return, std_dev = get_category_assumptions(category)
             # Sample from normal distribution
-            class_return = np.random.normal(
-                assumptions['mean_return'],
-                assumptions['std_dev']
-            )
-            portfolio_return += weight * class_return
+            category_return = np.random.normal(mean_return, std_dev)
+            portfolio_return += weight * category_return
+    else:
+        # Use class-level allocations with default assumptions
+        for asset_class, weight in class_allocation.items():
+            if asset_class in ASSET_CLASS_ASSUMPTIONS:
+                assumptions = ASSET_CLASS_ASSUMPTIONS[asset_class]
+                # Sample from normal distribution
+                class_return = np.random.normal(
+                    assumptions['mean_return'],
+                    assumptions['std_dev']
+                )
+                portfolio_return += weight * class_return
 
     return portfolio_return
 
