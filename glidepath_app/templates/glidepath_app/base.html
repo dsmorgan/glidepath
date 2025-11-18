@@ -62,7 +62,7 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
                             </svg>
                         </button>
-                        <div class="hidden group-hover:block absolute right-0 mt-0 w-64 bg-white rounded-md shadow-lg z-50 py-2">
+                        <div class="hidden group-hover:block absolute right-0 mt-0 w-64 bg-white rounded-md shadow-lg z-50 py-2 max-h-96 overflow-y-auto">
                             {% for user in all_users %}
                             <form method="post" action="{% url 'select_user' user.id %}" class="m-0">
                                 {% csrf_token %}

@@ -16,6 +16,7 @@ from glidepath_app.views import (
     download_portfolio_csv,
     modeling_view,
     settings_view,
+    login_view,
     logout_view,
     export_rules,
     query_ticker,
@@ -31,6 +32,8 @@ from glidepath_app.views import (
 )
 
 urlpatterns = [
+    path('login/', login_view, name='login'),
+    path('logout/', logout_view, name='logout'),
     path('', home, name='home'),
     path('rules/', rules_view, name='rules'),
     path('funds/', funds_view, name='funds'),
@@ -56,7 +59,6 @@ urlpatterns = [
     path('settings/identity-providers/add/', identity_provider_detail, name='identity_provider_add'),
     path('settings/identity-providers/<uuid:provider_id>/edit/', identity_provider_detail, name='identity_provider_edit'),
     path('settings/identity-providers/<uuid:provider_id>/delete/', delete_identity_provider, name='identity_provider_delete'),
-    path('logout/', logout_view, name='logout'),
     path('export/', export_rules, name='export_rules'),
     path('api/query-ticker/', query_ticker, name='query_ticker'),
     path('settings/funds/download/', download_funds_csv, name='download_funds_csv'),

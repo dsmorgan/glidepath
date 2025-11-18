@@ -2,7 +2,8 @@
 {% block title %}Glidepath - Settings{% endblock %}
 {% block content %}
 
-<!-- Users Section -->
+{% if is_admin %}
+<!-- Users Section (Admin Only) -->
 <div class="bg-white shadow rounded-lg p-6 mb-6">
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-3xl font-bold text-gray-900">Users</h1>
@@ -63,7 +64,7 @@
     {% endif %}
 </div>
 
-<!-- Identity Providers Section -->
+<!-- Identity Providers Section (Admin Only) -->
 <div class="bg-white shadow rounded-lg p-6 mb-6">
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-3xl font-bold text-gray-900">Identity Providers</h1>
@@ -114,6 +115,44 @@
     {% endif %}
 </div>
 
+<!-- Session Management Section (Admin Only) -->
+<div class="bg-white shadow rounded-lg p-6 mb-6">
+    <h1 class="text-3xl font-bold text-gray-900 mb-6">Session Management</h1>
+
+    <p class="text-gray-700 mb-6">
+        Configure session timeout settings. This determines how long users can remain idle before being automatically logged out.
+    </p>
+
+    {% if session_success_message %}
+    <div class="bg-green-50 border-l-4 border-green-400 p-4 mb-6">
+        <p class="text-green-700">{{ session_success_message }}</p>
+    </div>
+    {% endif %}
+
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+        <input type="hidden" name="session_settings_submit" value="1">
+
+        <div class="border border-gray-200 rounded-lg p-6 bg-gray-50">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Session Timeout</h2>
+            <div>
+                <label for="{{ session_form.session_timeout_minutes.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                    {{ session_form.session_timeout_minutes.label }}
+                </label>
+                {{ session_form.session_timeout_minutes }}
+                <p class="mt-1 text-sm text-gray-500">{{ session_form.session_timeout_minutes.help_text }}</p>
+            </div>
+        </div>
+
+        <div class="flex justify-end">
+            <button type="submit" class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                Save Settings
+            </button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
 <!-- Funds Management Section -->
 <div class="bg-white shadow rounded-lg p-6 mb-6">
     <div class="flex justify-between items-center mb-6">
@@ -124,9 +163,13 @@
     </div>
 
     <p class="text-gray-700 mb-6">
+        {% if is_admin %}
         Download all funds to CSV or upload a CSV file to bulk import funds.
         Upload format: ticker, name, category (as "Class:Category" or blank for Other), preference (1-256).
         Existing funds (by ticker) will be skipped.
+        {% else %}
+        Download all funds to CSV. Upload functionality is available to administrators only.
+        {% endif %}
     </p>
 
     {% if funds_upload_success %}
@@ -141,6 +184,7 @@
     </div>
     {% endif %}
 
+    {% if is_admin %}
     <form method="post" enctype="multipart/form-data" action="{% url 'upload_funds_csv' %}" class="space-y-4">
         {% csrf_token %}
         <div>
@@ -162,6 +206,7 @@
             </button>
         </div>
     </form>
+    {% endif %}
 </div>
 
 <!-- API Settings Section -->
@@ -169,31 +214,40 @@
     <h1 class="text-3xl font-bold text-gray-900 mb-6">API Settings</h1>
 
     <p class="text-gray-700 mb-6">
+        {% if is_admin %}
         Configure API keys for financial data sources. These keys are required to query ticker information from external services.
         API keys are stored securely and can be left blank if you don't plan to use a particular service.
+        {% else %}
+        View configured API keys for financial data sources. Contact an administrator to update these settings.
+        {% endif %}
     </p>
 
-    {% if success_message %}
+    {% if api_success_message %}
     <div class="bg-green-50 border-l-4 border-green-400 p-4 mb-6">
-        <p class="text-green-700">{{ success_message }}</p>
+        <p class="text-green-700">{{ api_success_message }}</p>
     </div>
     {% endif %}
 
     <form method="post" class="space-y-6">
         {% csrf_token %}
+        <input type="hidden" name="api_settings_submit" value="1">
 
         <!-- Alpha Vantage -->
         <div class="border border-gray-200 rounded-lg p-6 bg-gray-50">
             <h2 class="text-xl font-semibold text-gray-900 mb-2">Alpha Vantage</h2>
             <p class="text-sm text-gray-600 mb-4">
                 Official NASDAQ vendor with 500 free API calls per day. Supports historical data, fundamentals, technical indicators, forex, and crypto.
-                <a href="https://www.alphavantage.co/support/#api-key" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline">Get your free API key here</a>
+                {% if is_admin %}<a href="https://www.alphavantage.co/support/#api-key" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline">Get your free API key here</a>{% endif %}
             </p>
             <div>
                 <label for="{{ form.alpha_vantage_api_key.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
                     {{ form.alpha_vantage_api_key.label }}
                 </label>
-                {{ form.alpha_vantage_api_key }}
+                {% if is_admin %}
+                    {{ form.alpha_vantage_api_key }}
+                {% else %}
+                    <input type="text" value="{% if api_settings.alpha_vantage_api_key %}***********{% endif %}" disabled class="w-full border border-gray-300 rounded-md p-2 bg-gray-100 text-gray-500" />
+                {% endif %}
             </div>
         </div>
 
@@ -202,13 +256,17 @@
             <h2 class="text-xl font-semibold text-gray-900 mb-2">Finnhub</h2>
             <p class="text-sm text-gray-600 mb-4">
                 Institutional-grade financial data including real-time stock prices, global fundamentals, and ETF holdings.
-                <a href="https://finnhub.io/register" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline">Sign up for a free API key</a>
+                {% if is_admin %}<a href="https://finnhub.io/register" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline">Sign up for a free API key</a>{% endif %}
             </p>
             <div>
                 <label for="{{ form.finnhub_api_key.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
                     {{ form.finnhub_api_key.label }}
                 </label>
-                {{ form.finnhub_api_key }}
+                {% if is_admin %}
+                    {{ form.finnhub_api_key }}
+                {% else %}
+                    <input type="text" value="{% if api_settings.finnhub_api_key %}***********{% endif %}" disabled class="w-full border border-gray-300 rounded-md p-2 bg-gray-100 text-gray-500" />
+                {% endif %}
             </div>
         </div>
 
@@ -217,13 +275,17 @@
             <h2 class="text-xl font-semibold text-gray-900 mb-2">Polygon.io</h2>
             <p class="text-sm text-gray-600 mb-4">
                 Real-time and historical market data with low latency (20ms avg). Unlimited usage on premium subscriptions.
-                <a href="https://polygon.io/dashboard/signup" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline">Sign up for an API key</a>
+                {% if is_admin %}<a href="https://polygon.io/dashboard/signup" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline">Sign up for an API key</a>{% endif %}
             </p>
             <div>
                 <label for="{{ form.polygon_api_key.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
                     {{ form.polygon_api_key.label }}
                 </label>
-                {{ form.polygon_api_key }}
+                {% if is_admin %}
+                    {{ form.polygon_api_key }}
+                {% else %}
+                    <input type="text" value="{% if api_settings.polygon_api_key %}***********{% endif %}" disabled class="w-full border border-gray-300 rounded-md p-2 bg-gray-100 text-gray-500" />
+                {% endif %}
             </div>
         </div>
 
@@ -232,21 +294,27 @@
             <h2 class="text-xl font-semibold text-gray-900 mb-2">EODHD</h2>
             <p class="text-sm text-gray-600 mb-4">
                 Historical and fundamental financial data. Use "DEMO" as the API key to test with limited tickers (AAPL.US, TSLA.US, VTI.US, AMZN.US, BTC-USD, EUR-USD).
-                <a href="https://eodhd.com/register" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline">Register for a full API key</a>
+                {% if is_admin %}<a href="https://eodhd.com/register" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline">Register for a full API key</a>{% endif %}
             </p>
             <div>
                 <label for="{{ form.eodhd_api_key.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
                     {{ form.eodhd_api_key.label }}
                 </label>
-                {{ form.eodhd_api_key }}
+                {% if is_admin %}
+                    {{ form.eodhd_api_key }}
+                {% else %}
+                    <input type="text" value="{% if api_settings.eodhd_api_key %}***********{% endif %}" disabled class="w-full border border-gray-300 rounded-md p-2 bg-gray-100 text-gray-500" />
+                {% endif %}
             </div>
         </div>
 
+        {% if is_admin %}
         <div class="flex justify-end">
             <button type="submit" class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                 Save Settings
             </button>
         </div>
+        {% endif %}
     </form>
 
     <div class="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">

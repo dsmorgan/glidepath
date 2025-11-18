@@ -2,16 +2,18 @@ import json
 import csv
 import io
 
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, HttpResponseForbidden
 from django.shortcuts import render, redirect
 from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.contrib.auth.hashers import check_password
 
-from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm, IdentityProviderForm, AccountUploadForm, PortfolioForm, AssumptionUploadForm
-from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, AccountPosition, Portfolio, PortfolioItem, AssumptionUpload, AssumptionData
+from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm, IdentityProviderForm, AccountUploadForm, PortfolioForm, AssumptionUploadForm, SessionSettingsForm
+from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, AccountPosition, Portfolio, PortfolioItem, AssumptionUpload, AssumptionData, SessionSettings
 from .services import export_glidepath_rules, import_glidepath_rules, import_blackrock_assumptions
 from .ticker_service import query_ticker as query_ticker_service
 from .account_services import import_fidelity_csv, import_etrade_csv, get_portfolio_analysis, calculate_rebalance_recommendations
+from .decorators import admin_required
 
 DEFAULT_COLORS = [
     "#FF6384",
@@ -182,33 +184,61 @@ def home(request):
 
 
 def settings_view(request):
-    """Settings page view - manage API keys, users, and identity providers."""
-    settings = APISettings.get_settings()
-    success_message = None
+    """Settings page view - manage API keys, users, identity providers, and session settings."""
+    api_settings = APISettings.get_settings()
+    session_settings = SessionSettings.get_settings()
+    api_success_message = None
+    session_success_message = None
+
+    # Check if user is admin
+    is_admin = request.session.get('is_admin', False)
 
     if request.method == "POST":
-        form = APISettingsForm(request.POST, instance=settings)
-        if form.is_valid():
-            form.save()
-            success_message = "Settings saved successfully!"
+        # Handle API Settings form
+        if 'api_settings_submit' in request.POST:
+            if is_admin:
+                api_form = APISettingsForm(request.POST, instance=api_settings)
+                if api_form.is_valid():
+                    api_form.save()
+                    api_success_message = "API settings saved successfully!"
+            else:
+                # Non-admin users cannot edit API settings
+                api_form = APISettingsForm(instance=api_settings)
+        # Handle Session Settings form
+        elif 'session_settings_submit' in request.POST:
+            if is_admin:
+                session_form = SessionSettingsForm(request.POST, instance=session_settings)
+                if session_form.is_valid():
+                    session_form.save()
+                    session_success_message = "Session settings saved successfully!"
+            else:
+                # Non-admin users cannot edit session settings
+                session_form = SessionSettingsForm(instance=session_settings)
+        else:
+            api_form = APISettingsForm(instance=api_settings)
+            session_form = SessionSettingsForm(instance=session_settings)
     else:
-        form = APISettingsForm(instance=settings)
+        api_form = APISettingsForm(instance=api_settings)
+        session_form = SessionSettingsForm(instance=session_settings)
 
-    # Get all users and identity providers
-    users = User.objects.all().order_by('username')
-    identity_providers = IdentityProvider.objects.all().order_by('name')
+    # Get all users and identity providers (admin only)
+    users = User.objects.all().order_by('username') if is_admin else []
+    identity_providers = IdentityProvider.objects.all().order_by('name') if is_admin else []
 
     # Get session messages for funds upload
     funds_upload_success = request.session.pop('funds_upload_success', None)
     funds_upload_error = request.session.pop('funds_upload_error', None)
 
     context = {
-        "form": form,
-        "success_message": success_message,
+        "form": api_form,
+        "session_form": session_form,
+        "api_success_message": api_success_message,
+        "session_success_message": session_success_message,
         "users": users,
         "identity_providers": identity_providers,
         "funds_upload_success": funds_upload_success,
         "funds_upload_error": funds_upload_error,
+        "api_settings": api_settings,
     }
 
     return render(request, "glidepath_app/settings.html", context)
@@ -218,7 +248,13 @@ def rules_view(request):
     """Rules management view - upload, manage, and visualize glidepath rules."""
     error = None
     new_set = None
+    is_admin = request.session.get('is_admin', False)
+
     if request.method == "POST":
+        # Check if user is admin for modify operations
+        if not is_admin:
+            return HttpResponseForbidden("You do not have permission to perform this action. Administrator privileges required.")
+
         if "delete" in request.POST:
             RuleSet.objects.filter(id=request.POST["delete"]).delete()
             form = GlidepathRuleUploadForm()
@@ -332,11 +368,15 @@ def funds_view(request):
     except EmptyPage:
         funds = paginator.page(paginator.num_pages)
 
+    # Get API settings to determine available data sources
+    api_settings = APISettings.get_settings()
+
     context = {
         'funds': funds,
         'sort_by': sort_by,
         'order': order,
         'per_page': per_page,
+        'api_settings': api_settings,
     }
 
     return render(request, "glidepath_app/funds.html", context)
@@ -446,9 +486,15 @@ def assumptions_view(request):
         current_user = User.objects.first()
 
     # Check if user is admin
-    is_admin = current_user and current_user.is_admin()
+    is_admin = request.session.get('is_admin', False)
 
     if request.method == "POST":
+        # Only admins can upload
+        if not is_admin:
+            return HttpResponseForbidden("You do not have permission to perform this action. Administrator privileges required.")
+        else:
+            form = AssumptionUploadForm(request.POST, request.FILES)
+            if form.is_valid():
         # Check if this is a mapping save or file upload
         if 'save_mappings' in request.POST:
             # Only admins can save mappings
@@ -637,6 +683,7 @@ def view_assumption_upload(request, upload_id):
         return redirect('assumptions')
 
 
+@admin_required
 @require_POST
 def delete_assumption_upload(request, upload_id):
     """Delete an assumption upload and all its data rows (admin only)."""
@@ -969,10 +1016,59 @@ def modeling_view(request):
     return render(request, "glidepath_app/modeling.html")
 
 
+def login_view(request):
+    """Login view - handle user authentication."""
+    # If already logged in, redirect to home
+    if request.session.get('user_id'):
+        return redirect('home')
+
+    error = None
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
+        remember_me = request.POST.get('remember_me') == 'on'
+
+        # Authenticate user
+        try:
+            user = User.objects.get(username=username)
+
+            # Check if user is disabled
+            if user.disabled:
+                error = "This account has been disabled."
+            # Check if password is set (internal user)
+            elif not user.password:
+                error = "This account uses external authentication."
+            # Verify password
+            elif check_password(password, user.password):
+                # Set session
+                request.session['user_id'] = str(user.id)
+                request.session['username'] = user.username
+                request.session['is_admin'] = user.is_admin()
+
+                # Set session expiry based on remember me
+                session_settings = SessionSettings.get_settings()
+                if remember_me:
+                    # Remember me - session persists for configured timeout
+                    request.session.set_expiry(session_settings.session_timeout_minutes * 60)
+                else:
+                    # Session expires when browser closes
+                    request.session.set_expiry(0)
+
+                # Redirect to home
+                return redirect('home')
+            else:
+                error = "Invalid username or password."
+        except User.DoesNotExist:
+            error = "Invalid username or password."
+
+    return render(request, "glidepath_app/login.html", {'error': error})
+
+
 def logout_view(request):
     """Logout view - handle user logout."""
-    # Placeholder for logout functionality
-    return render(request, "glidepath_app/logout.html")
+    # Clear session
+    request.session.flush()
+    return redirect('login')
 
 
 # Keep backward compatibility alias
@@ -1016,6 +1112,9 @@ def query_ticker(request):
 
 def fund_detail(request):
     """Add or edit a fund with ticker, name, and category."""
+    # Check if user is admin
+    is_admin = request.session.get('is_admin', False)
+
     # Get ticker and name from query parameters (passed from funds page)
     ticker = request.GET.get('ticker', '').strip().upper()
     name = request.GET.get('name', '').strip()
@@ -1026,6 +1125,9 @@ def fund_detail(request):
         existing_fund = Fund.objects.filter(ticker=ticker).first()
 
     if request.method == 'POST':
+        # Only admins can add/edit funds
+        if not is_admin:
+            return HttpResponseForbidden("You do not have permission to perform this action. Administrator privileges required.")
         if existing_fund:
             # Update existing fund
             form = FundForm(request.POST, instance=existing_fund)
@@ -1060,6 +1162,7 @@ def fund_detail(request):
     return render(request, 'glidepath_app/fund_detail.html', context)
 
 
+@admin_required
 @require_POST
 def delete_fund(request, fund_id):
     """Delete a fund from the database."""
@@ -1071,6 +1174,7 @@ def delete_fund(request, fund_id):
         return redirect('funds')
 
 
+@admin_required
 def user_detail(request, user_id=None):
     """Add or edit a user account."""
     user = None
@@ -1096,6 +1200,7 @@ def user_detail(request, user_id=None):
     return render(request, 'glidepath_app/user_detail.html', context)
 
 
+@admin_required
 @require_POST
 def delete_user(request, user_id):
     """Delete a user account."""
@@ -1107,6 +1212,7 @@ def delete_user(request, user_id):
     return redirect('settings')
 
 
+@admin_required
 def identity_provider_detail(request, provider_id=None):
     """Add or edit an identity provider configuration."""
     provider = None
@@ -1132,6 +1238,7 @@ def identity_provider_detail(request, provider_id=None):
     return render(request, 'glidepath_app/identity_provider_detail.html', context)
 
 
+@admin_required
 @require_POST
 def delete_identity_provider(request, provider_id):
     """Delete an identity provider configuration."""
@@ -1186,6 +1293,7 @@ def download_funds_csv(request):
     return response
 
 
+@admin_required
 def upload_funds_csv(request):
     """Upload funds from a CSV file."""
     if request.method != 'POST':
