@@ -446,3 +446,74 @@ class AssumptionData(models.Model):
 
     def __str__(self) -> str:
         return f"{self.asset} ({self.currency})"
+
+
+class CategoryAssumptionMapping(models.Model):
+    """Maps asset categories to specific assumption data for simulation."""
+
+    HORIZON_CHOICES = [
+        ('5yr', '5 Year'),
+        ('7yr', '7 Year'),
+        ('10yr', '10 Year'),
+        ('15yr', '15 Year'),
+        ('20yr', '20 Year'),
+        ('25yr', '25 Year'),
+        ('30yr', '30 Year'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    category = models.OneToOneField(
+        AssetCategory,
+        on_delete=models.CASCADE,
+        related_name='assumption_mapping',
+        help_text="The asset category this mapping applies to"
+    )
+    assumption_data = models.ForeignKey(
+        AssumptionData,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='category_mappings',
+        help_text="The assumption data to use (null means use class defaults)"
+    )
+    horizon = models.CharField(
+        max_length=10,
+        choices=HORIZON_CHOICES,
+        default='10yr',
+        help_text="The time horizon for expected returns"
+    )
+
+    class Meta:
+        ordering = ["category__asset_class__name", "category__name"]
+
+    def __str__(self) -> str:
+        if self.assumption_data:
+            return f"{self.category.asset_class.name}:{self.category.name} → {self.assumption_data.asset} ({self.horizon})"
+        return f"{self.category.asset_class.name}:{self.category.name} → Default"
+
+    def get_mean_return(self):
+        """Get the mean return based on mapping or default."""
+        if self.assumption_data:
+            # Get the expected return for the selected horizon
+            field_name = f'expected_return_{self.horizon}'
+            return getattr(self.assumption_data, field_name)
+        else:
+            # Use default from asset class
+            from .monte_carlo import ASSET_CLASS_ASSUMPTIONS
+            class_name = self.category.asset_class.name
+            if class_name in ASSET_CLASS_ASSUMPTIONS:
+                return ASSET_CLASS_ASSUMPTIONS[class_name]['mean_return']
+        return None
+
+    def get_std_dev(self):
+        """Get the standard deviation based on mapping or default."""
+        if self.assumption_data:
+            # Use volatility from assumption data
+            return self.assumption_data.volatility
+        else:
+            # Use default from asset class
+            from .monte_carlo import ASSET_CLASS_ASSUMPTIONS
+            class_name = self.category.asset_class.name
+            if class_name in ASSET_CLASS_ASSUMPTIONS:
+                return ASSET_CLASS_ASSUMPTIONS[class_name]['std_dev']
+        return None
