@@ -38,11 +38,19 @@
                     name="source"
                     class="w-full border border-gray-300 rounded-md p-2"
                 >
-                    <option value="yfinance">yfinance (No API Key)</option>
-                    <option value="alpha_vantage">Alpha Vantage (API Key Required)</option>
-                    <option value="finnhub">Finnhub (API Key Required)</option>
-                    <option value="polygon">Polygon.io (API Key Required)</option>
-                    <option value="eodhd">EODHD (API Key Required)</option>
+                    <option value="yfinance">yfinance</option>
+                    {% if api_settings.alpha_vantage_api_key %}
+                    <option value="alpha_vantage">Alpha Vantage</option>
+                    {% endif %}
+                    {% if api_settings.finnhub_api_key %}
+                    <option value="finnhub">Finnhub</option>
+                    {% endif %}
+                    {% if api_settings.polygon_api_key %}
+                    <option value="polygon">Polygon.io</option>
+                    {% endif %}
+                    {% if api_settings.eodhd_api_key %}
+                    <option value="eodhd">EODHD</option>
+                    {% endif %}
                 </select>
             </div>
 

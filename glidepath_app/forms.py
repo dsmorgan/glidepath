@@ -1,5 +1,5 @@
 from django import forms
-from .models import APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, Portfolio, RuleSet, AssumptionUpload
+from .models import APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, Portfolio, RuleSet, AssumptionUpload, SessionSettings
 from django.contrib.auth.hashers import make_password
 
 
@@ -352,3 +352,25 @@ class PortfolioForm(forms.ModelForm):
             raise forms.ValidationError(f"Portfolio '{name}' already exists for this user.")
 
         return name
+
+
+class SessionSettingsForm(forms.ModelForm):
+    """Form for managing session settings."""
+
+    class Meta:
+        model = SessionSettings
+        fields = ['session_timeout_minutes']
+        widgets = {
+            'session_timeout_minutes': forms.NumberInput(attrs={
+                'class': 'w-full border border-gray-300 rounded-md p-2',
+                'placeholder': 'Enter session timeout in minutes',
+                'min': '1',
+                'max': '43200',  # 30 days max
+            }),
+        }
+        labels = {
+            'session_timeout_minutes': 'Session Timeout (minutes)',
+        }
+        help_texts = {
+            'session_timeout_minutes': 'Time before an inactive session expires (1-43200 minutes). Default: 360 (6 hours)',
+        }

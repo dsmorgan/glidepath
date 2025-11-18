@@ -446,3 +446,27 @@ class AssumptionData(models.Model):
 
     def __str__(self) -> str:
         return f"{self.asset} ({self.currency})"
+
+
+class SessionSettings(models.Model):
+    """Stores session management settings."""
+    # Only one row should exist in this table
+    id = models.AutoField(primary_key=True)
+
+    # Session timeout in minutes (default 360 = 6 hours)
+    session_timeout_minutes = models.IntegerField(default=360, help_text="Session timeout in minutes")
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Session Settings"
+        verbose_name_plural = "Session Settings"
+
+    def __str__(self) -> str:
+        return "Session Settings"
+
+    @classmethod
+    def get_settings(cls):
+        """Get or create the singleton settings instance."""
+        settings, created = cls.objects.get_or_create(pk=1)
+        return settings

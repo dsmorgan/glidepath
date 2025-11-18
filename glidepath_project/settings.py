@@ -18,6 +18,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'glidepath_app.middleware.AuthenticationMiddleware',
 ]
 
 ROOT_URLCONF = 'glidepath_project.urls'
