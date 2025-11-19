@@ -1218,7 +1218,10 @@ def oauth_login(request, provider_id):
     }
 
     auth_url = f"{provider.authorization_url}?{urllib.parse.urlencode(params)}"
-    logger.info(f"OAuth login redirecting to {provider.name}: {auth_url.split('?')[0]}")
+    logger.info(f"OAuth login redirecting to {provider.name}")
+    logger.info(f"Authorization URL: {provider.authorization_url}")
+    logger.info(f"Redirect URI: {redirect_uri}")
+    logger.info(f"Full auth_url: {auth_url}")
     return redirect(auth_url)
 
 
