@@ -186,13 +186,22 @@ def home(request):
 
 def settings_view(request):
     """Settings page view - manage API keys, users, identity providers, and session settings."""
+    from django.contrib.auth.hashers import make_password
+
     api_settings = APISettings.get_settings()
     session_settings = SessionSettings.get_settings()
     api_success_message = None
     session_success_message = None
+    password_success_message = None
+    password_error_message = None
 
     # Check if user is admin
     is_admin = request.session.get('is_admin', False)
+    user_id = request.session.get('user_id')
+
+    # Initialize forms
+    api_form = APISettingsForm(instance=api_settings)
+    session_form = SessionSettingsForm(instance=session_settings)
 
     if request.method == "POST":
         # Handle API Settings form
@@ -202,9 +211,6 @@ def settings_view(request):
                 if api_form.is_valid():
                     api_form.save()
                     api_success_message = "API settings saved successfully!"
-            else:
-                # Non-admin users cannot edit API settings
-                api_form = APISettingsForm(instance=api_settings)
         # Handle Session Settings form
         elif 'session_settings_submit' in request.POST:
             if is_admin:
@@ -212,15 +218,27 @@ def settings_view(request):
                 if session_form.is_valid():
                     session_form.save()
                     session_success_message = "Session settings saved successfully!"
-            else:
-                # Non-admin users cannot edit session settings
-                session_form = SessionSettingsForm(instance=session_settings)
-        else:
-            api_form = APISettingsForm(instance=api_settings)
-            session_form = SessionSettingsForm(instance=session_settings)
-    else:
-        api_form = APISettingsForm(instance=api_settings)
-        session_form = SessionSettingsForm(instance=session_settings)
+        # Handle Password Change form (for regular users)
+        elif 'password_change_submit' in request.POST:
+            if user_id:
+                try:
+                    user = User.objects.get(id=user_id)
+                    new_password = request.POST.get('new_password', '')
+                    confirm_password = request.POST.get('confirm_password', '')
+
+                    if not new_password:
+                        password_error_message = "Password cannot be empty."
+                    elif new_password != confirm_password:
+                        password_error_message = "Passwords do not match."
+                    elif len(new_password) < 8:
+                        password_error_message = "Password must be at least 8 characters long."
+                    else:
+                        # Update password
+                        user.password = make_password(new_password)
+                        user.save()
+                        password_success_message = "Password changed successfully!"
+                except User.DoesNotExist:
+                    password_error_message = "User not found."
 
     # Get all users and identity providers (admin only)
     users = User.objects.all().order_by('username') if is_admin else []
@@ -235,11 +253,14 @@ def settings_view(request):
         "session_form": session_form,
         "api_success_message": api_success_message,
         "session_success_message": session_success_message,
+        "password_success_message": password_success_message,
+        "password_error_message": password_error_message,
         "users": users,
         "identity_providers": identity_providers,
         "funds_upload_success": funds_upload_success,
         "funds_upload_error": funds_upload_error,
         "api_settings": api_settings,
+        "is_admin": is_admin,
     }
 
     return render(request, "glidepath_app/settings.html", context)

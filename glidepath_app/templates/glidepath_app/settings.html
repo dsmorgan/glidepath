@@ -153,6 +153,71 @@
 </div>
 {% endif %}
 
+<!-- Password Change Section (Non-Admin Users) -->
+{% if not is_admin %}
+<div class="bg-white shadow rounded-lg p-6 mb-6">
+    <h1 class="text-3xl font-bold text-gray-900 mb-6">Change Password</h1>
+
+    <p class="text-gray-700 mb-6">
+        Update your password to ensure your account remains secure. Your password must be at least 8 characters long.
+    </p>
+
+    {% if password_success_message %}
+    <div class="bg-green-50 border-l-4 border-green-400 p-4 mb-6">
+        <p class="text-green-700">{{ password_success_message }}</p>
+    </div>
+    {% endif %}
+
+    {% if password_error_message %}
+    <div class="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
+        <p class="text-red-700">{{ password_error_message }}</p>
+    </div>
+    {% endif %}
+
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+        <input type="hidden" name="password_change_submit" value="1">
+
+        <div>
+            <label for="new_password" class="block text-sm font-medium text-gray-700 mb-1">
+                New Password
+            </label>
+            <input
+                type="password"
+                id="new_password"
+                name="new_password"
+                required
+                minlength="8"
+                class="w-full border border-gray-300 rounded-md p-2"
+                placeholder="Enter new password"
+            />
+            <p class="mt-1 text-sm text-gray-500">Minimum 8 characters</p>
+        </div>
+
+        <div>
+            <label for="confirm_password" class="block text-sm font-medium text-gray-700 mb-1">
+                Confirm Password
+            </label>
+            <input
+                type="password"
+                id="confirm_password"
+                name="confirm_password"
+                required
+                minlength="8"
+                class="w-full border border-gray-300 rounded-md p-2"
+                placeholder="Re-enter new password"
+            />
+        </div>
+
+        <div class="flex justify-end">
+            <button type="submit" class="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                Change Password
+            </button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
 <!-- Funds Management Section -->
 <div class="bg-white shadow rounded-lg p-6 mb-6">
     <div class="flex justify-between items-center mb-6">
@@ -244,7 +309,12 @@
                     {{ form.alpha_vantage_api_key.label }}
                 </label>
                 {% if is_admin %}
-                    {{ form.alpha_vantage_api_key }}
+                <div class="flex gap-2">
+                    <input type="password" name="alpha_vantage_api_key" id="{{ form.alpha_vantage_api_key.id_for_label }}" value="{{ api_settings.alpha_vantage_api_key }}" class="flex-1 border border-gray-300 rounded-md p-2">
+                    <button type="button" onclick="toggleApiKeyVisibility('{{ form.alpha_vantage_api_key.id_for_label }}')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">
+                        Show/Hide
+                    </button>
+                </div>
                 {% else %}
                     <input type="text" value="{% if api_settings.alpha_vantage_api_key %}***********{% endif %}" disabled class="w-full border border-gray-300 rounded-md p-2 bg-gray-100 text-gray-500" />
                 {% endif %}
@@ -263,7 +333,12 @@
                     {{ form.finnhub_api_key.label }}
                 </label>
                 {% if is_admin %}
-                    {{ form.finnhub_api_key }}
+                <div class="flex gap-2">
+                    <input type="password" name="finnhub_api_key" id="{{ form.finnhub_api_key.id_for_label }}" value="{{ api_settings.finnhub_api_key }}" class="flex-1 border border-gray-300 rounded-md p-2">
+                    <button type="button" onclick="toggleApiKeyVisibility('{{ form.finnhub_api_key.id_for_label }}')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">
+                        Show/Hide
+                    </button>
+                </div>
                 {% else %}
                     <input type="text" value="{% if api_settings.finnhub_api_key %}***********{% endif %}" disabled class="w-full border border-gray-300 rounded-md p-2 bg-gray-100 text-gray-500" />
                 {% endif %}
@@ -282,7 +357,12 @@
                     {{ form.polygon_api_key.label }}
                 </label>
                 {% if is_admin %}
-                    {{ form.polygon_api_key }}
+                <div class="flex gap-2">
+                    <input type="password" name="polygon_api_key" id="{{ form.polygon_api_key.id_for_label }}" value="{{ api_settings.polygon_api_key }}" class="flex-1 border border-gray-300 rounded-md p-2">
+                    <button type="button" onclick="toggleApiKeyVisibility('{{ form.polygon_api_key.id_for_label }}')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">
+                        Show/Hide
+                    </button>
+                </div>
                 {% else %}
                     <input type="text" value="{% if api_settings.polygon_api_key %}***********{% endif %}" disabled class="w-full border border-gray-300 rounded-md p-2 bg-gray-100 text-gray-500" />
                 {% endif %}
@@ -301,7 +381,12 @@
                     {{ form.eodhd_api_key.label }}
                 </label>
                 {% if is_admin %}
-                    {{ form.eodhd_api_key }}
+                <div class="flex gap-2">
+                    <input type="password" name="eodhd_api_key" id="{{ form.eodhd_api_key.id_for_label }}" value="{{ api_settings.eodhd_api_key }}" class="flex-1 border border-gray-300 rounded-md p-2">
+                    <button type="button" onclick="toggleApiKeyVisibility('{{ form.eodhd_api_key.id_for_label }}')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">
+                        Show/Hide
+                    </button>
+                </div>
                 {% else %}
                     <input type="text" value="{% if api_settings.eodhd_api_key %}***********{% endif %}" disabled class="w-full border border-gray-300 rounded-md p-2 bg-gray-100 text-gray-500" />
                 {% endif %}
@@ -325,4 +410,13 @@
         </p>
     </div>
 </div>
+
+<script>
+function toggleApiKeyVisibility(fieldId) {
+    const field = document.getElementById(fieldId);
+    if (field) {
+        field.type = field.type === 'password' ? 'text' : 'password';
+    }
+}
+</script>
 {% endblock %}

@@ -512,29 +512,45 @@ function updateActions() {
     const selectedId = select.value;
 
     if (selectedId) {
-        exportBtn.setAttribute('data-id', selectedId);
-        exportBtn.classList.remove('pointer-events-none', 'opacity-50');
-        exportBtn.classList.add('hover:bg-blue-600', 'cursor-pointer');
+        // Export button (available to all users)
+        if (exportBtn) {
+            exportBtn.setAttribute('data-id', selectedId);
+            exportBtn.classList.remove('pointer-events-none', 'opacity-50');
+            exportBtn.classList.add('hover:bg-blue-600', 'cursor-pointer');
+        }
 
-        renameBtn.disabled = false;
-        renameBtn.classList.remove('pointer-events-none', 'opacity-50');
-        renameBtn.classList.add('hover:bg-purple-600', 'cursor-pointer');
+        // Admin-only buttons (only exist for admin users)
+        if (renameBtn) {
+            renameBtn.disabled = false;
+            renameBtn.classList.remove('pointer-events-none', 'opacity-50');
+            renameBtn.classList.add('hover:bg-purple-600', 'cursor-pointer');
+        }
 
-        deleteBtn.disabled = false;
-        deleteBtn.classList.remove('pointer-events-none', 'opacity-50');
-        deleteBtn.classList.add('hover:bg-red-600', 'cursor-pointer');
+        if (deleteBtn) {
+            deleteBtn.disabled = false;
+            deleteBtn.classList.remove('pointer-events-none', 'opacity-50');
+            deleteBtn.classList.add('hover:bg-red-600', 'cursor-pointer');
+        }
     } else {
-        exportBtn.removeAttribute('data-id');
-        exportBtn.classList.add('pointer-events-none', 'opacity-50');
-        exportBtn.classList.remove('hover:bg-blue-600', 'cursor-pointer');
+        // Export button (available to all users)
+        if (exportBtn) {
+            exportBtn.removeAttribute('data-id');
+            exportBtn.classList.add('pointer-events-none', 'opacity-50');
+            exportBtn.classList.remove('hover:bg-blue-600', 'cursor-pointer');
+        }
 
-        renameBtn.disabled = true;
-        renameBtn.classList.add('pointer-events-none', 'opacity-50');
-        renameBtn.classList.remove('hover:bg-purple-600', 'cursor-pointer');
+        // Admin-only buttons (only exist for admin users)
+        if (renameBtn) {
+            renameBtn.disabled = true;
+            renameBtn.classList.add('pointer-events-none', 'opacity-50');
+            renameBtn.classList.remove('hover:bg-purple-600', 'cursor-pointer');
+        }
 
-        deleteBtn.disabled = true;
-        deleteBtn.classList.add('pointer-events-none', 'opacity-50');
-        deleteBtn.classList.remove('hover:bg-red-600', 'cursor-pointer');
+        if (deleteBtn) {
+            deleteBtn.disabled = true;
+            deleteBtn.classList.add('pointer-events-none', 'opacity-50');
+            deleteBtn.classList.remove('hover:bg-red-600', 'cursor-pointer');
+        }
     }
 }
 
