@@ -1365,16 +1365,29 @@ def oauth_callback(request, provider_id):
     # Clean up session state
     del request.session['oauth_state']
     del request.session['oauth_provider_id']
+    print("Session state cleaned up", file=sys.stderr)
+    logger.info("Session state cleaned up")
 
     # Get authorization code
     code = request.GET.get('code')
+    print(f"Authorization code from URL: {code[:20] if code else 'MISSING'}...", file=sys.stderr)
+    logger.info(f"Authorization code from URL: {code[:20] if code else 'MISSING'}...")
+
     if not code:
-        return HttpResponseForbidden("Authorization code not provided.")
+        error_msg = "Authorization code not provided."
+        print(error_msg, file=sys.stderr)
+        logger.error(error_msg)
+        return HttpResponseForbidden(error_msg)
 
     try:
         provider = IdentityProvider.objects.get(id=provider_id, disabled=False)
+        print(f"Provider found: {provider.name}", file=sys.stderr)
+        logger.info(f"Provider found: {provider.name}")
     except IdentityProvider.DoesNotExist:
-        return HttpResponseForbidden("Identity provider not found or disabled.")
+        error_msg = "Identity provider not found or disabled."
+        print(error_msg, file=sys.stderr)
+        logger.error(error_msg)
+        return HttpResponseForbidden(error_msg)
 
     # Exchange code for tokens
     token_data = {
@@ -1385,18 +1398,28 @@ def oauth_callback(request, provider_id):
         'client_secret': provider.client_secret,
     }
 
+    print(f"Exchanging code for tokens at: {provider.token_url}", file=sys.stderr)
+    logger.info(f"Exchanging code for tokens at: {provider.token_url}")
+
     try:
         token_response = requests.post(provider.token_url, data=token_data)
+        print(f"Token response status: {token_response.status_code}", file=sys.stderr)
+        logger.info(f"Token response status: {token_response.status_code}")
+
         token_response.raise_for_status()
         tokens = token_response.json()
         access_token = tokens.get('access_token')
         id_token = tokens.get('id_token')
+        print(f"Got access_token: {bool(access_token)}, id_token: {bool(id_token)}", file=sys.stderr)
+        logger.info(f"Got access_token: {bool(access_token)}, id_token: {bool(id_token)}")
 
         # Fetch user info (try userinfo endpoint or decode ID token)
         user_info = None
 
         # Try to get userinfo from ID token (JWT)
         if id_token:
+            print("Attempting to decode ID token", file=sys.stderr)
+            logger.info("Attempting to decode ID token")
             # Simple JWT decode (not verifying signature for simplicity)
             # In production, you should verify the signature
             parts = id_token.split('.')
@@ -1409,18 +1432,31 @@ def oauth_callback(request, provider_id):
                 if padding != 4:
                     payload += '=' * padding
                 user_info = json.loads(base64.urlsafe_b64decode(payload))
+                print(f"Decoded user info from ID token: {list(user_info.keys())}", file=sys.stderr)
+                logger.info(f"Decoded user info from ID token: {list(user_info.keys())}")
 
         # If no user info from ID token, try a userinfo endpoint (common pattern)
         if not user_info and access_token:
+            print("Attempting to get user info from userinfo endpoint", file=sys.stderr)
+            logger.info("Attempting to get user info from userinfo endpoint")
             # Try common userinfo endpoint pattern
             userinfo_url = provider.authorization_url.replace('/authorize', '/userinfo').replace('/oauth/authorize', '/oauth/userinfo')
+            print(f"Userinfo URL: {userinfo_url}", file=sys.stderr)
+            logger.info(f"Userinfo URL: {userinfo_url}")
             headers = {'Authorization': f'Bearer {access_token}'}
             userinfo_response = requests.get(userinfo_url, headers=headers)
+            print(f"Userinfo response status: {userinfo_response.status_code}", file=sys.stderr)
+            logger.info(f"Userinfo response status: {userinfo_response.status_code}")
             if userinfo_response.status_code == 200:
                 user_info = userinfo_response.json()
+                print(f"Got user info: {list(user_info.keys())}", file=sys.stderr)
+                logger.info(f"Got user info: {list(user_info.keys())}")
 
         if not user_info:
-            return HttpResponseForbidden("Could not retrieve user information from provider.")
+            error_msg = "Could not retrieve user information from provider."
+            print(error_msg, file=sys.stderr)
+            logger.error(error_msg)
+            return HttpResponseForbidden(error_msg)
 
         # Extract user data using JSON paths
         def get_nested_value(data, path):
@@ -1493,12 +1529,20 @@ def oauth_callback(request, provider_id):
         session_settings = SessionSettings.get_settings()
         request.session.set_expiry(session_settings.session_timeout_minutes * 60)
 
+        print("Successfully authenticated user, redirecting to home", file=sys.stderr)
+        logger.info("Successfully authenticated user, redirecting to home")
         return redirect('home')
 
     except requests.RequestException as e:
-        return HttpResponseForbidden(f"Error communicating with identity provider: {str(e)}")
+        error_msg = f"Error communicating with identity provider: {str(e)}"
+        print(error_msg, file=sys.stderr)
+        logger.error(error_msg, exc_info=True)
+        return HttpResponseForbidden(error_msg)
     except Exception as e:
-        return HttpResponseForbidden(f"Error processing authentication: {str(e)}")
+        error_msg = f"Error processing authentication: {str(e)}"
+        print(error_msg, file=sys.stderr)
+        logger.error(error_msg, exc_info=True)
+        return HttpResponseForbidden(error_msg)
 
 
 # Keep backward compatibility alias
