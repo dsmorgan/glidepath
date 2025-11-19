@@ -1167,8 +1167,14 @@ def oauth_login(request, provider_id):
 
     logger = logging.getLogger(__name__)
 
+    logger.info(f"=== OAuth Login Initiated ===")
+    logger.info(f"Provider ID: {provider_id}")
+    logger.info(f"Request Host: {request.get_host()}")
+    logger.info(f"Request is_secure: {request.is_secure()}")
+
     try:
         provider = IdentityProvider.objects.get(id=provider_id, disabled=False)
+        logger.info(f"Provider found: {provider.name}")
     except IdentityProvider.DoesNotExist:
         error_msg = f"Identity provider {provider_id} not found or disabled."
         logger.warning(f"OAuth login attempt: {error_msg}")
@@ -1176,6 +1182,16 @@ def oauth_login(request, provider_id):
             'error': error_msg,
             'enabled_providers': IdentityProvider.objects.filter(disabled=False).order_by('name'),
         })
+
+    # Log raw provider configuration
+    logger.info(f"Provider configuration:")
+    logger.info(f"  - name: {provider.name}")
+    logger.info(f"  - authorization_url: {provider.authorization_url}")
+    logger.info(f"  - token_url: {provider.token_url}")
+    logger.info(f"  - client_id: {provider.client_id[:20]}..." if len(provider.client_id) > 20 else f"  - client_id: {provider.client_id}")
+    logger.info(f"  - scopes: {provider.scopes}")
+    logger.info(f"  - redirect_url: {provider.redirect_url}")
+    logger.info(f"  - disabled: {provider.disabled}")
 
     # Validate required configuration
     validation_errors = []
@@ -1201,13 +1217,16 @@ def oauth_login(request, provider_id):
     request.session['oauth_state'] = state
     request.session['oauth_provider_id'] = str(provider.id)
     request.session.save()  # Explicitly save session before redirect
+    logger.info(f"Session state saved with state token: {state[:20]}...")
 
     # Build authorization URL
     redirect_uri = provider.redirect_url.replace('<glidepath fqdn>', request.get_host())
+    logger.info(f"Initial redirect_uri: {redirect_uri}")
 
     # Handle HTTPS protocol
     if request.is_secure():
         redirect_uri = redirect_uri.replace('http://', 'https://')
+        logger.info(f"HTTPS detected, redirect_uri updated to: {redirect_uri}")
 
     params = {
         'client_id': provider.client_id,
@@ -1217,12 +1236,22 @@ def oauth_login(request, provider_id):
         'state': state,
     }
 
+    logger.info(f"OAuth parameters:")
+    logger.info(f"  - client_id: {params['client_id'][:20]}...")
+    logger.info(f"  - redirect_uri: {params['redirect_uri']}")
+    logger.info(f"  - response_type: {params['response_type']}")
+    logger.info(f"  - scope: {params['scope']}")
+    logger.info(f"  - state: {params['state'][:20]}...")
+
     auth_url = f"{provider.authorization_url}?{urllib.parse.urlencode(params)}"
-    logger.info(f"OAuth login redirecting to {provider.name}")
-    logger.info(f"Authorization URL: {provider.authorization_url}")
-    logger.info(f"Redirect URI: {redirect_uri}")
-    logger.info(f"Full auth_url: {auth_url}")
-    return redirect(auth_url)
+    logger.info(f"Constructed auth_url: {auth_url}")
+    logger.info(f"Redirecting to OAuth provider: {provider.name}")
+    logger.info(f"=== OAuth Login Redirect ===")
+
+    response = redirect(auth_url)
+    logger.info(f"Redirect response status: {response.status_code}")
+    logger.info(f"Redirect response location: {response.get('Location', 'NOT SET')}")
+    return response
 
 
 def oauth_callback(request, provider_id):
