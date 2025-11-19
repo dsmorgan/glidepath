@@ -15,6 +15,12 @@
             </div>
         {% endif %}
 
+        {% if not is_admin %}
+        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+            <p class="text-yellow-700">You do not have permission to add or edit funds. Administrator privileges required.</p>
+        </div>
+        {% endif %}
+
         <form method="post" class="space-y-6">
             {% csrf_token %}
 
@@ -73,9 +79,15 @@
                 <a href="{% url 'funds' %}" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                     Cancel
                 </a>
+                {% if is_admin %}
                 <button type="submit" class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                     Commit
                 </button>
+                {% else %}
+                <button type="button" disabled class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-gray-500 bg-gray-300 cursor-not-allowed" title="Administrator privileges required">
+                    Commit
+                </button>
+                {% endif %}
             </div>
         </form>
     </div>

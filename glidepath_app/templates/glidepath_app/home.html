@@ -10,7 +10,8 @@
     </p>
 
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <!-- Rules Card -->
+        {% if is_admin %}
+        <!-- Rules Card (Admin only) -->
         <a href="{% url 'rules' %}" class="block p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-50 transition">
             <h2 class="text-2xl font-semibold text-indigo-600 mb-3">Rules</h2>
             <p class="text-gray-600">
@@ -18,13 +19,14 @@
             </p>
         </a>
 
-        <!-- Funds Card -->
+        <!-- Funds Card (Admin only) -->
         <a href="{% url 'funds' %}" class="block p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-50 transition">
             <h2 class="text-2xl font-semibold text-indigo-600 mb-3">Funds</h2>
             <p class="text-gray-600">
                 Query ticker information from multiple financial data sources including yfinance, Alpha Vantage, Finnhub, and more.
             </p>
         </a>
+        {% endif %}
 
         <!-- Accounts Card -->
         <a href="{% url 'accounts' %}" class="block p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-50 transition">
@@ -50,23 +52,45 @@
             </p>
         </a>
 
-        <!-- Settings Card -->
+        {% if is_admin %}
+        <!-- Settings Card (Admin only) -->
         <a href="{% url 'settings' %}" class="block p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-50 transition">
             <h2 class="text-2xl font-semibold text-indigo-600 mb-3">Settings</h2>
             <p class="text-gray-600">
                 Configure API keys for financial data sources used in the Funds page.
             </p>
         </a>
+        {% endif %}
     </div>
 
     <div class="mt-8 p-6 bg-blue-50 border border-blue-200 rounded-lg">
         <h3 class="text-xl font-semibold text-blue-900 mb-2">Getting Started</h3>
+        {% if is_admin %}
         <p class="text-blue-800">
-            Begin by importing your glidepath rules in the <a href="{% url 'rules' %}" class="underline font-medium">Rules</a> section.
-            You can upload CSV files containing allocation rules by retirement age bands.
-            To query ticker information, configure your API keys in <a href="{% url 'settings' %}" class="underline font-medium">Settings</a>
-            and then use the <a href="{% url 'funds' %}" class="underline font-medium">Funds</a> page to search.
+            As an administrator, follow these steps to set up the system:
         </p>
+        <ol class="text-blue-800 mt-2 ml-6 list-decimal space-y-1">
+            <li>Import glidepath allocation rules in the <a href="{% url 'rules' %}" class="underline font-medium">Rules</a> section by uploading CSV files.</li>
+            <li>Configure API keys in <a href="{% url 'settings' %}" class="underline font-medium">Settings</a> to enable ticker information queries.</li>
+            <li>Use the <a href="{% url 'funds' %}" class="underline font-medium">Funds</a> page to search and manage fund information.</li>
+            <li>Upload your account positions in the <a href="{% url 'accounts' %}" class="underline font-medium">Accounts</a> section.</li>
+            <li>Create portfolios in the <a href="{% url 'portfolios' %}" class="underline font-medium">Portfolios</a> section to group your accounts.</li>
+            <li>Run retirement scenario simulations in the <a href="{% url 'modeling' %}" class="underline font-medium">Modeling</a> section.</li>
+        </ol>
+        <p class="text-blue-800 mt-3">
+            The <a href="{% url 'settings' %}" class="underline font-medium">Settings</a> page also allows you to manage user accounts,
+            identity providers, API keys, and session settings.
+        </p>
+        {% else %}
+        <p class="text-blue-800">
+            Get started by following these steps:
+        </p>
+        <ol class="text-blue-800 mt-2 ml-6 list-decimal space-y-1">
+            <li>Upload your account positions in the <a href="{% url 'accounts' %}" class="underline font-medium">Accounts</a> section.</li>
+            <li>Create portfolios in the <a href="{% url 'portfolios' %}" class="underline font-medium">Portfolios</a> section to group your accounts.</li>
+            <li>Run retirement scenario simulations in the <a href="{% url 'modeling' %}" class="underline font-medium">Modeling</a> section.</li>
+        </ol>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

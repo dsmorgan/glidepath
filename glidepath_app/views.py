@@ -180,7 +180,8 @@ def _build_chart_data(rules):
 
 def home(request):
     """Home page view - provides overview and navigation."""
-    return render(request, "glidepath_app/home.html")
+    is_admin = request.session.get('is_admin', False)
+    return render(request, "glidepath_app/home.html", {'is_admin': is_admin})
 
 
 def settings_view(request):
@@ -316,6 +317,7 @@ def rules_view(request):
         "class_pie_chart": json.dumps(pie_chart),
         "years_born": years_born,
         "retirement_ages": retirement_ages,
+        "is_admin": is_admin,
     }
 
     template = "glidepath_app/upload.html"
@@ -326,6 +328,9 @@ def rules_view(request):
 
 def funds_view(request):
     """Funds management view - manage investment funds."""
+    # Check if user is admin
+    is_admin = request.session.get('is_admin', False)
+
     # Get sorting parameters
     sort_by = request.GET.get('sort', 'ticker')
     order = request.GET.get('order', 'asc')
@@ -377,6 +382,7 @@ def funds_view(request):
         'order': order,
         'per_page': per_page,
         'api_settings': api_settings,
+        'is_admin': is_admin,
     }
 
     return render(request, "glidepath_app/funds.html", context)
@@ -1157,7 +1163,8 @@ def fund_detail(request):
     context = {
         'form': form,
         'is_edit': existing_fund is not None,
-        'fund': existing_fund
+        'fund': existing_fund,
+        'is_admin': is_admin,
     }
     return render(request, 'glidepath_app/fund_detail.html', context)
 
