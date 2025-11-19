@@ -187,6 +187,11 @@ class User(models.Model):
     identity_provider = models.ForeignKey(
         IdentityProvider, on_delete=models.SET_NULL, null=True, blank=True, related_name="users"
     )
+    external_provider_id = models.CharField(
+        max_length=500,
+        blank=True,
+        help_text="External user ID from OAuth provider (e.g., sub claim, username)"
+    )
     role = models.IntegerField(choices=ROLE_CHOICES, default=1)
     disabled = models.BooleanField(default=False)
     password = models.CharField(max_length=255, blank=True, help_text="Only used for internal users")
@@ -195,6 +200,13 @@ class User(models.Model):
 
     class Meta:
         ordering = ["username"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['identity_provider', 'external_provider_id'],
+                condition=models.Q(identity_provider__isnull=False, external_provider_id__gt=''),
+                name='unique_provider_external_id'
+            )
+        ]
 
     def __str__(self) -> str:
         return self.username

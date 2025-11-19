@@ -1488,31 +1488,47 @@ def oauth_callback(request, provider_id):
                     return None
             return value
 
-        identity = get_nested_value(user_info, provider.identity_path)
+        external_id = get_nested_value(user_info, provider.identity_path)
         email = get_nested_value(user_info, provider.email_path)
         name = get_nested_value(user_info, provider.name_path) if provider.name_path else None
 
-        if not identity or not email:
-            return HttpResponseForbidden("Could not extract required user information (identity or email).")
+        print(f"Extracted from provider: external_id={external_id}, email={email}, name={name}", file=sys.stderr)
+        logger.info(f"Extracted from provider: external_id={external_id}, email={email}, name={name}")
 
-        # Find or create user
-        # First try to find by identity_provider_id (external ID)
+        if not external_id or not email:
+            error_msg = "Could not extract required user information (identity or email)."
+            print(error_msg, file=sys.stderr)
+            logger.error(error_msg)
+            return HttpResponseForbidden(error_msg)
+
+        # Find or create user - using best practices lookup strategy
+        # Step 1: Primary lookup - by provider + external_provider_id
         user = User.objects.filter(
             identity_provider=provider,
-            identity_provider_id=identity
+            external_provider_id=external_id
         ).first()
 
+        print(f"Primary lookup (provider+external_id): {'Found' if user else 'Not found'}", file=sys.stderr)
+        logger.info(f"Primary lookup (provider+external_id): {'Found' if user else 'Not found'}")
+
         if not user:
-            # Try to find by email
+            # Step 2: Secondary lookup - by email (for existing local users)
             user = User.objects.filter(email=email).first()
 
             if user:
-                # Update existing user to link with provider
+                print(f"Secondary lookup (email): Found user {user.username}", file=sys.stderr)
+                logger.info(f"Secondary lookup (email): Found user {user.username}")
+                # Link existing user to provider
                 user.identity_provider = provider
-                user.identity_provider_id = identity
-                user.save()
+                user.external_provider_id = external_id
+                print(f"Linking existing user {user.username} to provider", file=sys.stderr)
+                logger.info(f"Linking existing user {user.username} to provider")
             elif provider.auto_provision_users:
-                # Create new user
+                # Step 3: Create new user if auto-provisioning is enabled
+                print("Creating new user (auto-provisioning enabled)", file=sys.stderr)
+                logger.info("Creating new user (auto-provisioning enabled)")
+
+                # Generate username from email or external_id
                 username = email.split('@')[0]
                 # Ensure username is unique
                 base_username = username
@@ -1526,13 +1542,22 @@ def oauth_callback(request, provider_id):
                     email=email,
                     name=name or email,
                     identity_provider=provider,
-                    identity_provider_id=identity,
-                    role=User.ROLE_USER,  # Default to regular user
+                    external_provider_id=external_id,
+                    role=1,  # Default to regular user
                     disabled=False,
                     password='',  # No local password for OAuth users
                 )
             else:
                 return HttpResponseForbidden("User not found and auto-provisioning is disabled for this provider.")
+
+        # Sync user information from provider on each login (best practice)
+        # This keeps the user's profile up to date with the IdP
+        user.email = email
+        if name:
+            user.name = name
+        user.save()
+        print(f"Synced user info: email={email}, name={name}", file=sys.stderr)
+        logger.info(f"Synced user info: email={email}, name={name}")
 
         # Check if user is disabled
         if user.disabled:
