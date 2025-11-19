@@ -394,16 +394,26 @@ def accounts_view(request):
     success = None
 
     # Determine which user's data to show
-    selected_user_id = request.session.get('selected_user_id')
-    if selected_user_id:
-        try:
-            current_user = User.objects.get(id=selected_user_id)
-        except User.DoesNotExist:
-            # Fall back to first user if selected user doesn't exist
-            current_user = User.objects.first()
+    # Get the logged-in user
+    user_id = request.session.get('user_id')
+    is_admin = request.session.get('is_admin', False)
+
+    # For admins, allow viewing other users' data via selected_user_id
+    # For regular users, always use their own user_id
+    if is_admin:
+        selected_user_id = request.session.get('selected_user_id')
+        if selected_user_id:
+            try:
+                current_user = User.objects.get(id=selected_user_id)
+            except User.DoesNotExist:
+                # Fall back to logged-in user
+                current_user = User.objects.get(id=user_id) if user_id else None
+        else:
+            # No user selected, use logged-in admin's own data
+            current_user = User.objects.get(id=user_id) if user_id else None
     else:
-        # Default to first user
-        current_user = User.objects.first()
+        # Regular users always see their own data
+        current_user = User.objects.get(id=user_id) if user_id else None
 
     if request.method == "POST":
         form = AccountUploadForm(request.POST, request.FILES)
@@ -482,17 +492,26 @@ def assumptions_view(request):
     success = None
 
     # Determine current user
-    selected_user_id = request.session.get('selected_user_id')
-    if selected_user_id:
-        try:
-            current_user = User.objects.get(id=selected_user_id)
-        except User.DoesNotExist:
-            current_user = User.objects.first()
-    else:
-        current_user = User.objects.first()
-
-    # Check if user is admin
+    # Get the logged-in user
+    user_id = request.session.get('user_id')
     is_admin = request.session.get('is_admin', False)
+
+    # For admins, allow viewing other users' data via selected_user_id
+    # For regular users, always use their own user_id
+    if is_admin:
+        selected_user_id = request.session.get('selected_user_id')
+        if selected_user_id:
+            try:
+                current_user = User.objects.get(id=selected_user_id)
+            except User.DoesNotExist:
+                # Fall back to logged-in user
+                current_user = User.objects.get(id=user_id) if user_id else None
+        else:
+            # No user selected, use logged-in admin's own data
+            current_user = User.objects.get(id=user_id) if user_id else None
+    else:
+        # Regular users always see their own data
+        current_user = User.objects.get(id=user_id) if user_id else None
 
     if request.method == "POST":
         # Only admins can upload
@@ -717,14 +736,26 @@ def delete_assumption_upload(request, upload_id):
 def portfolios_view(request):
     """Portfolios management view - manage investment portfolios."""
     # Determine which user's data to show
-    selected_user_id = request.session.get('selected_user_id')
-    if selected_user_id:
-        try:
-            current_user = User.objects.get(id=selected_user_id)
-        except User.DoesNotExist:
-            current_user = User.objects.first()
+    # Get the logged-in user
+    user_id = request.session.get('user_id')
+    is_admin = request.session.get('is_admin', False)
+
+    # For admins, allow viewing other users' data via selected_user_id
+    # For regular users, always use their own user_id
+    if is_admin:
+        selected_user_id = request.session.get('selected_user_id')
+        if selected_user_id:
+            try:
+                current_user = User.objects.get(id=selected_user_id)
+            except User.DoesNotExist:
+                # Fall back to logged-in user
+                current_user = User.objects.get(id=user_id) if user_id else None
+        else:
+            # No user selected, use logged-in admin's own data
+            current_user = User.objects.get(id=user_id) if user_id else None
     else:
-        current_user = User.objects.first()
+        # Regular users always see their own data
+        current_user = User.objects.get(id=user_id) if user_id else None
 
     # Get tolerance parameter (default to 2.0%)
     tolerance_str = request.GET.get('tolerance', '2.0')
@@ -775,14 +806,26 @@ def portfolios_view(request):
 def create_portfolio(request):
     """Create a new portfolio."""
     # Determine which user to create the portfolio for
-    selected_user_id = request.session.get('selected_user_id')
-    if selected_user_id:
-        try:
-            current_user = User.objects.get(id=selected_user_id)
-        except User.DoesNotExist:
-            current_user = User.objects.first()
+    # Get the logged-in user
+    user_id = request.session.get('user_id')
+    is_admin = request.session.get('is_admin', False)
+
+    # For admins, allow creating portfolios for other users via selected_user_id
+    # For regular users, always use their own user_id
+    if is_admin:
+        selected_user_id = request.session.get('selected_user_id')
+        if selected_user_id:
+            try:
+                current_user = User.objects.get(id=selected_user_id)
+            except User.DoesNotExist:
+                # Fall back to logged-in user
+                current_user = User.objects.get(id=user_id) if user_id else None
+        else:
+            # No user selected, use logged-in admin's own data
+            current_user = User.objects.get(id=user_id) if user_id else None
     else:
-        current_user = User.objects.first()
+        # Regular users always create for themselves
+        current_user = User.objects.get(id=user_id) if user_id else None
 
     if not current_user:
         return redirect('portfolios')
@@ -873,14 +916,26 @@ def edit_portfolio(request, portfolio_id):
         return redirect('portfolios')
 
     # Get the current user
-    selected_user_id = request.session.get('selected_user_id')
-    if selected_user_id:
-        try:
-            current_user = User.objects.get(id=selected_user_id)
-        except User.DoesNotExist:
-            current_user = User.objects.first()
+    # Get the logged-in user
+    user_id = request.session.get('user_id')
+    is_admin = request.session.get('is_admin', False)
+
+    # For admins, allow editing portfolios for other users via selected_user_id
+    # For regular users, always use their own user_id
+    if is_admin:
+        selected_user_id = request.session.get('selected_user_id')
+        if selected_user_id:
+            try:
+                current_user = User.objects.get(id=selected_user_id)
+            except User.DoesNotExist:
+                # Fall back to logged-in user
+                current_user = User.objects.get(id=user_id) if user_id else None
+        else:
+            # No user selected, use logged-in admin's own data
+            current_user = User.objects.get(id=user_id) if user_id else None
     else:
-        current_user = User.objects.first()
+        # Regular users always edit their own data
+        current_user = User.objects.get(id=user_id) if user_id else None
 
     if request.method == "POST":
         # Handle portfolio configuration (name and ruleset)
@@ -1399,14 +1454,26 @@ def modeling_view(request):
     from decimal import Decimal, InvalidOperation
 
     # Determine which user's data to show
-    selected_user_id = request.session.get('selected_user_id')
-    if selected_user_id:
-        try:
-            current_user = User.objects.get(id=selected_user_id)
-        except User.DoesNotExist:
-            current_user = User.objects.first()
+    # Get the logged-in user
+    user_id = request.session.get('user_id')
+    is_admin = request.session.get('is_admin', False)
+
+    # For admins, allow viewing other users' data via selected_user_id
+    # For regular users, always use their own user_id
+    if is_admin:
+        selected_user_id = request.session.get('selected_user_id')
+        if selected_user_id:
+            try:
+                current_user = User.objects.get(id=selected_user_id)
+            except User.DoesNotExist:
+                # Fall back to logged-in user
+                current_user = User.objects.get(id=user_id) if user_id else None
+        else:
+            # No user selected, use logged-in admin's own data
+            current_user = User.objects.get(id=user_id) if user_id else None
     else:
-        current_user = User.objects.first()
+        # Regular users always see their own data
+        current_user = User.objects.get(id=user_id) if user_id else None
 
     if not current_user:
         return render(request, 'glidepath_app/modeling.html', {
