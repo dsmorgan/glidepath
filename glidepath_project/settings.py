@@ -70,7 +70,7 @@ LOGGING = {
     'loggers': {
         'glidepath_app': {
             'handlers': ['console'],
-            'level': 'DEBUG',
+            'level': 'INFO',
             'propagate': True,
         },
         'django': {

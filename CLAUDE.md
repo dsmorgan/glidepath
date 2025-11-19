@@ -215,11 +215,13 @@ glidepath/
 - `email`: Email address (unique)
 - `name`: Full name
 - `identity_provider`: Foreign key to IdentityProvider (nullable)
+- `external_provider_id`: External user ID from OAuth provider (e.g., sub claim, username) - composite key with identity_provider
 - `role`: User role (0=Administrator, 1=User)
 - `disabled`: Boolean flag for account status
 - `password`: Password hash (only for internal users)
 - `created_at`: Account creation timestamp
 - `updated_at`: Last updated timestamp
+- **Constraints**: Unique together on (identity_provider, external_provider_id) when both are set
 - Related to: IdentityProvider (many:1 optional), AccountUpload (1:many), Portfolio (1:many)
 
 **AccountUpload** - Stores metadata about uploaded account position CSV files
@@ -474,3 +476,139 @@ Run tests with: `docker-compose run --rm web python manage.py test`
 - Database file: `db.sqlite3` (created automatically)
 - Migrations applied automatically on container startup
 - For resetting: Remove `db.sqlite3` and restart container
+
+## Database Schema Changes (Recent Updates)
+
+### User Model Enhancement (Migration 0018)
+Added OAuth2/OIDC support with improved identity linking:
+- **New field**: `external_provider_id` (CharField, 500 chars, blank=True)
+  - Stores external user ID from identity provider (e.g., sub claim, username)
+  - Enables proper multi-provider user identification
+- **New constraint**: Unique together on (identity_provider, external_provider_id)
+  - Ensures each user is uniquely identified per provider
+  - Only enforced when both fields are set (supports local-only users)
+
+This follows OAuth/OIDC best practices used by Auth0, Google, Azure AD, etc.
+
+## OAuth2/OIDC Authentication Implementation
+
+### Three-Step User Lookup Strategy
+When a user logs in via OAuth:
+1. **Primary lookup**: Find user by `IdentityProvider + external_provider_id`
+   - Fast lookup for returning users
+   - Guarantees user identity across provider changes
+2. **Secondary lookup**: Find by email address
+   - Allows existing local users to link to their IdP
+   - Supports user migration scenarios
+3. **Create new**: Auto-provision if enabled
+   - Generate unique username from email
+   - Store external ID for future lookups
+
+### User Information Sync
+On every OAuth login:
+- Email and name are synced from the provider
+- Keeps user profile up-to-date with IdP data
+- External ID remains immutable per provider
+
+### Redirect URI Handling
+- Automatically detects HTTPS vs HTTP based on:
+  1. `X-Forwarded-Proto` header (for reverse proxy setups)
+  2. `request.is_secure()` (for direct HTTPS connections)
+  3. Defaults to HTTPS for OAuth (safe assumption)
+- Applies same redirect_uri to both authorization request and token exchange
+- Critical: redirect_uri must match exactly in both requests per OAuth spec
+
+### Session Management
+After successful authentication:
+- Store in session: user_id, username, user_email, user_name, is_admin
+- These values available in templates for display (e.g., user dropdown)
+- Session timeout configurable via SessionSettings
+
+## Known Issues and Limitations
+
+### Current Limitations
+1. **SQLite Database**: Development only, not suitable for production workloads
+   - Consider PostgreSQL/MySQL for production
+   - Limited concurrent write support
+
+2. **Password Reset**: No self-service password reset for internal users
+   - Administrators must use manage_user.sh to reset passwords
+   - Consider adding email-based reset flow
+
+3. **OAuth Provider Changes**: Changing provider configuration after users login
+   - Existing users may lose access if provider URL changes
+   - No automatic migration of external provider IDs
+
+4. **Email Uniqueness**: Email must be unique across all users
+   - Cannot have same email in multiple IdPs
+   - May conflict with some OAuth provider setups
+
+5. **Account Linking**: No UI for linking multiple IdPs to single account
+   - Currently one IdP per user maximum
+   - Could be extended to support multiple linked accounts
+
+### Operational Considerations
+1. **Session Storage**: Uses database-backed sessions (required for multi-container setups)
+   - See `SessionSettings.get_settings()` for timeout configuration
+   - Clear old sessions periodically to maintain database performance
+
+2. **Logging**: Default INFO level for all loggers
+   - No debug print statements (all removed)
+   - Debug logging available if log level set to DEBUG
+
+3. **CSRF Protection**: OAuth state parameter prevents CSRF attacks
+   - Stored in session per request
+   - Validated on callback
+
+4. **User Provisioning**: Auto-provisioning must be explicitly enabled per provider
+   - Default is disabled (secure)
+   - Reduces risk of unintended user creation
+
+## UI Components
+
+### User Dropdown (Purple Button)
+- Replaces the basic logout button
+- Collapsed state: Shows username in purple button
+- Expanded state: Shows:
+  - Username
+  - Email
+  - Full Name
+  - Logout action (red text)
+- Provides clear indication of currently logged-in user
+- Color differentiation: Purple for current user vs. other UI elements
+
+### Admin User Selector (Blue Dropdown)
+- Allows administrators to switch between users (for testing/support)
+- Separate from current user indicator
+- Shows username, email, role, and disabled status
+- Checkmark indicates currently selected user
+
+## Middleware
+
+### AuthenticationMiddleware
+- Enforces login requirement for all endpoints except:
+  - `/login/` - Login page
+  - `/auth/idp/*/oidc/login/` - OAuth login initiation
+  - `/auth/idp/*/oidc/callback/` - OAuth callback handler
+- Checks for `user_id` in session to determine authentication state
+- Works with both internal and OAuth users
+
+## Architecture Decisions
+
+### Why External Provider ID?
+The `external_provider_id` field ensures:
+- **Stability**: User identity independent of Glidepath usernames
+- **Provider Flexibility**: Same user can exist across multiple IdPs
+- **Portability**: Users maintain identity even if provider URL changes
+- **Standards Compliance**: Follows OpenID Connect sub claim pattern
+
+### Why Three-Step Lookup?
+1. **Performance**: Primary lookup is fastest for returning users
+2. **User Migration**: Secondary lookup enables smooth OAuth adoption
+3. **Flexibility**: Supports multiple user creation strategies
+
+### Session Storage
+Database-backed sessions enable:
+- Multi-container deployments (shared state)
+- Session timeout management
+- Audit trail of user sessions

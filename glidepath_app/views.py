@@ -1128,6 +1128,8 @@ def login_view(request):
                 # Set session
                 request.session['user_id'] = str(user.id)
                 request.session['username'] = user.username
+                request.session['user_email'] = user.email
+                request.session['user_name'] = user.name
                 request.session['is_admin'] = user.is_admin()
 
                 # Set session expiry based on remember me
@@ -1164,35 +1166,19 @@ def oauth_login(request, provider_id):
     import urllib.parse
     import secrets
     import logging
-    import sys
 
     logger = logging.getLogger(__name__)
 
-    # Use both logging and print to ensure output appears
-    msg = f"=== OAuth Login Initiated ==="
-    print(msg, file=sys.stderr)
-    logger.info(msg)
-
-    msg = f"Provider ID: {provider_id}"
-    print(msg, file=sys.stderr)
-    logger.info(msg)
-
-    msg = f"Request Host: {request.get_host()}"
-    print(msg, file=sys.stderr)
-    logger.info(msg)
-
-    msg = f"Request is_secure: {request.is_secure()}"
-    print(msg, file=sys.stderr)
-    logger.info(msg)
+    logger.info(f"=== OAuth Login Initiated ===")
+    logger.info(f"Provider ID: {provider_id}")
+    logger.info(f"Request Host: {request.get_host()}")
+    logger.info(f"Request is_secure: {request.is_secure()}")
 
     try:
         provider = IdentityProvider.objects.get(id=provider_id, disabled=False)
-        msg = f"Provider found: {provider.name}"
-        print(msg, file=sys.stderr)
-        logger.info(msg)
+        logger.info(f"Provider found: {provider.name}")
     except IdentityProvider.DoesNotExist:
         error_msg = f"Identity provider {provider_id} not found or disabled."
-        print(error_msg, file=sys.stderr)
         logger.warning(f"OAuth login attempt: {error_msg}")
         return render(request, "glidepath_app/login.html", {
             'error': error_msg,
@@ -1200,22 +1186,14 @@ def oauth_login(request, provider_id):
         })
 
     # Log raw provider configuration
-    print("Provider configuration:", file=sys.stderr)
     logger.info(f"Provider configuration:")
-    print(f"  - name: {provider.name}", file=sys.stderr)
     logger.info(f"  - name: {provider.name}")
-    print(f"  - authorization_url: {provider.authorization_url}", file=sys.stderr)
     logger.info(f"  - authorization_url: {provider.authorization_url}")
-    print(f"  - token_url: {provider.token_url}", file=sys.stderr)
     logger.info(f"  - token_url: {provider.token_url}")
     client_id_display = f"{provider.client_id[:20]}..." if len(provider.client_id) > 20 else provider.client_id
-    print(f"  - client_id: {client_id_display}", file=sys.stderr)
     logger.info(f"  - client_id: {client_id_display}")
-    print(f"  - scopes: {provider.scopes}", file=sys.stderr)
     logger.info(f"  - scopes: {provider.scopes}")
-    print(f"  - redirect_url: {provider.redirect_url}", file=sys.stderr)
     logger.info(f"  - redirect_url: {provider.redirect_url}")
-    print(f"  - disabled: {provider.disabled}", file=sys.stderr)
     logger.info(f"  - disabled: {provider.disabled}")
 
     # Validate required configuration
@@ -1231,7 +1209,6 @@ def oauth_login(request, provider_id):
 
     if validation_errors:
         error_msg = f"Identity provider '{provider.name}' is misconfigured: {'; '.join(validation_errors)}"
-        print(error_msg, file=sys.stderr)
         logger.error(f"OAuth login attempt: {error_msg}")
         return render(request, "glidepath_app/login.html", {
             'error': error_msg,
@@ -1243,15 +1220,11 @@ def oauth_login(request, provider_id):
     request.session['oauth_state'] = state
     request.session['oauth_provider_id'] = str(provider.id)
     request.session.save()  # Explicitly save session before redirect
-    msg = f"Session state saved with state token: {state[:20]}..."
-    print(msg, file=sys.stderr)
-    logger.info(msg)
+    logger.info(f"Session state saved with state token: {state[:20]}...")
 
     # Build authorization URL
     redirect_uri = provider.redirect_url.replace('<glidepath fqdn>', request.get_host())
-    msg = f"Initial redirect_uri: {redirect_uri}"
-    print(msg, file=sys.stderr)
-    logger.info(msg)
+    logger.info(f"Initial redirect_uri: {redirect_uri}")
 
     # Determine protocol - check X-Forwarded-Proto header first (set by reverse proxies)
     # Fall back to request.is_secure() if behind proxy, default to https
@@ -1259,26 +1232,18 @@ def oauth_login(request, provider_id):
     forwarded_proto = request.META.get('HTTP_X_FORWARDED_PROTO')
     if forwarded_proto:
         protocol = forwarded_proto
-        msg = f"Protocol from X-Forwarded-Proto header: {protocol}"
-        print(msg, file=sys.stderr)
-        logger.info(msg)
+        logger.info(f"Protocol from X-Forwarded-Proto header: {protocol}")
     elif request.is_secure():
         protocol = 'https'
-        msg = f"Protocol from request.is_secure(): {protocol}"
-        print(msg, file=sys.stderr)
-        logger.info(msg)
+        logger.info(f"Protocol from request.is_secure(): {protocol}")
     else:
         # Default to https for OAuth (assume behind reverse proxy if is_secure is False)
-        msg = f"Using default protocol: {protocol} (assuming reverse proxy)"
-        print(msg, file=sys.stderr)
-        logger.info(msg)
+        logger.info(f"Using default protocol: {protocol} (assuming reverse proxy)")
 
     # Add protocol if redirect_uri doesn't have one
     if not redirect_uri.startswith(('http://', 'https://')):
         redirect_uri = f"{protocol}://{redirect_uri}"
-        msg = f"Added protocol, redirect_uri updated to: {redirect_uri}"
-        print(msg, file=sys.stderr)
-        logger.info(msg)
+        logger.info(f"Added protocol, redirect_uri updated to: {redirect_uri}")
 
     params = {
         'client_id': provider.client_id,
@@ -1288,36 +1253,25 @@ def oauth_login(request, provider_id):
         'state': state,
     }
 
-    print("OAuth parameters:", file=sys.stderr)
     logger.info(f"OAuth parameters:")
     for key, value in params.items():
         if key in ['client_id', 'state']:
             display_value = f"{value[:20]}..." if len(value) > 20 else value
         else:
             display_value = value
-        print(f"  - {key}: {display_value}", file=sys.stderr)
         logger.info(f"  - {key}: {display_value}")
 
     auth_url = f"{provider.authorization_url}?{urllib.parse.urlencode(params)}"
-    msg = f"Constructed auth_url: {auth_url}"
-    print(msg, file=sys.stderr)
-    logger.info(msg)
+    logger.info(f"Constructed auth_url: {auth_url}")
 
-    msg = f"Redirecting to OAuth provider: {provider.name}"
-    print(msg, file=sys.stderr)
-    logger.info(msg)
+    logger.info(f"Redirecting to OAuth provider: {provider.name}")
 
-    print("=== OAuth Login Redirect ===", file=sys.stderr)
     logger.info(f"=== OAuth Login Redirect ===")
 
     response = redirect(auth_url)
-    msg = f"Redirect response status: {response.status_code}"
-    print(msg, file=sys.stderr)
-    logger.info(msg)
+    logger.info(f"Redirect response status: {response.status_code}")
 
-    msg = f"Redirect response location: {response.get('Location', 'NOT SET')}"
-    print(msg, file=sys.stderr)
-    logger.info(msg)
+    logger.info(f"Redirect response location: {response.get('Location', 'NOT SET')}")
 
     return response
 
@@ -1328,14 +1282,11 @@ def oauth_callback(request, provider_id):
     import requests
     import json
     import logging
-    import sys
     from django.contrib.auth.hashers import make_password
 
     logger = logging.getLogger(__name__)
 
-    print("=== OAuth Callback Initiated ===", file=sys.stderr)
     logger.info("=== OAuth Callback Initiated ===")
-    print(f"Provider ID from URL: {provider_id}", file=sys.stderr)
     logger.info(f"Provider ID from URL: {provider_id}")
 
     # Verify state to prevent CSRF
@@ -1343,11 +1294,8 @@ def oauth_callback(request, provider_id):
     session_state = request.session.get('oauth_state')
     session_provider_id = request.session.get('oauth_provider_id')
 
-    print(f"State from URL: {state[:20] if state else 'MISSING'}...", file=sys.stderr)
     logger.info(f"State from URL: {state[:20] if state else 'MISSING'}...")
-    print(f"State from session: {session_state[:20] if session_state else 'MISSING'}...", file=sys.stderr)
     logger.info(f"State from session: {session_state[:20] if session_state else 'MISSING'}...")
-    print(f"Provider ID from session: {session_provider_id}", file=sys.stderr)
     logger.info(f"Provider ID from session: {session_provider_id}")
 
     if not state or state != session_state or str(provider_id) != session_provider_id:
@@ -1358,34 +1306,28 @@ def oauth_callback(request, provider_id):
             error_msg += f" (State mismatch: {state[:20]}... != {session_state[:20] if session_state else 'None'}...)"
         if str(provider_id) != session_provider_id:
             error_msg += f" (Provider mismatch: {provider_id} != {session_provider_id})"
-        print(error_msg, file=sys.stderr)
         logger.warning(error_msg)
         return HttpResponseForbidden(error_msg)
 
     # Clean up session state
     del request.session['oauth_state']
     del request.session['oauth_provider_id']
-    print("Session state cleaned up", file=sys.stderr)
     logger.info("Session state cleaned up")
 
     # Get authorization code
     code = request.GET.get('code')
-    print(f"Authorization code from URL: {code[:20] if code else 'MISSING'}...", file=sys.stderr)
     logger.info(f"Authorization code from URL: {code[:20] if code else 'MISSING'}...")
 
     if not code:
         error_msg = "Authorization code not provided."
-        print(error_msg, file=sys.stderr)
         logger.error(error_msg)
         return HttpResponseForbidden(error_msg)
 
     try:
         provider = IdentityProvider.objects.get(id=provider_id, disabled=False)
-        print(f"Provider found: {provider.name}", file=sys.stderr)
         logger.info(f"Provider found: {provider.name}")
     except IdentityProvider.DoesNotExist:
         error_msg = "Identity provider not found or disabled."
-        print(error_msg, file=sys.stderr)
         logger.error(error_msg)
         return HttpResponseForbidden(error_msg)
 
@@ -1413,22 +1355,18 @@ def oauth_callback(request, provider_id):
         'client_secret': provider.client_secret,
     }
 
-    print(f"Token redirect_uri: {token_redirect_uri}", file=sys.stderr)
     logger.info(f"Token redirect_uri: {token_redirect_uri}")
 
-    print(f"Exchanging code for tokens at: {provider.token_url}", file=sys.stderr)
     logger.info(f"Exchanging code for tokens at: {provider.token_url}")
 
     try:
         token_response = requests.post(provider.token_url, data=token_data)
-        print(f"Token response status: {token_response.status_code}", file=sys.stderr)
         logger.info(f"Token response status: {token_response.status_code}")
 
         token_response.raise_for_status()
         tokens = token_response.json()
         access_token = tokens.get('access_token')
         id_token = tokens.get('id_token')
-        print(f"Got access_token: {bool(access_token)}, id_token: {bool(id_token)}", file=sys.stderr)
         logger.info(f"Got access_token: {bool(access_token)}, id_token: {bool(id_token)}")
 
         # Fetch user info (try userinfo endpoint or decode ID token)
@@ -1436,7 +1374,6 @@ def oauth_callback(request, provider_id):
 
         # Try to get userinfo from ID token (JWT)
         if id_token:
-            print("Attempting to decode ID token", file=sys.stderr)
             logger.info("Attempting to decode ID token")
             # Simple JWT decode (not verifying signature for simplicity)
             # In production, you should verify the signature
@@ -1450,29 +1387,23 @@ def oauth_callback(request, provider_id):
                 if padding != 4:
                     payload += '=' * padding
                 user_info = json.loads(base64.urlsafe_b64decode(payload))
-                print(f"Decoded user info from ID token: {list(user_info.keys())}", file=sys.stderr)
                 logger.info(f"Decoded user info from ID token: {list(user_info.keys())}")
 
         # If no user info from ID token, try a userinfo endpoint (common pattern)
         if not user_info and access_token:
-            print("Attempting to get user info from userinfo endpoint", file=sys.stderr)
             logger.info("Attempting to get user info from userinfo endpoint")
             # Try common userinfo endpoint pattern
             userinfo_url = provider.authorization_url.replace('/authorize', '/userinfo').replace('/oauth/authorize', '/oauth/userinfo')
-            print(f"Userinfo URL: {userinfo_url}", file=sys.stderr)
             logger.info(f"Userinfo URL: {userinfo_url}")
             headers = {'Authorization': f'Bearer {access_token}'}
             userinfo_response = requests.get(userinfo_url, headers=headers)
-            print(f"Userinfo response status: {userinfo_response.status_code}", file=sys.stderr)
             logger.info(f"Userinfo response status: {userinfo_response.status_code}")
             if userinfo_response.status_code == 200:
                 user_info = userinfo_response.json()
-                print(f"Got user info: {list(user_info.keys())}", file=sys.stderr)
                 logger.info(f"Got user info: {list(user_info.keys())}")
 
         if not user_info:
             error_msg = "Could not retrieve user information from provider."
-            print(error_msg, file=sys.stderr)
             logger.error(error_msg)
             return HttpResponseForbidden(error_msg)
 
@@ -1492,12 +1423,10 @@ def oauth_callback(request, provider_id):
         email = get_nested_value(user_info, provider.email_path)
         name = get_nested_value(user_info, provider.name_path) if provider.name_path else None
 
-        print(f"Extracted from provider: external_id={external_id}, email={email}, name={name}", file=sys.stderr)
         logger.info(f"Extracted from provider: external_id={external_id}, email={email}, name={name}")
 
         if not external_id or not email:
             error_msg = "Could not extract required user information (identity or email)."
-            print(error_msg, file=sys.stderr)
             logger.error(error_msg)
             return HttpResponseForbidden(error_msg)
 
@@ -1508,7 +1437,6 @@ def oauth_callback(request, provider_id):
             external_provider_id=external_id
         ).first()
 
-        print(f"Primary lookup (provider+external_id): {'Found' if user else 'Not found'}", file=sys.stderr)
         logger.info(f"Primary lookup (provider+external_id): {'Found' if user else 'Not found'}")
 
         if not user:
@@ -1516,16 +1444,13 @@ def oauth_callback(request, provider_id):
             user = User.objects.filter(email=email).first()
 
             if user:
-                print(f"Secondary lookup (email): Found user {user.username}", file=sys.stderr)
                 logger.info(f"Secondary lookup (email): Found user {user.username}")
                 # Link existing user to provider
                 user.identity_provider = provider
                 user.external_provider_id = external_id
-                print(f"Linking existing user {user.username} to provider", file=sys.stderr)
                 logger.info(f"Linking existing user {user.username} to provider")
             elif provider.auto_provision_users:
                 # Step 3: Create new user if auto-provisioning is enabled
-                print("Creating new user (auto-provisioning enabled)", file=sys.stderr)
                 logger.info("Creating new user (auto-provisioning enabled)")
 
                 # Generate username from email or external_id
@@ -1556,7 +1481,6 @@ def oauth_callback(request, provider_id):
         if name:
             user.name = name
         user.save()
-        print(f"Synced user info: email={email}, name={name}", file=sys.stderr)
         logger.info(f"Synced user info: email={email}, name={name}")
 
         # Check if user is disabled
@@ -1566,24 +1490,23 @@ def oauth_callback(request, provider_id):
         # Log the user in
         request.session['user_id'] = str(user.id)
         request.session['username'] = user.username
+        request.session['user_email'] = user.email
+        request.session['user_name'] = user.name
         request.session['is_admin'] = user.is_admin()
 
         # Set session expiry
         session_settings = SessionSettings.get_settings()
         request.session.set_expiry(session_settings.session_timeout_minutes * 60)
 
-        print("Successfully authenticated user, redirecting to home", file=sys.stderr)
         logger.info("Successfully authenticated user, redirecting to home")
         return redirect('home')
 
     except requests.RequestException as e:
         error_msg = f"Error communicating with identity provider: {str(e)}"
-        print(error_msg, file=sys.stderr)
         logger.error(error_msg, exc_info=True)
         return HttpResponseForbidden(error_msg)
     except Exception as e:
         error_msg = f"Error processing authentication: {str(e)}"
-        print(error_msg, file=sys.stderr)
         logger.error(error_msg, exc_info=True)
         return HttpResponseForbidden(error_msg)
 

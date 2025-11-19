@@ -85,10 +85,41 @@
                     </div>
                     {% endif %}
 
-                    <!-- Logout Button -->
-                    <a href="{% url 'logout' %}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                        Logout
-                    </a>
+                    <!-- Current User Dropdown -->
+                    <div class="relative group">
+                        <button class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500">
+                            {{ request.session.username }}
+                            <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+                            </svg>
+                        </button>
+                        <div class="hidden group-hover:block absolute right-0 mt-0 w-64 bg-white rounded-md shadow-lg z-50 py-2">
+                            <div class="px-4 py-3 border-b border-gray-200">
+                                <div class="text-sm font-semibold text-gray-900">{{ request.session.username }}</div>
+                            </div>
+                            <!-- User Info Section -->
+                            <div class="px-4 py-2 space-y-2">
+                                <div>
+                                    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Username</div>
+                                    <div class="text-sm text-gray-900">{{ request.session.username }}</div>
+                                </div>
+                                <div>
+                                    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Email</div>
+                                    <div class="text-sm text-gray-900">{{ request.session.user_email }}</div>
+                                </div>
+                                <div>
+                                    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">Name</div>
+                                    <div class="text-sm text-gray-900">{{ request.session.user_name }}</div>
+                                </div>
+                            </div>
+                            <!-- Logout Action -->
+                            <div class="border-t border-gray-200 py-2">
+                                <a href="{% url 'logout' %}" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium">
+                                    Logout
+                                </a>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
