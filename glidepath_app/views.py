@@ -1327,15 +1327,40 @@ def oauth_callback(request, provider_id):
     import urllib.parse
     import requests
     import json
+    import logging
+    import sys
     from django.contrib.auth.hashers import make_password
+
+    logger = logging.getLogger(__name__)
+
+    print("=== OAuth Callback Initiated ===", file=sys.stderr)
+    logger.info("=== OAuth Callback Initiated ===")
+    print(f"Provider ID from URL: {provider_id}", file=sys.stderr)
+    logger.info(f"Provider ID from URL: {provider_id}")
 
     # Verify state to prevent CSRF
     state = request.GET.get('state')
     session_state = request.session.get('oauth_state')
     session_provider_id = request.session.get('oauth_provider_id')
 
+    print(f"State from URL: {state[:20] if state else 'MISSING'}...", file=sys.stderr)
+    logger.info(f"State from URL: {state[:20] if state else 'MISSING'}...")
+    print(f"State from session: {session_state[:20] if session_state else 'MISSING'}...", file=sys.stderr)
+    logger.info(f"State from session: {session_state[:20] if session_state else 'MISSING'}...")
+    print(f"Provider ID from session: {session_provider_id}", file=sys.stderr)
+    logger.info(f"Provider ID from session: {session_provider_id}")
+
     if not state or state != session_state or str(provider_id) != session_provider_id:
-        return HttpResponseForbidden("Invalid state parameter or provider mismatch.")
+        error_msg = "Invalid state parameter or provider mismatch."
+        if not state:
+            error_msg += " (Missing state in URL)"
+        elif state != session_state:
+            error_msg += f" (State mismatch: {state[:20]}... != {session_state[:20] if session_state else 'None'}...)"
+        if str(provider_id) != session_provider_id:
+            error_msg += f" (Provider mismatch: {provider_id} != {session_provider_id})"
+        print(error_msg, file=sys.stderr)
+        logger.warning(error_msg)
+        return HttpResponseForbidden(error_msg)
 
     # Clean up session state
     del request.session['oauth_state']

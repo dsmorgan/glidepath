@@ -20,8 +20,11 @@ class AuthenticationMiddleware:
         is_public = request.path in public_paths
 
         # Allow all OAuth/OIDC endpoints without authentication
-        # These are needed for users to initiate login
+        # These are needed for users to initiate login and handle callbacks
         if request.path.startswith('/auth/idp/') and '/oidc/' in request.path:
+            is_public = True
+        # Also allow with trailing slash
+        if request.path.rstrip('/').startswith('/auth/idp/') and '/oidc/' in request.path:
             is_public = True
 
         if not is_public:
