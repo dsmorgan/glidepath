@@ -5,7 +5,7 @@ from django.urls import reverse
 
 
 class AuthenticationMiddleware:
-    """Middleware to enforce authentication on all views except login."""
+    """Middleware to enforce authentication on all views except login and OAuth."""
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -17,7 +17,14 @@ class AuthenticationMiddleware:
         ]
 
         # Check if current path requires authentication
-        if request.path not in public_paths:
+        is_public = request.path in public_paths
+
+        # Allow all OAuth/OIDC endpoints without authentication
+        # These are needed for users to initiate login
+        if request.path.startswith('/auth/idp/') and '/oidc/' in request.path:
+            is_public = True
+
+        if not is_public:
             # Check if user is authenticated
             if not request.session.get('user_id'):
                 # Redirect to login page

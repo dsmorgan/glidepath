@@ -1164,19 +1164,35 @@ def oauth_login(request, provider_id):
     import urllib.parse
     import secrets
     import logging
+    import sys
 
     logger = logging.getLogger(__name__)
 
-    logger.info(f"=== OAuth Login Initiated ===")
-    logger.info(f"Provider ID: {provider_id}")
-    logger.info(f"Request Host: {request.get_host()}")
-    logger.info(f"Request is_secure: {request.is_secure()}")
+    # Use both logging and print to ensure output appears
+    msg = f"=== OAuth Login Initiated ==="
+    print(msg, file=sys.stderr)
+    logger.info(msg)
+
+    msg = f"Provider ID: {provider_id}"
+    print(msg, file=sys.stderr)
+    logger.info(msg)
+
+    msg = f"Request Host: {request.get_host()}"
+    print(msg, file=sys.stderr)
+    logger.info(msg)
+
+    msg = f"Request is_secure: {request.is_secure()}"
+    print(msg, file=sys.stderr)
+    logger.info(msg)
 
     try:
         provider = IdentityProvider.objects.get(id=provider_id, disabled=False)
-        logger.info(f"Provider found: {provider.name}")
+        msg = f"Provider found: {provider.name}"
+        print(msg, file=sys.stderr)
+        logger.info(msg)
     except IdentityProvider.DoesNotExist:
         error_msg = f"Identity provider {provider_id} not found or disabled."
+        print(error_msg, file=sys.stderr)
         logger.warning(f"OAuth login attempt: {error_msg}")
         return render(request, "glidepath_app/login.html", {
             'error': error_msg,
@@ -1184,13 +1200,22 @@ def oauth_login(request, provider_id):
         })
 
     # Log raw provider configuration
+    print("Provider configuration:", file=sys.stderr)
     logger.info(f"Provider configuration:")
+    print(f"  - name: {provider.name}", file=sys.stderr)
     logger.info(f"  - name: {provider.name}")
+    print(f"  - authorization_url: {provider.authorization_url}", file=sys.stderr)
     logger.info(f"  - authorization_url: {provider.authorization_url}")
+    print(f"  - token_url: {provider.token_url}", file=sys.stderr)
     logger.info(f"  - token_url: {provider.token_url}")
-    logger.info(f"  - client_id: {provider.client_id[:20]}..." if len(provider.client_id) > 20 else f"  - client_id: {provider.client_id}")
+    client_id_display = f"{provider.client_id[:20]}..." if len(provider.client_id) > 20 else provider.client_id
+    print(f"  - client_id: {client_id_display}", file=sys.stderr)
+    logger.info(f"  - client_id: {client_id_display}")
+    print(f"  - scopes: {provider.scopes}", file=sys.stderr)
     logger.info(f"  - scopes: {provider.scopes}")
+    print(f"  - redirect_url: {provider.redirect_url}", file=sys.stderr)
     logger.info(f"  - redirect_url: {provider.redirect_url}")
+    print(f"  - disabled: {provider.disabled}", file=sys.stderr)
     logger.info(f"  - disabled: {provider.disabled}")
 
     # Validate required configuration
@@ -1206,6 +1231,7 @@ def oauth_login(request, provider_id):
 
     if validation_errors:
         error_msg = f"Identity provider '{provider.name}' is misconfigured: {'; '.join(validation_errors)}"
+        print(error_msg, file=sys.stderr)
         logger.error(f"OAuth login attempt: {error_msg}")
         return render(request, "glidepath_app/login.html", {
             'error': error_msg,
@@ -1217,16 +1243,22 @@ def oauth_login(request, provider_id):
     request.session['oauth_state'] = state
     request.session['oauth_provider_id'] = str(provider.id)
     request.session.save()  # Explicitly save session before redirect
-    logger.info(f"Session state saved with state token: {state[:20]}...")
+    msg = f"Session state saved with state token: {state[:20]}..."
+    print(msg, file=sys.stderr)
+    logger.info(msg)
 
     # Build authorization URL
     redirect_uri = provider.redirect_url.replace('<glidepath fqdn>', request.get_host())
-    logger.info(f"Initial redirect_uri: {redirect_uri}")
+    msg = f"Initial redirect_uri: {redirect_uri}"
+    print(msg, file=sys.stderr)
+    logger.info(msg)
 
     # Handle HTTPS protocol
     if request.is_secure():
         redirect_uri = redirect_uri.replace('http://', 'https://')
-        logger.info(f"HTTPS detected, redirect_uri updated to: {redirect_uri}")
+        msg = f"HTTPS detected, redirect_uri updated to: {redirect_uri}"
+        print(msg, file=sys.stderr)
+        logger.info(msg)
 
     params = {
         'client_id': provider.client_id,
@@ -1236,21 +1268,37 @@ def oauth_login(request, provider_id):
         'state': state,
     }
 
+    print("OAuth parameters:", file=sys.stderr)
     logger.info(f"OAuth parameters:")
-    logger.info(f"  - client_id: {params['client_id'][:20]}...")
-    logger.info(f"  - redirect_uri: {params['redirect_uri']}")
-    logger.info(f"  - response_type: {params['response_type']}")
-    logger.info(f"  - scope: {params['scope']}")
-    logger.info(f"  - state: {params['state'][:20]}...")
+    for key, value in params.items():
+        if key in ['client_id', 'state']:
+            display_value = f"{value[:20]}..." if len(value) > 20 else value
+        else:
+            display_value = value
+        print(f"  - {key}: {display_value}", file=sys.stderr)
+        logger.info(f"  - {key}: {display_value}")
 
     auth_url = f"{provider.authorization_url}?{urllib.parse.urlencode(params)}"
-    logger.info(f"Constructed auth_url: {auth_url}")
-    logger.info(f"Redirecting to OAuth provider: {provider.name}")
+    msg = f"Constructed auth_url: {auth_url}"
+    print(msg, file=sys.stderr)
+    logger.info(msg)
+
+    msg = f"Redirecting to OAuth provider: {provider.name}"
+    print(msg, file=sys.stderr)
+    logger.info(msg)
+
+    print("=== OAuth Login Redirect ===", file=sys.stderr)
     logger.info(f"=== OAuth Login Redirect ===")
 
     response = redirect(auth_url)
-    logger.info(f"Redirect response status: {response.status_code}")
-    logger.info(f"Redirect response location: {response.get('Location', 'NOT SET')}")
+    msg = f"Redirect response status: {response.status_code}"
+    print(msg, file=sys.stderr)
+    logger.info(msg)
+
+    msg = f"Redirect response location: {response.get('Location', 'NOT SET')}"
+    print(msg, file=sys.stderr)
+    logger.info(msg)
+
     return response
 
 
