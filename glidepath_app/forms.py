@@ -215,7 +215,7 @@ class IdentityProviderForm(forms.ModelForm):
     class Meta:
         model = IdentityProvider
         fields = [
-            'name', 'type', 'redirect_url', 'auto_provision_users', 'disabled',
+            'name', 'type', 'auto_provision_users', 'disabled',
             'client_id', 'client_secret', 'authorization_url', 'token_url',
             'identity_path', 'email_path', 'name_path', 'scopes'
         ]
@@ -227,10 +227,6 @@ class IdentityProviderForm(forms.ModelForm):
             'type': forms.Select(attrs={
                 'class': 'w-full border border-gray-300 rounded-md p-2'
             }, choices=IdentityProvider.PROVIDER_TYPE_CHOICES),
-            'redirect_url': forms.URLInput(attrs={
-                'class': 'w-full border border-gray-300 rounded-md p-2',
-                'placeholder': 'https://yourdomain.com/callback'
-            }),
             'auto_provision_users': forms.CheckboxInput(attrs={
                 'class': 'ml-2'
             }),

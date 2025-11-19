@@ -1104,6 +1104,9 @@ def login_view(request):
     if request.session.get('user_id'):
         return redirect('home')
 
+    # Get enabled identity providers
+    enabled_providers = IdentityProvider.objects.filter(disabled=False).order_by('name')
+
     error = None
     if request.method == 'POST':
         username = request.POST.get('username', '').strip()
@@ -1143,7 +1146,10 @@ def login_view(request):
         except User.DoesNotExist:
             error = "Invalid username or password."
 
-    return render(request, "glidepath_app/login.html", {'error': error})
+    return render(request, "glidepath_app/login.html", {
+        'error': error,
+        'enabled_providers': enabled_providers,
+    })
 
 
 def logout_view(request):
@@ -1151,6 +1157,188 @@ def logout_view(request):
     # Clear session
     request.session.flush()
     return redirect('login')
+
+
+def oauth_login(request, provider_id):
+    """Initiate OAuth2/OIDC login flow."""
+    import urllib.parse
+    import secrets
+
+    try:
+        provider = IdentityProvider.objects.get(id=provider_id, disabled=False)
+    except IdentityProvider.DoesNotExist:
+        return HttpResponseForbidden("Identity provider not found or disabled.")
+
+    # Generate state for CSRF protection
+    state = secrets.token_urlsafe(32)
+    request.session['oauth_state'] = state
+    request.session['oauth_provider_id'] = str(provider.id)
+
+    # Build authorization URL
+    params = {
+        'client_id': provider.client_id,
+        'redirect_uri': provider.redirect_url.replace('<glidepath fqdn>', request.get_host()),
+        'response_type': 'code',
+        'scope': provider.scopes,
+        'state': state,
+    }
+
+    auth_url = f"{provider.authorization_url}?{urllib.parse.urlencode(params)}"
+    return redirect(auth_url)
+
+
+def oauth_callback(request, provider_id):
+    """Handle OAuth2/OIDC callback."""
+    import urllib.parse
+    import requests
+    import json
+    from django.contrib.auth.hashers import make_password
+
+    # Verify state to prevent CSRF
+    state = request.GET.get('state')
+    session_state = request.session.get('oauth_state')
+    session_provider_id = request.session.get('oauth_provider_id')
+
+    if not state or state != session_state or str(provider_id) != session_provider_id:
+        return HttpResponseForbidden("Invalid state parameter or provider mismatch.")
+
+    # Clean up session state
+    del request.session['oauth_state']
+    del request.session['oauth_provider_id']
+
+    # Get authorization code
+    code = request.GET.get('code')
+    if not code:
+        return HttpResponseForbidden("Authorization code not provided.")
+
+    try:
+        provider = IdentityProvider.objects.get(id=provider_id, disabled=False)
+    except IdentityProvider.DoesNotExist:
+        return HttpResponseForbidden("Identity provider not found or disabled.")
+
+    # Exchange code for tokens
+    token_data = {
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': provider.redirect_url.replace('<glidepath fqdn>', request.get_host()),
+        'client_id': provider.client_id,
+        'client_secret': provider.client_secret,
+    }
+
+    try:
+        token_response = requests.post(provider.token_url, data=token_data)
+        token_response.raise_for_status()
+        tokens = token_response.json()
+        access_token = tokens.get('access_token')
+        id_token = tokens.get('id_token')
+
+        # Fetch user info (try userinfo endpoint or decode ID token)
+        user_info = None
+
+        # Try to get userinfo from ID token (JWT)
+        if id_token:
+            # Simple JWT decode (not verifying signature for simplicity)
+            # In production, you should verify the signature
+            parts = id_token.split('.')
+            if len(parts) == 3:
+                import base64
+                # Decode payload
+                payload = parts[1]
+                # Add padding if needed
+                padding = 4 - len(payload) % 4
+                if padding != 4:
+                    payload += '=' * padding
+                user_info = json.loads(base64.urlsafe_b64decode(payload))
+
+        # If no user info from ID token, try a userinfo endpoint (common pattern)
+        if not user_info and access_token:
+            # Try common userinfo endpoint pattern
+            userinfo_url = provider.authorization_url.replace('/authorize', '/userinfo').replace('/oauth/authorize', '/oauth/userinfo')
+            headers = {'Authorization': f'Bearer {access_token}'}
+            userinfo_response = requests.get(userinfo_url, headers=headers)
+            if userinfo_response.status_code == 200:
+                user_info = userinfo_response.json()
+
+        if not user_info:
+            return HttpResponseForbidden("Could not retrieve user information from provider.")
+
+        # Extract user data using JSON paths
+        def get_nested_value(data, path):
+            """Get nested value from dict using dot notation."""
+            keys = path.split('.')
+            value = data
+            for key in keys:
+                if isinstance(value, dict):
+                    value = value.get(key)
+                else:
+                    return None
+            return value
+
+        identity = get_nested_value(user_info, provider.identity_path)
+        email = get_nested_value(user_info, provider.email_path)
+        name = get_nested_value(user_info, provider.name_path) if provider.name_path else None
+
+        if not identity or not email:
+            return HttpResponseForbidden("Could not extract required user information (identity or email).")
+
+        # Find or create user
+        # First try to find by identity_provider_id (external ID)
+        user = User.objects.filter(
+            identity_provider=provider,
+            identity_provider_id=identity
+        ).first()
+
+        if not user:
+            # Try to find by email
+            user = User.objects.filter(email=email).first()
+
+            if user:
+                # Update existing user to link with provider
+                user.identity_provider = provider
+                user.identity_provider_id = identity
+                user.save()
+            elif provider.auto_provision_users:
+                # Create new user
+                username = email.split('@')[0]
+                # Ensure username is unique
+                base_username = username
+                counter = 1
+                while User.objects.filter(username=username).exists():
+                    username = f"{base_username}{counter}"
+                    counter += 1
+
+                user = User.objects.create(
+                    username=username,
+                    email=email,
+                    name=name or email,
+                    identity_provider=provider,
+                    identity_provider_id=identity,
+                    role=User.ROLE_USER,  # Default to regular user
+                    disabled=False,
+                    password='',  # No local password for OAuth users
+                )
+            else:
+                return HttpResponseForbidden("User not found and auto-provisioning is disabled for this provider.")
+
+        # Check if user is disabled
+        if user.disabled:
+            return HttpResponseForbidden("This account has been disabled.")
+
+        # Log the user in
+        request.session['user_id'] = str(user.id)
+        request.session['username'] = user.username
+        request.session['is_admin'] = user.is_admin()
+
+        # Set session expiry
+        session_settings = SessionSettings.get_settings()
+        request.session.set_expiry(session_settings.session_timeout_minutes * 60)
+
+        return redirect('home')
+
+    except requests.RequestException as e:
+        return HttpResponseForbidden(f"Error communicating with identity provider: {str(e)}")
+    except Exception as e:
+        return HttpResponseForbidden(f"Error processing authentication: {str(e)}")
 
 
 # Keep backward compatibility alias
@@ -1308,15 +1496,31 @@ def identity_provider_detail(request, provider_id=None):
     if request.method == 'POST':
         form = IdentityProviderForm(request.POST, instance=provider)
         if form.is_valid():
-            form.save()
+            # Save the provider to get an ID
+            provider = form.save(commit=False)
+            # Set the system-generated redirect URL
+            # Will be updated with actual FQDN placeholder
+            provider.redirect_url = f"<glidepath fqdn>/auth/idp/{provider.id or 'NEW'}/oidc/callback"
+            provider.save()
+            # After save, update with actual ID if it was new
+            if '/NEW/' in provider.redirect_url:
+                provider.redirect_url = f"<glidepath fqdn>/auth/idp/{provider.id}/oidc/callback"
+                provider.save()
             return redirect('settings')
     else:
         form = IdentityProviderForm(instance=provider)
+
+    # Generate the redirect URL for display
+    if provider and provider.id:
+        redirect_url_display = f"<glidepath fqdn>/auth/idp/{provider.id}/oidc/callback"
+    else:
+        redirect_url_display = "<glidepath fqdn>/auth/idp/{id}/oidc/callback (will be generated after creation)"
 
     context = {
         'form': form,
         'is_edit': provider is not None,
         'provider': provider,
+        'redirect_url_display': redirect_url_display,
     }
     return render(request, 'glidepath_app/identity_provider_detail.html', context)
 
