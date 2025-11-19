@@ -1163,27 +1163,62 @@ def oauth_login(request, provider_id):
     """Initiate OAuth2/OIDC login flow."""
     import urllib.parse
     import secrets
+    import logging
+
+    logger = logging.getLogger(__name__)
 
     try:
         provider = IdentityProvider.objects.get(id=provider_id, disabled=False)
     except IdentityProvider.DoesNotExist:
-        return HttpResponseForbidden("Identity provider not found or disabled.")
+        error_msg = f"Identity provider {provider_id} not found or disabled."
+        logger.warning(f"OAuth login attempt: {error_msg}")
+        return render(request, "glidepath_app/login.html", {
+            'error': error_msg,
+            'enabled_providers': IdentityProvider.objects.filter(disabled=False).order_by('name'),
+        })
+
+    # Validate required configuration
+    validation_errors = []
+    if not provider.authorization_url:
+        validation_errors.append("Authorization URL not configured")
+    if not provider.client_id:
+        validation_errors.append("Client ID not configured")
+    if not provider.scopes:
+        validation_errors.append("Scopes not configured")
+    if not provider.redirect_url:
+        validation_errors.append("Redirect URL not configured")
+
+    if validation_errors:
+        error_msg = f"Identity provider '{provider.name}' is misconfigured: {'; '.join(validation_errors)}"
+        logger.error(f"OAuth login attempt: {error_msg}")
+        return render(request, "glidepath_app/login.html", {
+            'error': error_msg,
+            'enabled_providers': IdentityProvider.objects.filter(disabled=False).order_by('name'),
+        })
 
     # Generate state for CSRF protection
     state = secrets.token_urlsafe(32)
     request.session['oauth_state'] = state
     request.session['oauth_provider_id'] = str(provider.id)
+    request.session.save()  # Explicitly save session before redirect
 
     # Build authorization URL
+    redirect_uri = provider.redirect_url.replace('<glidepath fqdn>', request.get_host())
+
+    # Handle HTTPS protocol
+    if request.is_secure():
+        redirect_uri = redirect_uri.replace('http://', 'https://')
+
     params = {
         'client_id': provider.client_id,
-        'redirect_uri': provider.redirect_url.replace('<glidepath fqdn>', request.get_host()),
+        'redirect_uri': redirect_uri,
         'response_type': 'code',
         'scope': provider.scopes,
         'state': state,
     }
 
     auth_url = f"{provider.authorization_url}?{urllib.parse.urlencode(params)}"
+    logger.info(f"OAuth login redirecting to {provider.name}: {auth_url.split('?')[0]}")
     return redirect(auth_url)
 
 
