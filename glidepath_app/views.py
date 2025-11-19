@@ -1390,13 +1390,31 @@ def oauth_callback(request, provider_id):
         return HttpResponseForbidden(error_msg)
 
     # Exchange code for tokens
+    # Build redirect_uri with protocol (must match the one sent to authorization endpoint)
+    token_redirect_uri = provider.redirect_url.replace('<glidepath fqdn>', request.get_host())
+
+    # Determine protocol - same logic as oauth_login
+    protocol = 'https'
+    forwarded_proto = request.META.get('HTTP_X_FORWARDED_PROTO')
+    if forwarded_proto:
+        protocol = forwarded_proto
+    elif request.is_secure():
+        protocol = 'https'
+
+    # Add protocol if redirect_uri doesn't have one
+    if not token_redirect_uri.startswith(('http://', 'https://')):
+        token_redirect_uri = f"{protocol}://{token_redirect_uri}"
+
     token_data = {
         'grant_type': 'authorization_code',
         'code': code,
-        'redirect_uri': provider.redirect_url.replace('<glidepath fqdn>', request.get_host()),
+        'redirect_uri': token_redirect_uri,
         'client_id': provider.client_id,
         'client_secret': provider.client_secret,
     }
+
+    print(f"Token redirect_uri: {token_redirect_uri}", file=sys.stderr)
+    logger.info(f"Token redirect_uri: {token_redirect_uri}")
 
     print(f"Exchanging code for tokens at: {provider.token_url}", file=sys.stderr)
     logger.info(f"Exchanging code for tokens at: {provider.token_url}")
