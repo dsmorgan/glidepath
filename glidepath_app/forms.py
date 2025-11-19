@@ -270,8 +270,8 @@ class IdentityProviderForm(forms.ModelForm):
         labels = {
             'name': 'Provider Name',
             'type': 'Provider Type',
-            'redirect_url': 'Redirect URL',
             'auto_provision_users': 'Auto Provision Users',
+            'disabled': 'Disabled',
             'client_id': 'Client ID',
             'client_secret': 'Client Secret',
             'authorization_url': 'Authorization URL',
@@ -285,7 +285,6 @@ class IdentityProviderForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['name_path'].required = False
-        self.fields['redirect_url'].required = False
 
 
 class PortfolioForm(forms.ModelForm):
