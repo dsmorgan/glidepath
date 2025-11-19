@@ -1253,10 +1253,30 @@ def oauth_login(request, provider_id):
     print(msg, file=sys.stderr)
     logger.info(msg)
 
-    # Handle HTTPS protocol
-    if request.is_secure():
-        redirect_uri = redirect_uri.replace('http://', 'https://')
-        msg = f"HTTPS detected, redirect_uri updated to: {redirect_uri}"
+    # Determine protocol - check X-Forwarded-Proto header first (set by reverse proxies)
+    # Fall back to request.is_secure() if behind proxy, default to https
+    protocol = 'https'
+    forwarded_proto = request.META.get('HTTP_X_FORWARDED_PROTO')
+    if forwarded_proto:
+        protocol = forwarded_proto
+        msg = f"Protocol from X-Forwarded-Proto header: {protocol}"
+        print(msg, file=sys.stderr)
+        logger.info(msg)
+    elif request.is_secure():
+        protocol = 'https'
+        msg = f"Protocol from request.is_secure(): {protocol}"
+        print(msg, file=sys.stderr)
+        logger.info(msg)
+    else:
+        # Default to https for OAuth (assume behind reverse proxy if is_secure is False)
+        msg = f"Using default protocol: {protocol} (assuming reverse proxy)"
+        print(msg, file=sys.stderr)
+        logger.info(msg)
+
+    # Add protocol if redirect_uri doesn't have one
+    if not redirect_uri.startswith(('http://', 'https://')):
+        redirect_uri = f"{protocol}://{redirect_uri}"
+        msg = f"Added protocol, redirect_uri updated to: {redirect_uri}"
         print(msg, file=sys.stderr)
         logger.info(msg)
 
