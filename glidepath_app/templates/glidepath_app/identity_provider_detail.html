@@ -68,14 +68,30 @@
 
                 <!-- URLs -->
                 <div class="space-y-4">
+                    <!-- Redirect URL (System-Generated, Read-Only) -->
                     <div>
-                        <label for="{{ form.redirect_url.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
-                            {{ form.redirect_url.label }}
+                        <label class="block text-sm font-medium text-gray-700 mb-1">
+                            Redirect URL (Callback URL)
                         </label>
-                        {{ form.redirect_url }}
-                        {% if form.redirect_url.errors %}
-                        <p class="text-red-600 text-sm mt-1">{{ form.redirect_url.errors.0 }}</p>
-                        {% endif %}
+                        <div class="flex gap-2">
+                            <input
+                                type="text"
+                                id="redirect_url_display"
+                                value="{{ redirect_url_display }}"
+                                readonly
+                                class="flex-1 border border-gray-300 rounded-md p-2 bg-gray-100 text-gray-600"
+                            />
+                            <button
+                                type="button"
+                                onclick="copyRedirectUrl()"
+                                class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 whitespace-nowrap"
+                            >
+                                Copy
+                            </button>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">
+                            This is the callback URL you need to configure in your identity provider. Copy this URL and paste it into your IdP's redirect/callback URL settings.
+                        </p>
                     </div>
 
                     <div>
@@ -154,25 +170,43 @@
             </div>
         </div>
 
-        <!-- User Provisioning -->
+        <!-- User Provisioning & Provider Status -->
         <div class="border border-gray-300 rounded-lg p-6 bg-gray-50">
-            <h2 class="text-xl font-semibold text-gray-900 mb-4">User Provisioning</h2>
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">User Provisioning & Provider Status</h2>
 
-            <div class="flex items-center">
-                <input
-                    type="checkbox"
-                    name="auto_provision_users"
-                    id="id_auto_provision_users"
-                    {% if form.auto_provision_users.value %}checked{% endif %}
-                    class="w-4 h-4 text-indigo-600 bg-white border-gray-300 rounded"
-                />
-                <label for="id_auto_provision_users" class="ml-3 block text-sm font-medium text-gray-700">
-                    {{ form.auto_provision_users.label }}
-                </label>
+            <div class="space-y-4">
+                <div class="flex items-center">
+                    <input
+                        type="checkbox"
+                        name="auto_provision_users"
+                        id="id_auto_provision_users"
+                        {% if form.auto_provision_users.value %}checked{% endif %}
+                        class="w-4 h-4 text-indigo-600 bg-white border-gray-300 rounded"
+                    />
+                    <label for="id_auto_provision_users" class="ml-3 block text-sm font-medium text-gray-700">
+                        {{ form.auto_provision_users.label }}
+                    </label>
+                </div>
+                <p class="text-xs text-gray-500">
+                    When enabled, users logging in with this provider will be automatically created if they don't already exist.
+                </p>
+
+                <div class="flex items-center mt-4">
+                    <input
+                        type="checkbox"
+                        name="disabled"
+                        id="id_disabled"
+                        {% if form.disabled.value %}checked{% endif %}
+                        class="w-4 h-4 text-indigo-600 bg-white border-gray-300 rounded"
+                    />
+                    <label for="id_disabled" class="ml-3 block text-sm font-medium text-gray-700">
+                        {{ form.disabled.label }}
+                    </label>
+                </div>
+                <p class="text-xs text-gray-500">
+                    When disabled, users will not be able to sign in using this identity provider.
+                </p>
             </div>
-            <p class="text-xs text-gray-500 mt-2">
-                When enabled, users logging in with this provider will be automatically created if they don't already exist.
-            </p>
         </div>
 
         <!-- Form Errors -->
@@ -197,4 +231,30 @@
         </div>
     </form>
 </div>
+
+<script>
+function copyRedirectUrl() {
+    const input = document.getElementById('redirect_url_display');
+    input.select();
+    input.setSelectionRange(0, 99999); // For mobile devices
+
+    // Copy to clipboard
+    navigator.clipboard.writeText(input.value).then(function() {
+        // Visual feedback
+        const button = event.target;
+        const originalText = button.textContent;
+        button.textContent = 'Copied!';
+        button.classList.add('bg-green-600');
+        button.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+
+        setTimeout(function() {
+            button.textContent = originalText;
+            button.classList.remove('bg-green-600');
+            button.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+        }, 2000);
+    }, function(err) {
+        alert('Failed to copy: ' + err);
+    });
+}
+</script>
 {% endblock %}

@@ -18,6 +18,8 @@ from glidepath_app.views import (
     settings_view,
     login_view,
     logout_view,
+    oauth_login,
+    oauth_callback,
     export_rules,
     query_ticker,
     fund_detail,
@@ -34,6 +36,8 @@ from glidepath_app.views import (
 urlpatterns = [
     path('login/', login_view, name='login'),
     path('logout/', logout_view, name='logout'),
+    path('auth/idp/<uuid:provider_id>/oidc/login/', oauth_login, name='oauth_login'),
+    path('auth/idp/<uuid:provider_id>/oidc/callback/', oauth_callback, name='oauth_callback'),
     path('', home, name='home'),
     path('rules/', rules_view, name='rules'),
     path('funds/', funds_view, name='funds'),

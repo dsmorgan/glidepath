@@ -96,7 +96,11 @@
                         {% endfor %}
                     </td>
                     <td class="px-4 py-3 text-sm text-gray-700">
-                        {% if provider.disabled %}Yes{% else %}No{% endif %}
+                        {% if provider.disabled %}
+                        <span class="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-semibold">Yes</span>
+                        {% else %}
+                        <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-semibold">No</span>
+                        {% endif %}
                     </td>
                     <td class="px-4 py-3 text-sm text-gray-700 space-x-2">
                         <a href="{% url 'identity_provider_edit' provider.id %}" class="text-indigo-600 hover:text-indigo-900">Edit</a>
