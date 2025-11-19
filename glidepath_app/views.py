@@ -1142,6 +1142,9 @@ def login_view(request):
                     # Session expires when browser closes
                     request.session.set_expiry(0)
 
+                # Explicitly save the session
+                request.session.save()
+
                 # Redirect to home
                 return redirect('home')
             else:
@@ -1499,6 +1502,9 @@ def oauth_callback(request, provider_id):
         # Set session expiry
         session_settings = SessionSettings.get_settings()
         request.session.set_expiry(session_settings.session_timeout_minutes * 60)
+
+        # Explicitly save the session
+        request.session.save()
 
         logger.info("Successfully authenticated user, redirecting to home")
         return redirect('home')
