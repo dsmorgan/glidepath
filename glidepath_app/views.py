@@ -1130,6 +1130,7 @@ def login_view(request):
                 request.session['username'] = user.username
                 request.session['user_email'] = user.email
                 request.session['user_name'] = user.name
+                request.session['identity_provider_name'] = user.identity_provider.name if user.identity_provider else ''
                 request.session['is_admin'] = user.is_admin()
 
                 # Set session expiry based on remember me
@@ -1492,6 +1493,7 @@ def oauth_callback(request, provider_id):
         request.session['username'] = user.username
         request.session['user_email'] = user.email
         request.session['user_name'] = user.name
+        request.session['identity_provider_name'] = provider.name
         request.session['is_admin'] = user.is_admin()
 
         # Set session expiry
