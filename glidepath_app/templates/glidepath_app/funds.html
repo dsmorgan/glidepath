@@ -4,6 +4,12 @@
 <div class="bg-white shadow rounded-lg p-6">
     <h1 class="text-2xl font-bold text-gray-900 mb-6">Fund Lookup</h1>
 
+    {% if not is_admin %}
+    <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
+        <p class="text-blue-700">Only Administrators can add, edit, or delete funds. You can query and view fund information.</p>
+    </div>
+    {% endif %}
+
     <p class="text-gray-700 mb-6">
         Query ticker information from multiple financial data sources. Configure your API keys in
         <a href="{% url 'settings' %}" class="text-indigo-600 hover:text-indigo-800 underline">Settings</a>
