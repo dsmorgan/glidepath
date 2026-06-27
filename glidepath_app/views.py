@@ -12,7 +12,7 @@ from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm,
 from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, AccountPosition, Portfolio, PortfolioItem, AssumptionUpload, AssumptionData, SessionSettings
 from .services import export_glidepath_rules, import_glidepath_rules, import_blackrock_assumptions
 from .ticker_service import query_ticker as query_ticker_service
-from .account_services import import_fidelity_csv, import_etrade_csv, get_portfolio_analysis, calculate_rebalance_recommendations
+from .account_services import import_fidelity_csv, import_etrade_csv, parse_nysaves_csv, get_portfolio_analysis, calculate_rebalance_recommendations
 from .decorators import admin_required
 
 DEFAULT_COLORS = [
@@ -413,6 +413,7 @@ def accounts_view(request):
     """Accounts management view - manage investment accounts."""
     error = None
     success = None
+    warning = None
 
     # Determine which user's data to show
     # Get the logged-in user
@@ -451,6 +452,16 @@ def accounts_view(request):
                 elif upload_type == 'etrade':
                     upload = import_etrade_csv(file_obj, current_user, filename)
                     success = f"Successfully uploaded {upload.entry_count} positions from {filename}"
+                elif upload_type == 'nysaves':
+                    result = parse_nysaves_csv(file_obj, current_user, filename)
+                    success = f"Successfully uploaded {result['matched']} position(s) from {filename}"
+                    if result['unmatched']:
+                        unmatched = sorted(set(result['unmatched']))
+                        warning = (
+                            f"{len(unmatched)} portfolio name(s) did not match a known "
+                            f"NYSaves fund and were skipped: {', '.join(unmatched)}. "
+                            "Fix the names and re-upload to include them."
+                        )
                 else:
                     error = f"Unsupported upload type: {upload_type}"
 
@@ -471,11 +482,25 @@ def accounts_view(request):
         'form': form,
         'error': error,
         'success': success,
+        'warning': warning,
         'uploads': uploads,
         'current_user': current_user,
     }
 
     return render(request, "glidepath_app/accounts.html", context)
+
+
+def nysaves_csv_template(request):
+    """Serve a downloadable starter CSV for NYSaves 529 holdings uploads."""
+    content = (
+        "Account Number,Account Name,Portfolio Name,Units,Unit Price,Current Value\n"
+        "NYS-001,Child 1 529,Growth Stock Index Portfolio,45.231,,\n"
+        "NYS-001,Child 1 529,Bond Market Index Portfolio,12.500,,\n"
+        "NYS-002,Child 2 529,Moderate Growth Portfolio,88.750,,\n"
+    )
+    response = HttpResponse(content, content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="nysaves-holdings-template.csv"'
+    return response
 
 
 def view_account_upload(request, upload_id):

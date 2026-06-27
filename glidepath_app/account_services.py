@@ -7,7 +7,10 @@ from decimal import Decimal
 from django.db import transaction
 from django.db.models import Sum, DecimalField
 from django.db.models.functions import Coalesce
-from .models import AccountUpload, AccountPosition, User, Portfolio, Fund
+from .models import (
+    AccountUpload, AccountPosition, User, Portfolio, Fund,
+    FundProvider, VirtualFund,
+)
 
 
 def normalize_symbol(symbol: str) -> str:
@@ -363,6 +366,153 @@ def import_etrade_csv(file_obj, user: User, filename: str) -> AccountUpload:
         )
 
     return upload
+
+
+def _parse_money(value: str):
+    """Parse a money/number string (stripping $ and commas) into a Decimal, or None."""
+    if value is None:
+        return None
+    cleaned = value.replace('$', '').replace(',', '').strip()
+    if not cleaned:
+        return None
+    try:
+        return Decimal(cleaned)
+    except Exception:
+        return None
+
+
+NYSAVES_CSV_COLUMNS = [
+    "Account Number", "Account Name", "Portfolio Name",
+    "Units", "Unit Price", "Current Value",
+]
+
+
+@transaction.atomic
+def parse_nysaves_csv(file_obj, user: User, filename: str) -> dict:
+    """
+    Import a NYSaves 529 holdings CSV (a purpose-built format, since NYSaves has
+    no export feature).
+
+    Expected columns: Account Number, Account Name, Portfolio Name, Units,
+    Unit Price (optional), Current Value (optional).
+
+    Each "Portfolio Name" is matched case-insensitively to a VirtualFund under the
+    NYSaves provider. When Unit Price is omitted, the most recent scraped unit
+    price for the matched fund is used; Current Value is derived (units x price)
+    when not supplied.
+
+    Returns a dict: {upload, matched (int), unmatched (list of raw portfolio names),
+    total_rows (int)}.
+
+    Raises:
+        ValueError: if the provider/catalog is missing, the file is malformed, or
+        no rows match a known NYSaves fund.
+    """
+    provider = FundProvider.objects.filter(slug='nysaves').first()
+    if provider is None:
+        raise ValueError(
+            "NYSaves provider is not configured. Run migrations to seed the fund catalog."
+        )
+
+    try:
+        content = file_obj.read()
+        if isinstance(content, bytes):
+            content = content.decode('utf-8-sig')
+    except Exception as e:
+        raise ValueError(f"Error reading file: {str(e)}")
+
+    reader = csv.DictReader(StringIO(content))
+    if not reader.fieldnames:
+        raise ValueError("CSV file is empty")
+
+    headers = {(h or '').strip() for h in reader.fieldnames}
+    missing = [c for c in ("Account Number", "Portfolio Name", "Units") if c not in headers]
+    if missing:
+        raise ValueError(f"NYSaves CSV is missing required column(s): {', '.join(missing)}")
+
+    # Case-insensitive lookup of NYSaves virtual funds by name.
+    fund_by_name = {
+        vf.name.strip().lower(): vf
+        for vf in VirtualFund.objects.filter(provider=provider)
+    }
+
+    matched_positions = []
+    unmatched = []
+    total_rows = 0
+
+    for row in reader:
+        portfolio_name = (row.get('Portfolio Name') or '').strip()
+        account_number = (row.get('Account Number') or '').strip()
+        if not portfolio_name and not account_number:
+            continue  # skip blank/footer rows
+        total_rows += 1
+
+        fund = fund_by_name.get(portfolio_name.lower())
+        if fund is None:
+            unmatched.append(portfolio_name)
+            continue
+
+        units = _parse_money(row.get('Units'))
+        unit_price = _parse_money(row.get('Unit Price'))
+        if unit_price is None:
+            unit_price = fund.unit_price  # fall back to latest scraped price (may be None)
+
+        current_value = _parse_money(row.get('Current Value'))
+        if current_value is None and units is not None and unit_price is not None:
+            current_value = units * unit_price
+
+        matched_positions.append({
+            'fund': fund,
+            'account_number': account_number,
+            'account_name': (row.get('Account Name') or '').strip(),
+            'quantity': str(units) if units is not None else (row.get('Units') or '').strip(),
+            'last_price': str(unit_price) if unit_price is not None else '',
+            'current_value': str(current_value) if current_value is not None else '',
+        })
+
+    if not matched_positions:
+        if unmatched:
+            raise ValueError(
+                "No portfolio names matched known NYSaves funds: "
+                + ", ".join(sorted(set(unmatched)))
+            )
+        raise ValueError("No valid position data found in NYSaves CSV file")
+
+    # Replace any prior upload of the same file (mirrors the other parsers).
+    AccountUpload.objects.filter(
+        user=user, upload_type='nysaves', filename=filename
+    ).delete()
+
+    upload = AccountUpload.objects.create(
+        user=user,
+        file_datetime="Manual NYSaves entry",
+        upload_type='nysaves',
+        account_type='education',
+        fund_provider=provider,
+        filename=filename,
+        entry_count=len(matched_positions),
+    )
+
+    for pos in matched_positions:
+        fund = pos['fund']
+        AccountPosition.objects.create(
+            upload=upload,
+            virtual_fund=fund,
+            account_number=pos['account_number'],
+            account_name=pos['account_name'],
+            symbol=fund.slug,
+            description=fund.name,
+            quantity=pos['quantity'],
+            last_price=pos['last_price'],
+            current_value=pos['current_value'],
+        )
+
+    return {
+        'upload': upload,
+        'matched': len(matched_positions),
+        'unmatched': unmatched,
+        'total_rows': total_rows,
+    }
 
 
 def get_portfolio_analysis(portfolio: Portfolio) -> dict:
