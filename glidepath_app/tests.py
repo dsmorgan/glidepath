@@ -9,7 +9,7 @@ from .services import export_glidepath_rules, import_glidepath_rules
 
 class ImportRulesTests(TestCase):
     def test_import_sample_csv(self):
-        sample = settings.BASE_DIR / "sample-glidepath-rule.csv"
+        sample = settings.BASE_DIR / "sample_input" / "sample-glidepath-rule.csv"
         with open(sample, "rb") as f:
             rs = import_glidepath_rules(f)
         self.assertTrue(GlidepathRule.objects.filter(ruleset=rs).exists())
