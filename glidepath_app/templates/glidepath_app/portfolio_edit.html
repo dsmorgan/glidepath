@@ -27,7 +27,7 @@
         <div class="bg-gray-50 border border-gray-300 rounded-lg p-6 mb-6">
             <h2 class="text-xl font-semibold text-gray-900 mb-4">Portfolio Configuration</h2>
 
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <!-- Portfolio Name -->
                 <div>
                     <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
@@ -36,6 +36,17 @@
                     {{ form.name }}
                     {% if form.name.errors %}
                     <p class="text-red-600 text-sm mt-1">{{ form.name.errors.0 }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Account Type -->
+                <div>
+                    <label for="{{ form.account_type.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                        {{ form.account_type.label }}
+                    </label>
+                    {{ form.account_type }}
+                    {% if form.account_type.errors %}
+                    <p class="text-red-600 text-sm mt-1">{{ form.account_type.errors.0 }}</p>
                     {% endif %}
                 </div>
 
@@ -49,8 +60,10 @@
                     <p class="text-red-600 text-sm mt-1">{{ form.ruleset.errors.0 }}</p>
                     {% endif %}
                 </div>
+            </div>
 
-                <!-- Year Born -->
+            <!-- Retirement fields (Account Type = Retirement) -->
+            <div class="js-retirement-fields grid grid-cols-1 md:grid-cols-4 gap-6 mt-6">
                 <div>
                     <label for="{{ form.year_born.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
                         {{ form.year_born.label }}
@@ -60,8 +73,6 @@
                     <p class="text-red-600 text-sm mt-1">{{ form.year_born.errors.0 }}</p>
                     {% endif %}
                 </div>
-
-                <!-- Retirement Age -->
                 <div>
                     <label for="{{ form.retirement_age.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
                         {{ form.retirement_age.label }}
@@ -72,6 +83,83 @@
                     {% endif %}
                 </div>
             </div>
+
+            <!-- Education fields (Account Type = Education / 529) -->
+            <div class="js-education-fields grid grid-cols-1 md:grid-cols-3 gap-6 mt-6 hidden">
+                <div>
+                    <label for="{{ form.years_to_enrollment.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                        {{ form.years_to_enrollment.label }}
+                    </label>
+                    {{ form.years_to_enrollment }}
+                    <p class="text-gray-500 text-xs mt-1">Negative = student already enrolled.</p>
+                    {% if form.years_to_enrollment.errors %}
+                    <p class="text-red-600 text-sm mt-1">{{ form.years_to_enrollment.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label for="{{ form.college_duration_years.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                        {{ form.college_duration_years.label }}
+                    </label>
+                    {{ form.college_duration_years }}
+                    {% if form.college_duration_years.errors %}
+                    <p class="text-red-600 text-sm mt-1">{{ form.college_duration_years.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label for="{{ form.annual_withdrawal.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                        {{ form.annual_withdrawal.label }}
+                    </label>
+                    {{ form.annual_withdrawal }}
+                    {% if form.annual_withdrawal.errors %}
+                    <p class="text-red-600 text-sm mt-1">{{ form.annual_withdrawal.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label for="{{ form.annual_contribution.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                        {{ form.annual_contribution.label }}
+                    </label>
+                    {{ form.annual_contribution }}
+                    {% if form.annual_contribution.errors %}
+                    <p class="text-red-600 text-sm mt-1">{{ form.annual_contribution.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label for="{{ form.return_assumption.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                        {{ form.return_assumption.label }}
+                    </label>
+                    {{ form.return_assumption }}
+                    {% if form.return_assumption.errors %}
+                    <p class="text-red-600 text-sm mt-1">{{ form.return_assumption.errors.0 }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <script>
+            (function () {
+                const at = document.getElementById('{{ form.account_type.id_for_label }}');
+                if (!at) return;
+                const retire = document.querySelector('.js-retirement-fields');
+                const edu = document.querySelector('.js-education-fields');
+                const ruleset = document.getElementById('{{ form.ruleset.id_for_label }}');
+                function apply() {
+                    const v = at.value;
+                    if (retire) retire.classList.toggle('hidden', v !== 'retirement');
+                    if (edu) edu.classList.toggle('hidden', v !== 'education');
+                    if (ruleset) {
+                        Array.from(ruleset.options).forEach(function (opt) {
+                            const t = opt.getAttribute('data-account-type');
+                            const show = !opt.value || !t || t === v;  // always keep the empty option
+                            opt.hidden = !show;
+                            opt.disabled = !show;
+                        });
+                        const sel = ruleset.selectedOptions[0];
+                        if (sel && sel.hidden) ruleset.value = '';
+                    }
+                }
+                at.addEventListener('change', apply);
+                apply();
+            })();
+            </script>
         </div>
 
         {% if accounts_data %}

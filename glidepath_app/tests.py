@@ -15,6 +15,7 @@ from .services import export_glidepath_rules, import_glidepath_rules
 from .account_services import (
     parse_nysaves_csv, get_portfolio_analysis, resolve_position_asset_categories,
 )
+from .forms import PortfolioForm
 from . import scraper_service
 
 
@@ -267,3 +268,45 @@ class PortfolioAnalysisTests(TestCase):
         self.assertEqual(a["years_to_retirement"], a["current_year"] - 1990 - 65)
         self.assertEqual(a["target_class_breakdown"], {"Stocks": 100.0})
         self.assertEqual(a["account_type"], "retirement")
+
+
+class PortfolioFormTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create(username="f", email="f@example.com")
+
+    def test_create_education_portfolio_saves_fields(self):
+        form = PortfolioForm(
+            {
+                "name": "Edu1", "account_type": "education",
+                "years_to_enrollment": "10", "annual_withdrawal": "30000",
+                "annual_contribution": "5000", "return_assumption": "6.00",
+            },
+            user=self.user,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        portfolio = form.save(commit=False)
+        portfolio.user = self.user
+        portfolio.save()
+        self.assertEqual(portfolio.account_type, "education")
+        self.assertEqual(portfolio.years_to_enrollment, 10)
+        self.assertEqual(portfolio.college_duration_years, 4)  # default applied when blank
+        self.assertEqual(portfolio.annual_withdrawal, Decimal("30000"))
+
+    def test_retirement_portfolio_does_not_require_education_fields(self):
+        form = PortfolioForm(
+            {"name": "Ret1", "account_type": "retirement",
+             "year_born": "1990", "retirement_age": "65"},
+            user=self.user,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        portfolio = form.save(commit=False)
+        portfolio.user = self.user
+        portfolio.save()
+        self.assertEqual(portfolio.account_type, "retirement")
+        self.assertEqual(portfolio.college_duration_years, 4)
+
+    def test_ruleset_options_tagged_with_account_type(self):
+        RuleSet.objects.create(name="edu-rs", account_type="education")
+        form = PortfolioForm(user=self.user)
+        html = str(form["ruleset"])
+        self.assertIn('data-account-type="education"', html)
