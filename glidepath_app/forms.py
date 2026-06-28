@@ -1,6 +1,14 @@
+from decimal import Decimal
 from django import forms
-from .models import APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, Portfolio, RuleSet, AssumptionUpload, SessionSettings
+from .models import (
+    APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload,
+    Portfolio, RuleSet, AssumptionUpload, SessionSettings,
+    FundProvider, VirtualFund, VirtualFundComposition,
+)
 from django.contrib.auth.hashers import make_password
+
+
+_INPUT = 'w-full border border-gray-300 rounded-md p-2'
 
 
 class GlidepathRuleUploadForm(forms.Form):
@@ -446,3 +454,90 @@ class SessionSettingsForm(forms.ModelForm):
         help_texts = {
             'session_timeout_minutes': 'Time before an inactive session expires (1-43200 minutes). Default: 360 (6 hours)',
         }
+
+
+class FundProviderForm(forms.ModelForm):
+    """Add/edit a virtual-fund provider (e.g. a 529 plan)."""
+
+    class Meta:
+        model = FundProvider
+        fields = ['name', 'slug', 'price_source_url', 'price_scraper', 'notes']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': _INPUT, 'placeholder': 'NY 529 Direct Plan'}),
+            'slug': forms.TextInput(attrs={'class': _INPUT, 'placeholder': 'nysaves'}),
+            'price_source_url': forms.URLInput(attrs={'class': _INPUT, 'placeholder': 'https://...'}),
+            'price_scraper': forms.TextInput(attrs={'class': _INPUT, 'placeholder': 'nysaves'}),
+            'notes': forms.Textarea(attrs={'class': _INPUT, 'rows': 2}),
+        }
+        labels = {
+            'price_source_url': 'Price Source URL',
+            'price_scraper': 'Scraper Identifier',
+        }
+        help_texts = {
+            'slug': 'Stable identifier used in URLs and uploads (e.g. nysaves).',
+            'price_scraper': 'Scraper key dispatched by scraper_service (e.g. nysaves). Leave blank if no scraper.',
+        }
+
+
+class VirtualFundForm(forms.ModelForm):
+    """Add/edit a virtual fund and its current price."""
+
+    class Meta:
+        model = VirtualFund
+        fields = ['provider', 'name', 'slug', 'unit_price', 'price_as_of', 'is_active', 'notes']
+        widgets = {
+            'provider': forms.Select(attrs={'class': _INPUT}),
+            'name': forms.TextInput(attrs={'class': _INPUT, 'placeholder': 'Growth Stock Index Portfolio'}),
+            'slug': forms.TextInput(attrs={'class': _INPUT, 'placeholder': 'growth-stock-index'}),
+            'unit_price': forms.NumberInput(attrs={'class': _INPUT, 'step': '0.0001'}),
+            'price_as_of': forms.DateInput(attrs={'class': _INPUT, 'type': 'date'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'ml-2'}),
+            'notes': forms.Textarea(attrs={'class': _INPUT, 'rows': 2}),
+        }
+        labels = {
+            'unit_price': 'Unit Price',
+            'price_as_of': 'Price As Of',
+            'is_active': 'Active',
+        }
+        help_texts = {
+            'slug': 'Unique per provider; used as the position symbol for uploads.',
+        }
+
+
+class BaseCompositionFormSet(forms.BaseInlineFormSet):
+    """Inline formset enforcing that a virtual fund's composition sums to 100%."""
+
+    def clean(self):
+        super().clean()
+        if any(self.errors):
+            return
+        total = Decimal('0')
+        rows = 0
+        for form in self.forms:
+            cd = getattr(form, 'cleaned_data', None)
+            if not cd or cd.get('DELETE'):
+                continue
+            if cd.get('asset_category') is None and cd.get('percentage') is None:
+                continue
+            rows += 1
+            pct = cd.get('percentage')
+            if pct is not None:  # Decimal('0') is falsy — don't use `or`
+                total += pct
+        if rows and total != Decimal('100'):
+            raise forms.ValidationError(
+                f"Composition percentages must sum to 100% (currently {total}%)."
+            )
+
+
+VirtualFundCompositionFormSet = forms.inlineformset_factory(
+    VirtualFund,
+    VirtualFundComposition,
+    formset=BaseCompositionFormSet,
+    fields=['asset_category', 'percentage'],
+    widgets={
+        'asset_category': forms.Select(attrs={'class': _INPUT}),
+        'percentage': forms.NumberInput(attrs={'class': _INPUT, 'step': '0.01'}),
+    },
+    extra=1,
+    can_delete=True,
+)

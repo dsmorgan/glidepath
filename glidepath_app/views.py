@@ -1,19 +1,26 @@
 import json
 import csv
 import io
+import logging
 
+import requests
+
+from django.db import transaction
 from django.http import HttpResponse, JsonResponse, HttpResponseForbidden
 from django.shortcuts import render, redirect
 from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.contrib.auth.hashers import check_password
 
-from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm, IdentityProviderForm, AccountUploadForm, PortfolioForm, AssumptionUploadForm, SessionSettingsForm
-from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, AccountPosition, Portfolio, PortfolioItem, AssumptionUpload, AssumptionData, SessionSettings
+from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm, IdentityProviderForm, AccountUploadForm, PortfolioForm, AssumptionUploadForm, SessionSettingsForm, FundProviderForm, VirtualFundForm, VirtualFundCompositionFormSet
+from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, AccountPosition, Portfolio, PortfolioItem, AssumptionUpload, AssumptionData, SessionSettings, FundProvider, VirtualFund
 from .services import export_glidepath_rules, import_glidepath_rules, import_blackrock_assumptions
 from .ticker_service import query_ticker as query_ticker_service
 from .account_services import import_fidelity_csv, import_etrade_csv, parse_nysaves_csv, get_portfolio_analysis, calculate_rebalance_recommendations
+from .scraper_service import refresh_virtual_fund_prices
 from .decorators import admin_required
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_COLORS = [
     "#FF6384",
@@ -2131,3 +2138,165 @@ def modeling_view(request):
     }
 
     return render(request, 'glidepath_app/modeling.html', context)
+
+
+# ---------------------------------------------------------------------------
+# Virtual fund / provider administration (admin-gated)
+# ---------------------------------------------------------------------------
+
+PRICE_REFRESH_COOLDOWN_SECONDS = 3600  # prices update infrequently; throttle re-fetches
+
+
+def virtual_funds_view(request):
+    """List fund providers and their virtual funds. Editing is admin-only."""
+    from django.utils import timezone
+
+    is_admin = request.session.get('is_admin', False)
+
+    refresh_summary = request.session.pop('vf_refresh_summary', None)
+    refresh_error = request.session.pop('vf_refresh_error', None)
+    refresh_info = request.session.pop('vf_refresh_info', None)
+
+    now = timezone.now()
+    providers = []
+    for provider in FundProvider.objects.prefetch_related('virtual_funds').all():
+        # last_price_refresh is stamped only when prices were updated; throttle within the cooldown.
+        can_refresh = True
+        minutes_ago = None
+        if provider.last_price_refresh:
+            elapsed = (now - provider.last_price_refresh).total_seconds()
+            minutes_ago = int(elapsed // 60)
+            can_refresh = elapsed >= PRICE_REFRESH_COOLDOWN_SECONDS
+        providers.append({
+            'provider': provider,
+            'funds': provider.virtual_funds.all(),
+            'can_refresh': can_refresh,
+            'minutes_ago': minutes_ago,
+        })
+
+    context = {
+        'providers': providers,
+        'is_admin': is_admin,
+        'refresh_summary': refresh_summary,
+        'refresh_error': refresh_error,
+        'refresh_info': refresh_info,
+    }
+    return render(request, 'glidepath_app/virtual_funds.html', context)
+
+
+@admin_required
+def fund_provider_detail(request, provider_id=None):
+    """Add or edit a fund provider (admin only)."""
+    provider = FundProvider.objects.filter(id=provider_id).first() if provider_id else None
+    if provider_id and provider is None:
+        return redirect('virtual_funds')
+
+    if request.method == 'POST':
+        form = FundProviderForm(request.POST, instance=provider)
+        if form.is_valid():
+            form.save()
+            return redirect('virtual_funds')
+    else:
+        form = FundProviderForm(instance=provider)
+
+    context = {'form': form, 'provider': provider, 'is_edit': provider is not None, 'is_admin': True}
+    return render(request, 'glidepath_app/fund_provider_detail.html', context)
+
+
+@admin_required
+@require_POST
+def delete_fund_provider(request, provider_id):
+    """Delete a fund provider (cascades to its virtual funds)."""
+    FundProvider.objects.filter(id=provider_id).delete()
+    return redirect('virtual_funds')
+
+
+@admin_required
+def virtual_fund_detail(request, fund_id=None):
+    """Add or edit a virtual fund, including its composition breakdown (admin only)."""
+    fund = VirtualFund.objects.filter(id=fund_id).first() if fund_id else None
+    if fund_id and fund is None:
+        return redirect('virtual_funds')
+
+    if request.method == 'POST':
+        form = VirtualFundForm(request.POST, instance=fund)
+        # Bind to the existing fund, or a transient instance for create, so the
+        # composition can be validated BEFORE anything is written.
+        formset = VirtualFundCompositionFormSet(request.POST, instance=fund or VirtualFund())
+        if form.is_valid() and formset.is_valid():
+            # Atomic so an invalid composition never leaves an orphaned fund, and a
+            # later DB error rolls back the fund's field changes too.
+            with transaction.atomic():
+                saved_fund = form.save()
+                formset.instance = saved_fund
+                formset.save()
+            return redirect('virtual_funds')
+    else:
+        form = VirtualFundForm(instance=fund)
+        formset = VirtualFundCompositionFormSet(instance=fund)
+
+    context = {
+        'form': form,
+        'formset': formset,
+        'fund': fund,
+        'is_edit': fund is not None,
+        'is_admin': True,
+    }
+    return render(request, 'glidepath_app/virtual_fund_detail.html', context)
+
+
+@admin_required
+@require_POST
+def delete_virtual_fund(request, fund_id):
+    """Delete a virtual fund (cascades to its composition)."""
+    VirtualFund.objects.filter(id=fund_id).delete()
+    return redirect('virtual_funds')
+
+
+@admin_required
+@require_POST
+def refresh_provider_prices(request, provider_id):
+    """Manually trigger a price refresh for a provider's virtual funds."""
+    from django.utils import timezone
+
+    provider = FundProvider.objects.filter(id=provider_id).first()
+    if provider is None:
+        return redirect('virtual_funds')
+
+    # Throttle: last_price_refresh is stamped only when prices were retrieved, so this
+    # blocks re-polling within the cooldown without blocking retries of failed/empty fetches.
+    if provider.last_price_refresh:
+        elapsed = (timezone.now() - provider.last_price_refresh).total_seconds()
+        if elapsed < PRICE_REFRESH_COOLDOWN_SECONDS:
+            mins = int((PRICE_REFRESH_COOLDOWN_SECONDS - elapsed) // 60) + 1
+            request.session['vf_refresh_info'] = (
+                f"{provider.name}: prices were refreshed {int(elapsed // 60)} min ago. "
+                f"They update infrequently — try again in about {mins} min."
+            )
+            return redirect('virtual_funds')
+
+    try:
+        result = refresh_virtual_fund_prices(provider.slug)
+    except (ValueError, requests.RequestException) as exc:
+        logger.exception("Price refresh failed for provider %s", provider.slug)
+        request.session['vf_refresh_error'] = f"Price refresh failed: {exc}"
+        return redirect('virtual_funds')
+
+    if result['updated'] == 0:
+        # Nothing was retrieved/applied — surface as an error, not a green success.
+        detail = f"returned {result['scraped_count']} row(s) but none matched a seeded fund"
+        if result['scraped_count'] == 0:
+            detail = "returned no prices (the feed may have changed or be unavailable)"
+        request.session['vf_refresh_error'] = (
+            f"{provider.name}: no prices were updated — the scraper {detail}. "
+            "Check fund names against the provider, then try again."
+        )
+        return redirect('virtual_funds')
+
+    summary = f"{provider.name}: updated {result['updated']} of {result['scraped_count']} scraped fund(s)."
+    if result['not_updated']:
+        summary += f" No price for {len(result['not_updated'])} fund(s)."
+    if result['unmatched_scraped']:
+        summary += f" {len(result['unmatched_scraped'])} scraped row(s) matched no fund."
+    request.session['vf_refresh_summary'] = summary
+    return redirect('virtual_funds')

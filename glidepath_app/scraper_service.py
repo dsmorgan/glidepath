@@ -159,8 +159,12 @@ def refresh_virtual_fund_prices(provider_slug: str) -> dict:
             provider_slug, len(unmatched_scraped), ", ".join(sorted(unmatched_scraped)),
         )
 
-    provider.last_price_refresh = timezone.now()
-    provider.save(update_fields=["last_price_refresh"])
+    # Only stamp last_price_refresh when prices were actually retrieved. A run that
+    # updates nothing (scrape returned nothing / matched no fund) is not treated as a
+    # successful fetch, so callers throttling on this timestamp allow an immediate retry.
+    if updated_funds:
+        provider.last_price_refresh = timezone.now()
+        provider.save(update_fields=["last_price_refresh"])
 
     return {
         "updated": len(updated_funds),
