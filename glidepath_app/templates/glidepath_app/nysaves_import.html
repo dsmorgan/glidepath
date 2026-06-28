@@ -33,9 +33,10 @@
     <div class="bg-white border border-gray-200 rounded-lg p-5 mb-6">
         <h2 class="text-lg font-semibold text-gray-900 mb-3">1. Add a bookmarklet</h2>
         <p class="text-sm text-gray-600 mb-4">
-            Drag a button below to your bookmarks bar (or right-click &rarr; add bookmark). If your
-            browser won't let you drag it, copy the code under "Show code" and paste it as the
-            <em>URL/location</em> of a new bookmark.
+            Easiest: <strong>drag</strong> a button below onto your bookmarks bar (make it visible first
+            &mdash; Chrome: ⌘⇧B, Safari: View &rarr; Show Favorites Bar). If dragging won't work, click
+            <strong>Copy code</strong>, then create a new bookmark and paste it as the bookmark's
+            <em>URL/address</em>.
         </p>
 
         <div class="space-y-5">
@@ -45,6 +46,10 @@
                    class="inline-block bg-indigo-600 text-white font-semibold px-4 py-2 rounded cursor-move select-none">
                     📥 Send 529 → Glidepath
                 </a>
+                <button type="button" data-copy="bm-post-code"
+                        class="js-copy-code inline-block bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium px-3 py-2 rounded ml-2">
+                    Copy code
+                </button>
                 <span class="text-sm text-gray-500 ml-2">Sends holdings straight into Glidepath (use your deployed HTTPS site).</span>
                 <details class="mt-2"><summary class="text-xs text-indigo-600 cursor-pointer">Show code</summary>
                     <textarea id="bm-post-code" readonly rows="4"
@@ -58,6 +63,10 @@
                    class="inline-block bg-gray-700 text-white font-semibold px-4 py-2 rounded cursor-move select-none">
                     📋 Copy 529 as CSV
                 </a>
+                <button type="button" data-copy="bm-csv-code"
+                        class="js-copy-code inline-block bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium px-3 py-2 rounded ml-2">
+                    Copy code
+                </button>
                 <span class="text-sm text-gray-500 ml-2">Copies a CSV to your clipboard; upload it on the Accounts page. Works for local/HTTP.</span>
                 <details class="mt-2"><summary class="text-xs text-indigo-600 cursor-pointer">Show code</summary>
                     <textarea id="bm-csv-code" readonly rows="4"
@@ -93,5 +102,21 @@
             if (link && code) link.setAttribute('href', code.value);
         });
     })();
+
+    // One-click "Copy code" — copies the bookmarklet's javascript: code to the clipboard.
+    document.querySelectorAll('.js-copy-code').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var code = document.getElementById(btn.getAttribute('data-copy'));
+            if (!code) return;
+            var label = btn.textContent;
+            function flash(msg) { btn.textContent = msg; setTimeout(function () { btn.textContent = label; }, 1500); }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(code.value).then(function () { flash('Copied!'); },
+                                                               function () { code.select(); flash('Select + ⌘C'); });
+            } else {
+                code.select(); document.execCommand && document.execCommand('copy'); flash('Copied!');
+            }
+        });
+    });
 </script>
 {% endblock %}
