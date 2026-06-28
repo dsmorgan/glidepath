@@ -16,7 +16,12 @@
             </a>
         </div>
 
-        {% if price_age_days is not None %}
+        {% if prices_never_refreshed %}
+        <p class="mt-3 text-xs text-amber-600">
+            Unit prices have never been refreshed{% if provider %} for {{ provider.name }}{% endif %}.
+            Run a price refresh so holdings without an entered value can be valued.
+        </p>
+        {% elif price_age_days is not None %}
         <p class="mt-3 text-xs {% if price_age_days > 7 %}text-amber-600{% else %}text-gray-500{% endif %}">
             Unit prices last refreshed {{ price_age_days }} day{{ price_age_days|pluralize }} ago{% if provider %} ({{ provider.name }}){% endif %}.
             {% if price_age_days > 7 %}Consider refreshing prices.{% endif %}

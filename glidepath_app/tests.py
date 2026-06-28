@@ -137,7 +137,7 @@ class NYSavesParserTests(TestCase):
         )
         with self.assertRaises(ValueError) as cm:
             parse_nysaves_csv(_csv_file(text), self.user, "nysaves.csv")
-        self.assertIn("No portfolio names matched", str(cm.exception))
+        self.assertIn("unmatched portfolio names", str(cm.exception))
 
     def test_reupload_replaces_prior(self):
         text = (
@@ -155,6 +155,28 @@ class NYSavesParserTests(TestCase):
         with self.assertRaises(ValueError) as cm:
             parse_nysaves_csv(_csv_file(text), self.user, "bad.csv")
         self.assertIn("Portfolio Name", str(cm.exception))
+
+    def test_unvaluable_rows_reported_not_imported(self):
+        # Income Portfolio has no seeded price; bad units can't be parsed. Both are
+        # skipped and reported, not silently imported as $0.
+        text = (
+            "Account Number,Account Name,Portfolio Name,Units,Unit Price,Current Value\n"
+            "NYS-1,Kid,Growth Stock Index Portfolio,5,12.00,\n"   # valid (price given)
+            "NYS-1,Kid,Income Portfolio,10,,\n"                    # no price available
+            "NYS-1,Kid,Bond Market Index Portfolio,abc,5.00,\n"   # invalid units
+        )
+        result = parse_nysaves_csv(_csv_file(text), self.user, "n.csv")
+        self.assertEqual(result["matched"], 1)
+        self.assertEqual(len(result["errors"]), 2)
+        self.assertEqual(AccountPosition.objects.filter(upload=result["upload"]).count(), 1)
+
+    def test_all_unvaluable_raises(self):
+        text = (
+            "Account Number,Account Name,Portfolio Name,Units,Unit Price,Current Value\n"
+            "NYS-1,Kid,Income Portfolio,10,,\n"  # no price, never scraped
+        )
+        with self.assertRaises(ValueError):
+            parse_nysaves_csv(_csv_file(text), self.user, "n.csv")
 
 
 class ScraperServiceTests(TestCase):
@@ -376,6 +398,29 @@ class EducationProjectionTests(TestCase):
         resp = self.client.get(reverse("education_dashboard", args=[pf.id]))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "529 dashboard")
+
+    def test_dashboard_holdings_uses_nysaves_upload(self):
+        # A later Fidelity upload shares the account number and symbol; the dashboard
+        # must still source holdings from the NYSaves upload (virtual_fund set).
+        text = (
+            "Account Number,Account Name,Portfolio Name,Units,Unit Price,Current Value\n"
+            "ACCT-X,Kid,Growth Stock Index Portfolio,5,12.00,\n"
+        )
+        parse_nysaves_csv(_csv_file(text), self.user, "n.csv")
+        fid = AccountUpload.objects.create(user=self.user, file_datetime="x",
+                                           upload_type="fidelity", filename="f.csv", entry_count=1)
+        AccountPosition.objects.create(upload=fid, account_number="ACCT-X",
+                                       symbol="growth-stock-index", description="",
+                                       quantity="1", current_value="999")
+        pf = Portfolio.objects.create(user=self.user, name="dash", account_type="education",
+                                      years_to_enrollment=5, annual_withdrawal=Decimal("1"),
+                                      return_assumption=Decimal("6"))
+        PortfolioItem.objects.create(portfolio=pf, account_number="ACCT-X", symbol="growth-stock-index")
+        session = self.client.session
+        session["user_id"] = str(self.user.id)
+        session.save()
+        resp = self.client.get(reverse("education_dashboard", args=[pf.id]))
+        self.assertContains(resp, "Growth Stock Index Portfolio")  # fund name => NYSaves upload used
 
     def test_dashboard_denies_other_users_portfolio(self):
         owner = User.objects.create(username="owner", email="owner@example.com")

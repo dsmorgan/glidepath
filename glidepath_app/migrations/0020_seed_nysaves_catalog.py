@@ -121,7 +121,8 @@ def seed(apps, schema_editor):
                 asset_category=category_lookup[(class_name, category_name)],
                 defaults={"percentage": percentage},
             )
-        assert total == Decimal("100"), f"{name} composition sums to {total}, not 100"
+        if total != Decimal("100"):
+            raise ValueError(f"{name} composition sums to {total}, not 100")
 
 
 def unseed(apps, schema_editor):

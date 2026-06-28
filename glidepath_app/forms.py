@@ -406,6 +406,11 @@ class PortfolioForm(forms.ModelForm):
         if not name:
             raise forms.ValidationError("Portfolio name is required.")
 
+        # Without a bound user we can't scope the uniqueness check; skip it rather
+        # than matching across all users.
+        if self.user is None:
+            return name
+
         # Check for duplicate names (excluding current instance if editing)
         query = Portfolio.objects.filter(user=self.user, name=name)
         if self.instance.pk:

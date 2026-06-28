@@ -455,13 +455,21 @@ def accounts_view(request):
                 elif upload_type == 'nysaves':
                     result = parse_nysaves_csv(file_obj, current_user, filename)
                     success = f"Successfully uploaded {result['matched']} position(s) from {filename}"
+                    warnings = []
                     if result['unmatched']:
                         unmatched = sorted(set(result['unmatched']))
-                        warning = (
+                        warnings.append(
                             f"{len(unmatched)} portfolio name(s) did not match a known "
-                            f"NYSaves fund and were skipped: {', '.join(unmatched)}. "
-                            "Fix the names and re-upload to include them."
+                            f"NYSaves fund and were skipped: {', '.join(unmatched)}."
                         )
+                    if result.get('errors'):
+                        warnings.append(
+                            f"{len(result['errors'])} position(s) could not be valued and were "
+                            f"skipped: {'; '.join(result['errors'])}. Refresh prices or supply "
+                            "Unit Price/Current Value, then re-upload."
+                        )
+                    if warnings:
+                        warning = " ".join(warnings)
                 else:
                     error = f"Unsupported upload type: {upload_type}"
 
@@ -891,7 +899,8 @@ def education_dashboard(request, portfolio_id):
     provider = None
     for item in portfolio.items.all():
         upload = AccountUpload.objects.filter(
-            user=portfolio.user, positions__account_number=item.account_number
+            user=portfolio.user, upload_type='nysaves',
+            positions__account_number=item.account_number
         ).order_by('-upload_datetime').first()
         if not upload:
             continue
@@ -913,8 +922,12 @@ def education_dashboard(request, portfolio_id):
         })
 
     price_age_days = None
-    if provider and provider.last_price_refresh:
-        price_age_days = (timezone.now() - provider.last_price_refresh).days
+    prices_never_refreshed = False
+    if provider:
+        if provider.last_price_refresh:
+            price_age_days = (timezone.now() - provider.last_price_refresh).days
+        else:
+            prices_never_refreshed = True
 
     context = {
         'portfolio': portfolio,
@@ -927,6 +940,7 @@ def education_dashboard(request, portfolio_id):
         'holdings': holdings,
         'provider': provider,
         'price_age_days': price_age_days,
+        'prices_never_refreshed': prices_never_refreshed,
     }
     return render(request, "glidepath_app/education_dashboard.html", context)
 

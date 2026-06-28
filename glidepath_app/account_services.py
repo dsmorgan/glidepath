@@ -1,9 +1,10 @@
 """Service functions for importing and managing account position CSV uploads and portfolio analysis."""
 
 import csv
+import logging
 import re
 from io import StringIO
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from django.db import transaction
 from django.db.models import Sum, DecimalField
 from django.db.models.functions import Coalesce
@@ -11,6 +12,8 @@ from .models import (
     AccountUpload, AccountPosition, User, Portfolio, Fund,
     FundProvider, VirtualFund,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_symbol(symbol: str) -> str:
@@ -438,6 +441,7 @@ def parse_nysaves_csv(file_obj, user: User, filename: str) -> dict:
 
     matched_positions = []
     unmatched = []
+    errors = []
     total_rows = 0
 
     for row in reader:
@@ -452,30 +456,47 @@ def parse_nysaves_csv(file_obj, user: User, filename: str) -> dict:
             unmatched.append(portfolio_name)
             continue
 
+        label = f"{portfolio_name} (acct {account_number})"
+
+        # Units are required and must be a valid number — never store a value we
+        # could not parse, or it silently becomes $0 in portfolio analysis.
         units = _parse_money(row.get('Units'))
+        if units is None:
+            errors.append(f"{label}: missing or invalid Units")
+            continue
+
         unit_price = _parse_money(row.get('Unit Price'))
         if unit_price is None:
             unit_price = fund.unit_price  # fall back to latest scraped price (may be None)
 
         current_value = _parse_money(row.get('Current Value'))
-        if current_value is None and units is not None and unit_price is not None:
-            current_value = units * unit_price
+        if current_value is None:
+            if unit_price is not None:
+                current_value = units * unit_price
+            else:
+                # No explicit value and no price available -> can't value this holding.
+                errors.append(
+                    f"{label}: no Unit Price/Current Value and no refreshed price available"
+                )
+                continue
 
         matched_positions.append({
             'fund': fund,
             'account_number': account_number,
             'account_name': (row.get('Account Name') or '').strip(),
-            'quantity': str(units) if units is not None else (row.get('Units') or '').strip(),
+            'quantity': str(units),
             'last_price': str(unit_price) if unit_price is not None else '',
-            'current_value': str(current_value) if current_value is not None else '',
+            'current_value': str(current_value),
         })
 
     if not matched_positions:
+        problems = []
         if unmatched:
-            raise ValueError(
-                "No portfolio names matched known NYSaves funds: "
-                + ", ".join(sorted(set(unmatched)))
-            )
+            problems.append("unmatched portfolio names: " + ", ".join(sorted(set(unmatched))))
+        if errors:
+            problems.append("; ".join(errors))
+        if problems:
+            raise ValueError("No positions could be imported. " + " | ".join(problems))
         raise ValueError("No valid position data found in NYSaves CSV file")
 
     # Replace any prior upload of the same file (mirrors the other parsers).
@@ -511,6 +532,7 @@ def parse_nysaves_csv(file_obj, user: User, filename: str) -> dict:
         'upload': upload,
         'matched': len(matched_positions),
         'unmatched': unmatched,
+        'errors': errors,
         'total_rows': total_rows,
     }
 
@@ -618,14 +640,14 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
             current_value_str = position.current_value.replace('$', '').replace(',', '').strip()
             try:
                 current_value = Decimal(current_value_str) if current_value_str else Decimal('0')
-            except:
+            except (InvalidOperation, AttributeError):
                 current_value = Decimal('0')
 
             # Parse quantity, handling commas
             quantity_str = position.quantity.replace(',', '').strip()
             try:
                 quantity = Decimal(quantity_str) if quantity_str else Decimal('0')
-            except:
+            except (InvalidOperation, AttributeError):
                 quantity = Decimal('0')
 
             # Store per-account data
@@ -1231,8 +1253,11 @@ def calculate_rebalance_recommendations(portfolio: Portfolio, tolerance: float) 
                             }
                             for fund in asset_category.funds.filter(preference__gte=1, preference__lte=10).order_by('preference')
                         ]
-                except:
-                    pass
+                except Exception:
+                    logger.warning(
+                        "Failed to load recommended funds for %s:%s",
+                        buy_cat.get('asset_class'), buy_cat.get('category'), exc_info=True,
+                    )
 
                 recommendations.append({
                     'action': 'Buy',

@@ -121,10 +121,15 @@ def refresh_virtual_fund_prices(provider_slug: str) -> dict:
         )
 
     scraped = scraper(provider)  # {raw_name: (Decimal, date_or_None)}
-    scraped_by_norm = {
-        _normalize_name(name): (name, price, as_of)
-        for name, (price, as_of) in scraped.items()
-    }
+    scraped_by_norm = {}
+    for name, (price, as_of) in scraped.items():
+        norm = _normalize_name(name)
+        if norm in scraped_by_norm:
+            logger.warning(
+                "%s feed: two entries normalize to '%s' ('%s' and '%s'); keeping the latter",
+                provider_slug, norm, scraped_by_norm[norm][0], name,
+            )
+        scraped_by_norm[norm] = (name, price, as_of)
 
     funds = list(VirtualFund.objects.filter(provider=provider, is_active=True))
     today = timezone.now().date()
@@ -150,8 +155,8 @@ def refresh_virtual_fund_prices(provider_slug: str) -> dict:
     ]
     if unmatched_scraped:
         logger.warning(
-            "NYSaves refresh: %d scraped row(s) matched no seeded fund: %s",
-            len(unmatched_scraped), ", ".join(sorted(unmatched_scraped)),
+            "%s refresh: %d scraped row(s) matched no seeded fund: %s",
+            provider_slug, len(unmatched_scraped), ", ".join(sorted(unmatched_scraped)),
         )
 
     provider.last_price_refresh = timezone.now()
