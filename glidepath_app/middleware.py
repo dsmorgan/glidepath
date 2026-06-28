@@ -14,6 +14,8 @@ class AuthenticationMiddleware:
         # List of paths that don't require authentication
         public_paths = [
             reverse('login'),
+            # Token-authenticated cross-origin endpoint (bookmarklet holdings import).
+            reverse('nysaves_import_submit'),
         ]
 
         # Check if current path requires authentication

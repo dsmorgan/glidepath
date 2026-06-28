@@ -8,7 +8,9 @@ import requests
 from django.db import transaction
 from django.http import HttpResponse, JsonResponse, HttpResponseForbidden
 from django.shortcuts import render, redirect
-from django.views.decorators.http import require_POST
+from django.urls import reverse
+from django.views.decorators.http import require_POST, require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.contrib.auth.hashers import check_password
 
@@ -16,7 +18,7 @@ from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm,
 from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, AccountPosition, Portfolio, PortfolioItem, AssumptionUpload, AssumptionData, SessionSettings, FundProvider, VirtualFund
 from .services import export_glidepath_rules, import_glidepath_rules, import_blackrock_assumptions
 from .ticker_service import query_ticker as query_ticker_service
-from .account_services import import_fidelity_csv, import_etrade_csv, parse_nysaves_csv, get_portfolio_analysis, calculate_rebalance_recommendations
+from .account_services import import_fidelity_csv, import_etrade_csv, parse_nysaves_csv, ingest_nysaves_rows, get_portfolio_analysis, calculate_rebalance_recommendations
 from .scraper_service import refresh_virtual_fund_prices
 from .decorators import admin_required
 
@@ -2300,3 +2302,89 @@ def refresh_provider_prices(request, provider_id):
         summary += f" {len(result['unmatched_scraped'])} scraped row(s) matched no fund."
     request.session['vf_refresh_summary'] = summary
     return redirect('virtual_funds')
+
+
+def nysaves_import(request):
+    """Per-user page that shows the holdings-import token and the bookmarklets.
+
+    POST rotates the token. The token authenticates the cross-origin POST from the
+    bookmarklet (the NYSaves page can't send a Glidepath session cookie)."""
+    user_id = request.session.get('user_id')
+    user = User.objects.filter(id=user_id).first() if user_id else None
+    if user is None:
+        return redirect('login')
+
+    if request.method == 'POST' and 'rotate' in request.POST:
+        user.rotate_import_token()
+        return redirect('nysaves_import')
+
+    token = user.ensure_import_token()
+    submit_url = request.build_absolute_uri(reverse('nysaves_import_submit'))
+    return render(request, 'glidepath_app/nysaves_import.html', {
+        'import_token': token,
+        'submit_url': submit_url,
+    })
+
+
+def _cors(response):
+    """Allow the bookmarklet (running on nysaves.org) to read the response.
+
+    The endpoint is authenticated by a bearer token in the body, not by cookies,
+    so a wildcard origin carries no credential risk."""
+    response['Access-Control-Allow-Origin'] = '*'
+    response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+    response['Access-Control-Allow-Headers'] = 'Content-Type'
+    return response
+
+
+@csrf_exempt
+@require_http_methods(['POST', 'OPTIONS'])
+def nysaves_import_submit(request):
+    """Token-authenticated holdings import for the bookmarklet (cross-origin POST).
+
+    Body (text/plain JSON, to avoid a CORS preflight):
+        {token, account_number, account_name, positions: [{portfolio_name, units}]}
+    Returns {ok, matched, unmatched, errors, upload_id} with CORS headers.
+    """
+    if request.method == 'OPTIONS':
+        return _cors(HttpResponse(status=204))
+
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except (ValueError, UnicodeDecodeError):
+        return _cors(JsonResponse({'ok': False, 'error': 'Invalid JSON body.'}, status=400))
+
+    token = (payload.get('token') or '').strip()
+    user = User.objects.filter(import_token=token).first() if token else None
+    if user is None:
+        return _cors(JsonResponse({'ok': False, 'error': 'Invalid or missing import token.'}, status=401))
+
+    account_number = (payload.get('account_number') or '').strip()
+    account_name = (payload.get('account_name') or '').strip()
+    positions = payload.get('positions') or []
+    if not isinstance(positions, list) or not positions:
+        return _cors(JsonResponse({'ok': False, 'error': 'No positions provided.'}, status=400))
+
+    # _parse_money (in ingest) strips $ and commas, so raw values pass through fine.
+    rows = [{
+        'Account Number': account_number,
+        'Account Name': account_name,
+        'Portfolio Name': (p.get('portfolio_name') or '').strip(),
+        'Units': str(p.get('units') or '').strip(),
+        'Unit Price': str(p.get('unit_price') or '').strip(),
+        'Current Value': str(p.get('current_value') or '').strip(),
+    } for p in positions]
+
+    filename = f"NYSaves bookmarklet — acct {account_number or 'unknown'}"
+    try:
+        result = ingest_nysaves_rows(rows, user, filename, file_datetime='Bookmarklet import')
+    except ValueError as exc:
+        return _cors(JsonResponse({'ok': False, 'error': str(exc)}, status=422))
+
+    return _cors(JsonResponse({
+        'ok': True,
+        'matched': result['matched'],
+        'unmatched': result['unmatched'],
+        'errors': result['errors'],
+        'upload_id': str(result['upload'].id),
+    }))

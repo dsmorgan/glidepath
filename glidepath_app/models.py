@@ -278,6 +278,10 @@ class User(models.Model):
     role = models.IntegerField(choices=ROLE_CHOICES, default=1)
     disabled = models.BooleanField(default=False)
     password = models.CharField(max_length=255, blank=True, help_text="Only used for internal users")
+    import_token = models.CharField(
+        max_length=64, blank=True, default="", db_index=True,
+        help_text="Bearer token for the bookmarklet holdings-import endpoint (per user; rotatable)."
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -301,6 +305,19 @@ class User(models.Model):
     def is_internal_user(self) -> bool:
         """Check if user is an internal (non-identity provider) user."""
         return self.identity_provider is None
+
+    def ensure_import_token(self) -> str:
+        """Return the user's import token, generating and saving one if absent."""
+        if not self.import_token:
+            self.rotate_import_token()
+        return self.import_token
+
+    def rotate_import_token(self) -> str:
+        """Generate a fresh import token and persist it."""
+        import secrets
+        self.import_token = secrets.token_urlsafe(32)
+        self.save(update_fields=["import_token"])
+        return self.import_token
 
 
 class AccountUpload(models.Model):

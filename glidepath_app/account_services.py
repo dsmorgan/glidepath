@@ -411,12 +411,6 @@ def parse_nysaves_csv(file_obj, user: User, filename: str) -> dict:
         ValueError: if the provider/catalog is missing, the file is malformed, or
         no rows match a known NYSaves fund.
     """
-    provider = FundProvider.objects.filter(slug='nysaves').first()
-    if provider is None:
-        raise ValueError(
-            "NYSaves provider is not configured. Run migrations to seed the fund catalog."
-        )
-
     try:
         content = file_obj.read()
         if isinstance(content, bytes):
@@ -433,6 +427,26 @@ def parse_nysaves_csv(file_obj, user: User, filename: str) -> dict:
     if missing:
         raise ValueError(f"NYSaves CSV is missing required column(s): {', '.join(missing)}")
 
+    return ingest_nysaves_rows(reader, user, filename)
+
+
+@transaction.atomic
+def ingest_nysaves_rows(rows, user: User, filename: str,
+                        file_datetime: str = "Manual NYSaves entry") -> dict:
+    """Match NYSaves holding rows to seeded VirtualFunds and persist them.
+
+    `rows` is an iterable of mappings with the NYSaves columns (Account Number,
+    Account Name, Portfolio Name, Units required; Unit Price, Current Value
+    optional). Shared by the CSV importer (parse_nysaves_csv) and the bookmarklet
+    import endpoint. Returns {upload, matched, unmatched, errors, total_rows};
+    raises ValueError if the catalog is missing or nothing could be imported.
+    """
+    provider = FundProvider.objects.filter(slug='nysaves').first()
+    if provider is None:
+        raise ValueError(
+            "NYSaves provider is not configured. Run migrations to seed the fund catalog."
+        )
+
     # Case-insensitive lookup of NYSaves virtual funds by name.
     fund_by_name = {
         vf.name.strip().lower(): vf
@@ -444,7 +458,7 @@ def parse_nysaves_csv(file_obj, user: User, filename: str) -> dict:
     errors = []
     total_rows = 0
 
-    for row in reader:
+    for row in rows:
         portfolio_name = (row.get('Portfolio Name') or '').strip()
         account_number = (row.get('Account Number') or '').strip()
         if not portfolio_name and not account_number:
@@ -506,7 +520,7 @@ def parse_nysaves_csv(file_obj, user: User, filename: str) -> dict:
 
     upload = AccountUpload.objects.create(
         user=user,
-        file_datetime="Manual NYSaves entry",
+        file_datetime=file_datetime,
         upload_type='nysaves',
         account_type='education',
         fund_provider=provider,
