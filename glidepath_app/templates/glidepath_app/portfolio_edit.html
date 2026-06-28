@@ -62,8 +62,8 @@
                 </div>
             </div>
 
-            <!-- Retirement fields (Account Type = Retirement) -->
-            <div class="js-retirement-fields grid grid-cols-1 md:grid-cols-4 gap-6 mt-6">
+            <!-- Year Born + anchor age (Year Born applies to both account types) -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mt-6">
                 <div>
                     <label for="{{ form.year_born.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
                         {{ form.year_born.label }}
@@ -73,7 +73,8 @@
                     <p class="text-red-600 text-sm mt-1">{{ form.year_born.errors.0 }}</p>
                     {% endif %}
                 </div>
-                <div>
+                <!-- Retirement Age (Account Type = Retirement) -->
+                <div class="js-retirement-fields{% if form.instance.account_type == 'education' %} hidden{% endif %}">
                     <label for="{{ form.retirement_age.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
                         {{ form.retirement_age.label }}
                     </label>
@@ -82,20 +83,21 @@
                     <p class="text-red-600 text-sm mt-1">{{ form.retirement_age.errors.0 }}</p>
                     {% endif %}
                 </div>
-            </div>
-
-            <!-- Education fields (Account Type = Education / 529) -->
-            <div class="js-education-fields grid grid-cols-1 md:grid-cols-3 gap-6 mt-6 hidden">
-                <div>
-                    <label for="{{ form.years_to_enrollment.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
-                        {{ form.years_to_enrollment.label }}
+                <!-- Enrollment Age (Account Type = Education / 529) -->
+                <div class="js-education-fields{% if form.instance.account_type != 'education' %} hidden{% endif %}">
+                    <label for="{{ form.enrollment_age.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
+                        {{ form.enrollment_age.label }}
                     </label>
-                    {{ form.years_to_enrollment }}
-                    <p class="text-gray-500 text-xs mt-1">Negative = student already enrolled.</p>
-                    {% if form.years_to_enrollment.errors %}
-                    <p class="text-red-600 text-sm mt-1">{{ form.years_to_enrollment.errors.0 }}</p>
+                    {{ form.enrollment_age }}
+                    <p class="text-gray-500 text-xs mt-1">College start = the glide path's year 0.</p>
+                    {% if form.enrollment_age.errors %}
+                    <p class="text-red-600 text-sm mt-1">{{ form.enrollment_age.errors.0 }}</p>
                     {% endif %}
                 </div>
+            </div>
+
+            <!-- Education funding fields (Account Type = Education / 529) -->
+            <div class="js-education-fields grid grid-cols-1 md:grid-cols-4 gap-6 mt-6{% if form.instance.account_type != 'education' %} hidden{% endif %}">
                 <div>
                     <label for="{{ form.college_duration_years.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">
                         {{ form.college_duration_years.label }}
@@ -138,13 +140,13 @@
             (function () {
                 const at = document.getElementById('{{ form.account_type.id_for_label }}');
                 if (!at) return;
-                const retire = document.querySelector('.js-retirement-fields');
-                const edu = document.querySelector('.js-education-fields');
+                const retire = document.querySelectorAll('.js-retirement-fields');
+                const edu = document.querySelectorAll('.js-education-fields');
                 const ruleset = document.getElementById('{{ form.ruleset.id_for_label }}');
                 function apply() {
                     const v = at.value;
-                    if (retire) retire.classList.toggle('hidden', v !== 'retirement');
-                    if (edu) edu.classList.toggle('hidden', v !== 'education');
+                    retire.forEach(el => el.classList.toggle('hidden', v !== 'retirement'));
+                    edu.forEach(el => el.classList.toggle('hidden', v !== 'education'));
                     if (ruleset) {
                         Array.from(ruleset.options).forEach(function (opt) {
                             const t = opt.getAttribute('data-account-type');

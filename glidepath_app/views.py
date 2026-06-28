@@ -302,7 +302,8 @@ def rules_view(request):
             form = GlidepathRuleUploadForm(request.POST, request.FILES)
             if form.is_valid():
                 try:
-                    new_set = import_glidepath_rules(form.cleaned_data["file"])
+                    account_type = request.POST.get("account_type", "retirement")
+                    new_set = import_glidepath_rules(form.cleaned_data["file"], account_type)
                 except ValueError as exc:  # pragma: no cover - defensive
                     error = str(exc)
             else:  # pragma: no cover - defensive
@@ -330,9 +331,26 @@ def rules_view(request):
         )
         class_chart, category_chart, pie_chart = _build_chart_data(list(rules))
 
-    # Generate year and retirement age options
-    years_born = list(range(1940, 2021))
-    retirement_ages = list(range(40, 81))
+    # Chart controls. Education and retirement share the same glide-path math
+    # (year = year_born + age + offset, marker at offset 0); only the anchor age,
+    # labels, and the milestone marker text differ.
+    is_education = bool(selected_set and selected_set.account_type == 'education')
+    if is_education:
+        years_born = list(range(2000, 2027))
+        age_options = list(range(16, 26))
+        age_label = "Enrollment Age"
+        marker_label = "Enrollment"
+        time_window_label = "Years from Enrollment"
+        default_year_born = 2018
+        default_age = 18
+    else:
+        years_born = list(range(1940, 2021))
+        age_options = list(range(40, 81))
+        age_label = "Retirement Age"
+        marker_label = "Retirement"
+        time_window_label = "Years to Retirement"
+        default_year_born = 1973
+        default_age = 58
 
     context = {
         "form": form,
@@ -340,11 +358,17 @@ def rules_view(request):
         "rules": rules,
         "rule_sets": rule_sets,
         "selected_set": selected_set,
+        "is_education": is_education,
+        "time_window_label": time_window_label,
         "class_chart": json.dumps(class_chart),
         "category_chart": json.dumps(category_chart),
         "class_pie_chart": json.dumps(pie_chart),
         "years_born": years_born,
-        "retirement_ages": retirement_ages,
+        "age_options": age_options,
+        "age_label": age_label,
+        "marker_label": marker_label,
+        "default_year_born": default_year_born,
+        "default_age": default_age,
         "is_admin": is_admin,
     }
 

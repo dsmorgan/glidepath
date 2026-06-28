@@ -1,7 +1,16 @@
 import io
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from unittest import mock
+
+
+def _year_born_for(years_to_enrollment, enrollment_age=18):
+    """Birth year that yields a given years-to-enrollment for `enrollment_age`.
+
+    years_to_enrollment = (year_born + enrollment_age) - current_year, so
+    year_born = current_year + years_to_enrollment - enrollment_age.
+    """
+    return datetime.now().year + years_to_enrollment - enrollment_age
 
 from django.conf import settings
 from django.test import TestCase
@@ -54,7 +63,10 @@ class ImportRulesTests(TestCase):
             f = io.BytesIO(data.encode("utf-8"))
             f.name = "rules.csv"
             import_glidepath_rules(f)
-        names = list(RuleSet.objects.order_by("id").values_list("name", flat=True))
+        names = list(
+            RuleSet.objects.filter(name__startswith="rules").order_by("id")
+            .values_list("name", flat=True)
+        )
         self.assertEqual(names[0], "rules")
         self.assertEqual(names[1], "rules (1)")
 
@@ -255,22 +267,54 @@ class PortfolioAnalysisTests(TestCase):
         self.assertAlmostEqual(a["category_breakdown"]["Bonds:US Investment Grade"], 280.0, places=2)
         self.assertEqual(a["account_type"], "education")
 
-    def test_education_ruleset_target_keyed_on_enrollment(self):
-        self._upload_529()
+    def _two_band_edu_ruleset(self):
+        """Aggressive before enrollment (offset < 0), conservative after (offset >= 0)."""
+        stocks = AssetClass.objects.get(name="Stocks")
+        bonds = AssetClass.objects.get(name="Bonds")
         rs = RuleSet.objects.create(name="edu", account_type="education")
-        rule = GlidepathRule.objects.create(ruleset=rs, gt_retire_age=-100, lt_retire_age=100)
-        ClassAllocation.objects.create(rule=rule, asset_class=AssetClass.objects.get(name="Stocks"),
-                                       percentage=Decimal("50"))
-        ClassAllocation.objects.create(rule=rule, asset_class=AssetClass.objects.get(name="Bonds"),
-                                       percentage=Decimal("50"))
-        pf = Portfolio.objects.create(user=self.user, name="529b", account_type="education",
-                                      ruleset=rs, years_to_enrollment=10)
-        PortfolioItem.objects.create(portfolio=pf, account_number="NYS-1", symbol="moderate-growth")
+        before = GlidepathRule.objects.create(ruleset=rs, gt_retire_age=-100, lt_retire_age=0)
+        ClassAllocation.objects.create(rule=before, asset_class=stocks, percentage=Decimal("90"))
+        ClassAllocation.objects.create(rule=before, asset_class=bonds, percentage=Decimal("10"))
+        after = GlidepathRule.objects.create(ruleset=rs, gt_retire_age=0, lt_retire_age=100)
+        ClassAllocation.objects.create(rule=after, asset_class=stocks, percentage=Decimal("20"))
+        ClassAllocation.objects.create(rule=after, asset_class=bonds, percentage=Decimal("80"))
+        return rs
 
+    def test_education_ruleset_target_keyed_on_enrollment(self):
+        """New convention: years FROM enrollment. A student 10 years out (offset -10)
+        lands in the aggressive band; an enrolled student (offset >= 0) in conservative."""
+        self._upload_529()
+        rs = self._two_band_edu_ruleset()
+
+        # 10 years before enrollment -> offset -10 -> aggressive 90/10.
+        pf = Portfolio.objects.create(user=self.user, name="529b", account_type="education",
+                                      ruleset=rs, year_born=_year_born_for(10), enrollment_age=18)
+        PortfolioItem.objects.create(portfolio=pf, account_number="NYS-1", symbol="moderate-growth")
         a = get_portfolio_analysis(pf)
-        self.assertEqual(a["target_class_breakdown"], {"Stocks": 50.0, "Bonds": 50.0})
+        self.assertEqual(a["target_class_breakdown"], {"Stocks": 90.0, "Bonds": 10.0})
         self.assertIsNone(a["years_to_retirement"])  # retirement framing not used for education
         self.assertEqual(a["years_to_enrollment"], 10)
+
+        # Already enrolled 2 years (offset +2) -> conservative 20/80.
+        pf.year_born = _year_born_for(-2)
+        pf.save(update_fields=["year_born"])
+        a2 = get_portfolio_analysis(pf)
+        self.assertEqual(a2["target_class_breakdown"], {"Stocks": 20.0, "Bonds": 80.0})
+        self.assertEqual(a2["years_to_enrollment"], -2)
+
+    def test_education_and_retirement_resolve_same_band(self):
+        """Parity: with identical year_born + age, both account types pick the same offset."""
+        self._upload_529()
+        stocks = AssetClass.objects.get(name="Stocks")
+        # Education ruleset: aggressive band covering offset -10.
+        edu_rs = self._two_band_edu_ruleset()
+        edu = Portfolio.objects.create(user=self.user, name="e", account_type="education",
+                                       ruleset=edu_rs, year_born=_year_born_for(10), enrollment_age=18)
+        PortfolioItem.objects.create(portfolio=edu, account_number="NYS-1", symbol="moderate-growth")
+        edu_analysis = get_portfolio_analysis(edu)
+        # The education time window is the negation of years-to-enrollment.
+        self.assertEqual(edu_analysis["years_to_enrollment"], 10)
+        self.assertEqual(edu_analysis["target_class_breakdown"], {"Stocks": 90.0, "Bonds": 10.0})
 
     def test_retirement_real_fund_path_unchanged(self):
         """Regression lock: the real-ticker retirement path still aggregates as before."""
@@ -305,7 +349,8 @@ class PortfolioFormTests(TestCase):
         form = PortfolioForm(
             {
                 "name": "Edu1", "account_type": "education",
-                "years_to_enrollment": "10", "annual_withdrawal": "30000",
+                "year_born": str(_year_born_for(10)), "enrollment_age": "18",
+                "annual_withdrawal": "30000",
                 "annual_contribution": "5000", "return_assumption": "6.00",
             },
             user=self.user,
@@ -315,7 +360,8 @@ class PortfolioFormTests(TestCase):
         portfolio.user = self.user
         portfolio.save()
         self.assertEqual(portfolio.account_type, "education")
-        self.assertEqual(portfolio.years_to_enrollment, 10)
+        self.assertEqual(portfolio.enrollment_age, 18)
+        self.assertEqual(portfolio.years_to_enrollment, 10)  # derived property
         self.assertEqual(portfolio.college_duration_years, 4)  # default applied when blank
         self.assertEqual(portfolio.annual_withdrawal, Decimal("30000"))
 
@@ -356,7 +402,7 @@ class EducationProjectionTests(TestCase):
     def test_projection_on_track(self):
         pf = Portfolio.objects.create(
             user=self.user, name="529proj", account_type="education",
-            years_to_enrollment=10, college_duration_years=4,
+            year_born=_year_born_for(10), enrollment_age=18, college_duration_years=4,
             annual_withdrawal=Decimal("10000"), annual_contribution=Decimal("4000"),
             return_assumption=Decimal("0"),
         )
@@ -371,7 +417,7 @@ class EducationProjectionTests(TestCase):
     def test_projection_shortfall(self):
         pf = Portfolio.objects.create(
             user=self.user, name="529short", account_type="education",
-            years_to_enrollment=5, college_duration_years=4,
+            year_born=_year_born_for(5), enrollment_age=18, college_duration_years=4,
             annual_withdrawal=Decimal("20000"), annual_contribution=Decimal("0"),
             return_assumption=Decimal("0"),
         )
@@ -382,15 +428,16 @@ class EducationProjectionTests(TestCase):
     def test_projection_unavailable_when_inputs_missing(self):
         pf = Portfolio.objects.create(
             user=self.user, name="529bad", account_type="education",
-        )  # no years_to_enrollment / return / withdrawal
+        )  # no year_born / enrollment_age / return / withdrawal
         proj = calculate_education_projection(pf)
         self.assertFalse(proj["available"])
-        self.assertIn("Years to Enrollment", proj["missing"])
+        self.assertIn("Year Born", proj["missing"])
+        self.assertIn("Enrollment Age", proj["missing"])
 
     def test_dashboard_view_renders(self):
         pf = Portfolio.objects.create(
             user=self.user, name="529view", account_type="education",
-            years_to_enrollment=8, annual_withdrawal=Decimal("15000"),
+            year_born=_year_born_for(8), enrollment_age=18, annual_withdrawal=Decimal("15000"),
             return_assumption=Decimal("6"),
         )
         session = self.client.session
@@ -414,8 +461,8 @@ class EducationProjectionTests(TestCase):
                                        symbol="growth-stock-index", description="",
                                        quantity="1", current_value="999")
         pf = Portfolio.objects.create(user=self.user, name="dash", account_type="education",
-                                      years_to_enrollment=5, annual_withdrawal=Decimal("1"),
-                                      return_assumption=Decimal("6"))
+                                      year_born=_year_born_for(5), enrollment_age=18,
+                                      annual_withdrawal=Decimal("1"), return_assumption=Decimal("6"))
         PortfolioItem.objects.create(portfolio=pf, account_number="ACCT-X", symbol="growth-stock-index")
         session = self.client.session
         session["user_id"] = str(self.user.id)
@@ -426,8 +473,8 @@ class EducationProjectionTests(TestCase):
     def test_dashboard_denies_other_users_portfolio(self):
         owner = User.objects.create(username="owner", email="owner@example.com")
         pf = Portfolio.objects.create(user=owner, name="theirs", account_type="education",
-                                      years_to_enrollment=8, annual_withdrawal=Decimal("1"),
-                                      return_assumption=Decimal("6"))
+                                      year_born=_year_born_for(8), enrollment_age=18,
+                                      annual_withdrawal=Decimal("1"), return_assumption=Decimal("6"))
         # self.user is logged in but does not own the portfolio -> redirected away.
         session = self.client.session
         session["user_id"] = str(self.user.id)
@@ -435,6 +482,70 @@ class EducationProjectionTests(TestCase):
         resp = self.client.get(reverse("education_dashboard", args=[pf.id]))
         self.assertEqual(resp.status_code, 302)
         self.assertIn("/portfolios/", resp["Location"])
+
+
+class EducationConventionTests(TestCase):
+    """The education glide path shares the retirement sign convention:
+    negative = before enrollment (aggressive), 0 = enrollment, positive = after."""
+
+    EXAMPLE = "Example 529 Education Glide Path"
+
+    def setUp(self):
+        self.user = User.objects.create(username="c", email="c@example.com")
+
+    def test_years_to_enrollment_property(self):
+        pf = Portfolio.objects.create(user=self.user, name="prop", account_type="education",
+                                      year_born=_year_born_for(7), enrollment_age=18)
+        self.assertEqual(pf.years_to_enrollment, 7)
+        pf.enrollment_age = None
+        self.assertIsNone(pf.years_to_enrollment)  # undefined when an input is missing
+
+    def test_seeded_example_ruleset_uses_new_convention(self):
+        """Migrations 0021/0023: most-aggressive band sits at the most-negative offset."""
+        rs = RuleSet.objects.get(name=self.EXAMPLE)
+        rules = list(GlidepathRule.objects.filter(ruleset=rs).order_by("gt_retire_age"))
+        first, last = rules[0], rules[-1]
+        self.assertEqual(first.gt_retire_age, -100)  # furthest before enrollment
+        first_stocks = first.class_allocations.get(asset_class__name="Stocks").percentage
+        last_stocks = last.class_allocations.get(asset_class__name="Stocks").percentage
+        self.assertEqual(first_stocks, Decimal("90"))  # aggressive before college
+        self.assertEqual(last_stocks, Decimal("20"))   # conservative during/after
+        self.assertEqual(last.lt_retire_age, 100)
+
+    def test_sample_csv_imports_in_new_convention(self):
+        sample = settings.BASE_DIR / "sample_input" / "sample-education-glidepath-rule.csv"
+        with open(sample, "rb") as f:
+            rs = import_glidepath_rules(f, account_type="education")
+        self.assertEqual(rs.account_type, "education")
+        first = GlidepathRule.objects.filter(ruleset=rs).order_by("gt_retire_age").first()
+        self.assertEqual(first.gt_retire_age, -100)
+        self.assertEqual(first.class_allocations.get(asset_class__name="Stocks").percentage,
+                         Decimal("90"))
+
+    def test_rules_page_renders_education_chart_config(self):
+        rs = RuleSet.objects.get(name=self.EXAMPLE)
+        session = self.client.session
+        session["user_id"] = str(self.user.id)
+        session.save()
+        resp = self.client.get(reverse("rules"), {"ruleset": rs.id})
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn('markerLabel: "Enrollment"', body)
+        self.assertIn("Enrollment Age", body)
+        self.assertIn("Years from Enrollment".lower(), body.lower())
+
+    def test_rules_page_retirement_keeps_retirement_framing(self):
+        rs = RuleSet.objects.create(name="ret-frame", account_type="retirement")
+        rule = GlidepathRule.objects.create(ruleset=rs, gt_retire_age=-100, lt_retire_age=100)
+        ClassAllocation.objects.create(rule=rule, asset_class=AssetClass.objects.get_or_create(name="Stocks")[0],
+                                       percentage=Decimal("100"))
+        session = self.client.session
+        session["user_id"] = str(self.user.id)
+        session.save()
+        resp = self.client.get(reverse("rules"), {"ruleset": rs.id})
+        body = resp.content.decode()
+        self.assertIn('markerLabel: "Retirement"', body)
+        self.assertIn("Retirement Age", body)
 
 
 class AccessControlTests(TestCase):
@@ -491,6 +602,37 @@ class AccessControlTests(TestCase):
         self.assertEqual(
             self.client.get(reverse("edit_portfolio", args=[self.portfolio.id])).status_code, 200
         )
+
+
+class EducationRulesetTests(TestCase):
+    def _rules_csv(self):
+        data = (
+            "gt-retire-age,lt-retire-age,Stocks,Bonds,Stocks:US Total Market,Bonds:US Investment Grade\n"
+            "-100,100,60,40,60,40\n"
+        )
+        f = io.BytesIO(data.encode("utf-8"))
+        f.name = "edu.csv"
+        return f
+
+    def test_import_sets_education_account_type(self):
+        rs = import_glidepath_rules(self._rules_csv(), account_type="education")
+        self.assertEqual(rs.account_type, "education")
+
+    def test_import_defaults_retirement_and_rejects_invalid(self):
+        rs = import_glidepath_rules(self._rules_csv(), account_type="bogus")
+        self.assertEqual(rs.account_type, "retirement")
+
+    def test_example_education_ruleset_seeded(self):
+        rs = RuleSet.objects.get(name="Example 529 Education Glide Path")
+        self.assertEqual(rs.account_type, "education")
+        self.assertEqual(rs.rules.count(), 6)
+        # New convention: the most-aggressive band is furthest before enrollment.
+        far = rs.rules.get(gt_retire_age=-100)
+        classes = {c.asset_class.name: c.percentage for c in far.class_allocations.all()}
+        self.assertEqual(classes["Stocks"], Decimal("90.00"))
+        # category allocations sum to their parent class
+        cat_total = sum(c.percentage for c in far.category_allocations.all())
+        self.assertEqual(cat_total, Decimal("100.00"))
 
 
 class VirtualFundAdminTests(TestCase):

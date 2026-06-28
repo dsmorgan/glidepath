@@ -813,14 +813,17 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
     years_to_retirement = None
     matching_rule = None
 
-    # Resolve the rule time-window value. Retirement rules key on years to
-    # retirement; education rules key on years to enrollment (entered directly).
+    # Resolve the rule time-window value. Education and retirement now share one
+    # convention: the band's offset is "years from the milestone" (negative =
+    # before it, 0 = the milestone, positive = after it), so both derive the
+    # window the same way -- current_year - year_born - age. Retirement keys on
+    # retirement_age; education keys on enrollment_age (college start).
     time_window = None
-    if portfolio.ruleset:
+    if portfolio.ruleset and portfolio.year_born:
         if portfolio.account_type == 'education':
-            time_window = portfolio.years_to_enrollment
-        elif portfolio.year_born and portfolio.retirement_age:
-            # current_year - year_born - retirement_age
+            if portfolio.enrollment_age is not None:
+                time_window = current_year - portfolio.year_born - portfolio.enrollment_age
+        elif portfolio.retirement_age:
             # Negative value = before retirement, Positive = after retirement
             years_to_retirement = current_year - portfolio.year_born - portfolio.retirement_age
             time_window = years_to_retirement

@@ -90,8 +90,10 @@ def calculate_education_projection(portfolio) -> dict:
     {'available': False, 'missing': [...]} when required inputs are absent.
     """
     missing = []
-    if portfolio.years_to_enrollment is None:
-        missing.append("Years to Enrollment")
+    if portfolio.year_born is None:
+        missing.append("Year Born")
+    if portfolio.enrollment_age is None:
+        missing.append("Enrollment Age")
     if portfolio.return_assumption is None:
         missing.append("Return Assumption")
     if portfolio.annual_withdrawal is None:

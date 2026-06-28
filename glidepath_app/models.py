@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 import uuid
 from django.db import models
@@ -378,13 +379,16 @@ class Portfolio(models.Model):
     account_type = models.CharField(
         max_length=20, choices=ACCOUNT_TYPE_CHOICES, default='retirement'
     )
-    year_born = models.IntegerField(null=True, blank=True, help_text="Birth year for target allocation calculation")
+    year_born = models.IntegerField(
+        null=True, blank=True,
+        help_text="Birth year. Retirement: the saver's; education: the student's."
+    )
     retirement_age = models.IntegerField(null=True, blank=True, help_text="Target retirement age for allocation")
 
     # --- Education-specific fields (null for retirement portfolios) ---
-    years_to_enrollment = models.IntegerField(
+    enrollment_age = models.IntegerField(
         null=True, blank=True,
-        help_text="Years until the student starts college (negative = already enrolled)"
+        help_text="Age at which the student starts college (the glide path's year 0)."
     )
     college_duration_years = models.IntegerField(
         default=4, help_text="Number of years funds will be withdrawn for school"
@@ -411,6 +415,19 @@ class Portfolio(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user.username} - {self.name}"
+
+    @property
+    def years_to_enrollment(self):
+        """Years until the student starts college, derived from birth year + enrollment age.
+
+        Positive = enrollment is still ahead (accumulation); negative = already
+        enrolled. None when either input is unset. This is the time-to-event horizon
+        the projection uses; it is the negation of the glide-path time window (years
+        *from* enrollment), keeping education aligned with the retirement model.
+        """
+        if self.year_born is None or self.enrollment_age is None:
+            return None
+        return self.year_born + self.enrollment_age - datetime.now().year
 
     def get_balance_info(self):
         """

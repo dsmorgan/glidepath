@@ -24,7 +24,7 @@
                 <select id="rulesetSelect" name="ruleset" class="w-full border border-gray-300 rounded-md p-2" onchange="updateActions(); htmx.ajax('GET', '{% url 'rules' %}?ruleset=' + this.value, '#rules');">
                     <option value="">-- Select a Ruleset --</option>
                     {% for rs in rule_sets %}
-                        <option value="{{ rs.id }}" {% if selected_set and rs.id == selected_set.id %}selected{% endif %}>{{ rs.name }}</option>
+                        <option value="{{ rs.id }}" {% if selected_set and rs.id == selected_set.id %}selected{% endif %}>{{ rs.name }}{% if rs.account_type != 'retirement' %} — {{ rs.get_account_type_display }}{% endif %}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -59,8 +59,13 @@
                 <!-- Upload Button (Admin only) -->
                 <form method="post" enctype="multipart/form-data" class="inline-block">
                     {% csrf_token %}
-                    <div class="flex gap-2">
+                    <div class="flex gap-2 items-center">
                         <input type="file" name="file" required class="border border-gray-300 rounded-md p-2 text-sm">
+                        <select name="account_type" title="Account type for the imported rule set" class="border border-gray-300 rounded-md p-2 text-sm">
+                            <option value="retirement">Retirement</option>
+                            <option value="education">Education / 529</option>
+                            <option value="general">General</option>
+                        </select>
                         <button type="submit" class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 whitespace-nowrap">
                             Upload CSV
                         </button>
@@ -94,9 +99,20 @@
 </div>
 
 <script>
+// Default anchor (Year Born + age). Education overrides these via glidepathConfig
+// so the preview lands on a sensible future enrollment instead of a retirement year.
+function glidepathDefaults() {
+    const cfg = window.glidepathConfig || {};
+    return {
+        yearBorn: cfg.defaultYearBorn || 1973,
+        age: cfg.defaultAge || 58,
+    };
+}
+
 function getYearOfRetirement() {
-    const yearBorn = parseInt(document.getElementById('yearBornSelect')?.value || 1973);
-    const retirementAge = parseInt(document.getElementById('retirementAgeSelect')?.value || 58);
+    const d = glidepathDefaults();
+    const yearBorn = parseInt(document.getElementById('yearBornSelect')?.value || d.yearBorn);
+    const retirementAge = parseInt(document.getElementById('retirementAgeSelect')?.value || d.age);
     return yearBorn + retirementAge;
 }
 
@@ -257,8 +273,9 @@ function updateCurrentYearDisplay() {
 
 function updateTableYearAndAge() {
     // Calculate Year and Age for all table rows
-    const yearBorn = parseInt(document.getElementById('yearBornSelect')?.value || 1973);
-    const retirementAge = parseInt(document.getElementById('retirementAgeSelect')?.value || 58);
+    const d = glidepathDefaults();
+    const yearBorn = parseInt(document.getElementById('yearBornSelect')?.value || d.yearBorn);
+    const retirementAge = parseInt(document.getElementById('retirementAgeSelect')?.value || d.age);
     const yearOfRetirement = yearBorn + retirementAge;
 
     // Get all table rows with age data
@@ -328,11 +345,15 @@ function initializeCharts() {
     const retirementAgeSelect = document.getElementById('retirementAgeSelect');
 
     if (yearBornSelect && retirementAgeSelect) {
-        const savedYearBorn = sessionStorage.getItem('yearBorn') || '1973';
-        const savedRetirementAge = sessionStorage.getItem('retirementAge') || '58';
+        const d = glidepathDefaults();
+        // Only reuse a saved value if it's a valid option for this ruleset type;
+        // retirement and education share the storage key but have disjoint ranges.
+        const inOptions = (sel, val) => Array.from(sel.options).some(o => o.value === val);
+        const savedYearBorn = sessionStorage.getItem('yearBorn');
+        const savedRetirementAge = sessionStorage.getItem('retirementAge');
 
-        yearBornSelect.value = savedYearBorn;
-        retirementAgeSelect.value = savedRetirementAge;
+        yearBornSelect.value = inOptions(yearBornSelect, savedYearBorn) ? savedYearBorn : String(d.yearBorn);
+        retirementAgeSelect.value = inOptions(retirementAgeSelect, savedRetirementAge) ? savedRetirementAge : String(d.age);
     }
 
     updateCharts();
@@ -403,7 +424,8 @@ function updateCharts() {
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'top';
                     // Draw at the top inside the chart area with small padding
-                    ctx.fillText('Retirement', x, chart.chartArea.top + 5);
+                    const markerLabel = (window.glidepathConfig && window.glidepathConfig.markerLabel) || 'Retirement';
+                    ctx.fillText(markerLabel, x, chart.chartArea.top + 5);
                     ctx.restore();
                 }
 
