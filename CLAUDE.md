@@ -4,13 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Glidepath is a Django web application for managing investment allocation rules (glidepatches) based on retirement age. It allows users to import CSV-based allocation rules, visualize them with charts, and export them back to CSV.
+Glidepath is a Django web application for managing investment allocation rules (glidepatches) and tracking portfolio drift against them. Originally retirement-only, it now supports **multiple account types** (retirement and education/529) on a shared rule engine, taxonomy, and projection infrastructure — distinguished by an `account_type` flag rather than separate systems.
 
 **Core Functionality:**
-- Import glidepath rules from CSV files
-- Store asset class and category allocations by retirement age bands
-- Visualize allocations with interactive charts (stacked area, pie)
-- Export rules back to CSV format
+- Import glidepath rules from CSV files; visualize them (stacked area, pie) and export back to CSV
+- Type portfolios/rule sets/uploads as `retirement` or `education` (529)
+- Import brokerage holdings (Fidelity/E-Trade) and NYSaves 529 holdings; analyze current-vs-target drift
+- **Virtual funds**: model non-publicly-traded products (529 portfolios) and "explode" them into asset categories via look-through composition
+- Education (529) dashboard with a deterministic balance/funding-gap projection
+- Admin CRUD for fund providers / virtual funds, with manual price refresh
+
+> See `docs/529-architecture-spec.md` for the multi-account-type design, and the
+> **Multi-Account-Type Architecture** section below for the implemented surface.
 
 ## Project Structure
 
@@ -275,6 +280,45 @@ glidepath/
 - Unique together on (portfolio, account_number, symbol)
 - Related to: Portfolio (many:1)
 
+### Multi-Account-Type Architecture (Retirement, Education / 529)
+
+Portfolios, rule sets, and account uploads carry an `account_type` — `retirement`, `education`, or `general` (module-level `ACCOUNT_TYPE_CHOICES` in `models.py`). The rule engine, asset taxonomy, and projection infrastructure are shared; the flag selects terminology and the time-window anchor.
+
+**Unified glide-path time axis (important).** A rule band's `gt_retire_age`/`lt_retire_age` are *years relative to the milestone*: **negative = before the milestone (accumulating, aggressive), `0` = the milestone, positive = after (drawing down, conservative)**. The milestone is retirement for retirement portfolios and **college enrollment** for education ones. Both account types resolve the active band with one formula in `get_portfolio_analysis`:
+
+```
+time_window = current_year - year_born - age      # age = retirement_age OR enrollment_age
+```
+
+(The field names `gt_retire_age`/`lt_retire_age` are historical; for education read them as "years from enrollment.")
+
+#### New models
+- **FundProvider** — an institution offering non-public funds (e.g. a 529 plan). `slug` unique (e.g. `nysaves`), `price_scraper` (dispatched by `scraper_service`), `last_price_refresh` (price-refresh cooldown stamp).
+- **VirtualFund** — a non-publicly-traded product (e.g. a NY 529 portfolio). `provider` FK, `slug` unique per provider, `unit_price`/`price_as_of`, `is_active`. `composition_total()` sums its composition.
+- **VirtualFundComposition** — the asset-category breakdown for a virtual fund; percentages must sum to 100. `(virtual_fund, asset_category)` unique.
+
+#### Additions to existing models
+- **RuleSet / AccountUpload / Portfolio** — `account_type`.
+- **Portfolio** — education fields: `enrollment_age` (the glide path's year 0), `college_duration_years`, `annual_withdrawal`, `annual_contribution`, `return_assumption`. `years_to_enrollment` is a **derived property** (`year_born + enrollment_age - current_year`), not a stored column.
+- **AccountUpload** — `fund_provider` FK (set for virtual-fund uploads); `nysaves` upload type.
+- **AccountPosition** — `virtual_fund` FK (set when a holding maps to a virtual fund).
+- **Fund** — `preference` (display/recommendation priority; 1–10 = recommended), with `is_recommended` / `get_sort_preference` helpers.
+
+#### Services
+- **account_services.py** — `parse_nysaves_csv()` parses a NYSaves holdings export and matches portfolio names to seeded VirtualFunds by normalized name (surfacing unmatched/unvaluable rows rather than importing them as $0). `explode_virtual_fund()` / `resolve_position_asset_categories()` do the look-through: a virtual fund's value is distributed across `AssetCategory` per its composition. `get_portfolio_analysis()` handles both real tickers and virtual-fund explosion plus the unified time-window above.
+- **scraper_service.py** — `refresh_virtual_fund_prices(provider_slug)` updates VirtualFund unit prices via a provider-specific scraper in the `SCRAPERS` registry (NYSaves uses the acs529 JSON API). `last_price_refresh` is stamped **only when ≥1 fund updates**, which drives a 1-hour UI refresh cooldown. `_normalize_name()` bridges feed-vs-catalog naming.
+- **education_projection.py** — `calculate_education_projection(portfolio)` produces a deterministic year-by-year accumulation→withdrawal balance trajectory, funding gap, and `calculate_required_contribution()` back-solver. The deterministic analogue of `monte_carlo.py` for retirement.
+
+#### Views & UI
+- **education_dashboard** (`/portfolios/<id>/education/`, name `education_dashboard`) — holdings sourced from the latest `nysaves` upload, read-only current-vs-target drift, and the projection table/chart. Owner-scoped (admins may act as a selected user).
+- **Virtual Funds admin** (`/virtual-funds/…`: `virtual_funds_view`, `fund_provider_detail`, `virtual_fund_detail`, `refresh_provider_prices`, deletes) — admin-only CRUD for providers/funds/compositions plus the manual "Refresh Prices" trigger (cooldown-gated; composition formset validates sum-to-100).
+- **Rules page** relabels the time-window fields and the chart's milestone marker by account type (retirement → "Retirement"; education → "Enrollment"), driven by `window.glidepathConfig`.
+- **Portfolio create/edit** — an account-type selector toggles retirement (Year Born + Retirement Age) vs education (Year Born + Enrollment Age + funding fields); initial visibility is rendered server-side from `account_type`.
+
+#### Management commands
+- `refresh_fund_prices` — manually refresh virtual-fund prices for active providers (schedulable via cron/queue; no scheduled job ships by default).
+- `verify_compositions` — audit that every VirtualFund's composition sums to 100%.
+
 ### Key Business Logic (glidepath_app/services.py)
 
 **import_glidepath_rules(file_obj)** - CSV import engine
@@ -468,6 +512,15 @@ Tests in `glidepath_app/tests.py`:
 - **test_missing_years_raise_error**: Validates age band coverage validation
 - **test_overlapping_years_raise_error**: Validates no overlapping age bands
 
+Multi-account-type / 529 coverage (same file):
+- **NYSavesParserTests** — NYSaves holdings parsing, name matching, price fallback, unmatched/unvaluable handling
+- **PortfolioAnalysisTests** — virtual-fund composition explosion; education vs retirement target resolution via the unified time window
+- **EducationProjectionTests** — accumulation/withdrawal projection, funding gap, required-contribution back-solver, dashboard render + owner scoping
+- **EducationConventionTests** — the unified sign convention both directions, derived `years_to_enrollment` property, seeded-example bands, sample-CSV import, and rules-page chart config per account type
+- **EducationRulesetTests** — account-type on import + example seed
+- **VirtualFundAdminTests** — admin CRUD for providers/funds/compositions and price-refresh cooldown
+- **AccessControlTests** — owner-only scoping (IDOR hardening) on portfolio/upload routes
+
 Run tests with: `docker-compose run --rm web python manage.py test`
 
 ## Database
@@ -489,6 +542,15 @@ Added OAuth2/OIDC support with improved identity linking:
   - Only enforced when both fields are set (supports local-only users)
 
 This follows OAuth/OIDC best practices used by Auth0, Google, Azure AD, etc.
+
+### Multi-Account-Type & Virtual Funds (Migrations 0019–0023)
+- **0019** — schema for `FundProvider`/`VirtualFund`/`VirtualFundComposition`, `account_type` on RuleSet/AccountUpload/Portfolio, education fields on Portfolio, `virtual_fund` FK on AccountPosition, `nysaves` upload type.
+- **0020** — seed the NYSaves catalog: provider, canonical `AssetCategory` set, and the 18 static NY 529 portfolios with their compositions. (Target Enrollment portfolios are intentionally not seeded.)
+- **0021** — seed the "Example 529 Education Glide Path" rule set.
+- **0022** — drop the stored `Portfolio.years_to_enrollment` column; add `enrollment_age` (`years_to_enrollment` is now a derived property).
+- **0023** — re-seed the example education rule set under the unified sign convention (delete + recreate; `Portfolio.ruleset` is `SET_NULL`, so referencing portfolios are un-linked, not deleted).
+
+Note: migrations 0021/0023 encode the **unified glide-path convention** (negative = before the milestone/enrollment; `0` = the milestone; positive = after). Education rule bands read as "years from enrollment."
 
 ## OAuth2/OIDC Authentication Implementation
 

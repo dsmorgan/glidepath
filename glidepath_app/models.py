@@ -18,8 +18,10 @@ class RuleSet(models.Model):
     name = models.CharField(max_length=100, unique=True)
     account_type = models.CharField(
         max_length=20, choices=ACCOUNT_TYPE_CHOICES, default='retirement',
-        help_text="Which kind of portfolio this rule set applies to. For education "
-                  "rule sets, the age-band fields are interpreted as years to enrollment."
+        help_text="Which kind of portfolio this rule set applies to. The age-band "
+                  "fields are years relative to the milestone (negative = before, "
+                  "0 = the milestone, positive = after); for education the milestone "
+                  "is college enrollment."
     )
     description = models.TextField(blank=True)
 
