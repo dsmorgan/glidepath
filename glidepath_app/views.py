@@ -8,11 +8,12 @@ from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.contrib.auth.hashers import check_password
 
-from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm, IdentityProviderForm, AccountUploadForm, PortfolioForm, AssumptionUploadForm, SessionSettingsForm
-from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, AccountPosition, Portfolio, PortfolioItem, AssumptionUpload, AssumptionData, SessionSettings
+from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm, IdentityProviderForm, AccountUploadForm, PortfolioForm, AssumptionUploadForm, SessionSettingsForm, FundProviderForm, VirtualFundForm, VirtualFundCompositionFormSet
+from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, AccountPosition, Portfolio, PortfolioItem, AssumptionUpload, AssumptionData, SessionSettings, FundProvider, VirtualFund
 from .services import export_glidepath_rules, import_glidepath_rules, import_blackrock_assumptions
 from .ticker_service import query_ticker as query_ticker_service
 from .account_services import import_fidelity_csv, import_etrade_csv, parse_nysaves_csv, get_portfolio_analysis, calculate_rebalance_recommendations
+from .scraper_service import refresh_virtual_fund_prices
 from .decorators import admin_required
 
 DEFAULT_COLORS = [
@@ -2107,3 +2108,120 @@ def modeling_view(request):
     }
 
     return render(request, 'glidepath_app/modeling.html', context)
+
+
+# ---------------------------------------------------------------------------
+# Virtual fund / provider administration (admin-gated)
+# ---------------------------------------------------------------------------
+
+def virtual_funds_view(request):
+    """List fund providers and their virtual funds. Editing is admin-only."""
+    is_admin = request.session.get('is_admin', False)
+
+    refresh_summary = request.session.pop('vf_refresh_summary', None)
+    refresh_error = request.session.pop('vf_refresh_error', None)
+
+    providers = []
+    for provider in FundProvider.objects.prefetch_related('virtual_funds').all():
+        providers.append({
+            'provider': provider,
+            'funds': provider.virtual_funds.all(),
+        })
+
+    context = {
+        'providers': providers,
+        'is_admin': is_admin,
+        'refresh_summary': refresh_summary,
+        'refresh_error': refresh_error,
+    }
+    return render(request, 'glidepath_app/virtual_funds.html', context)
+
+
+def fund_provider_detail(request, provider_id=None):
+    """Add or edit a fund provider."""
+    is_admin = request.session.get('is_admin', False)
+    provider = FundProvider.objects.filter(id=provider_id).first() if provider_id else None
+    if provider_id and provider is None:
+        return redirect('virtual_funds')
+
+    if request.method == 'POST':
+        if not is_admin:
+            return HttpResponseForbidden("Administrator privileges required.")
+        form = FundProviderForm(request.POST, instance=provider)
+        if form.is_valid():
+            form.save()
+            return redirect('virtual_funds')
+    else:
+        form = FundProviderForm(instance=provider)
+
+    context = {'form': form, 'provider': provider, 'is_edit': provider is not None, 'is_admin': is_admin}
+    return render(request, 'glidepath_app/fund_provider_detail.html', context)
+
+
+@admin_required
+@require_POST
+def delete_fund_provider(request, provider_id):
+    """Delete a fund provider (cascades to its virtual funds)."""
+    FundProvider.objects.filter(id=provider_id).delete()
+    return redirect('virtual_funds')
+
+
+def virtual_fund_detail(request, fund_id=None):
+    """Add or edit a virtual fund, including its composition breakdown."""
+    is_admin = request.session.get('is_admin', False)
+    fund = VirtualFund.objects.filter(id=fund_id).first() if fund_id else None
+    if fund_id and fund is None:
+        return redirect('virtual_funds')
+
+    if request.method == 'POST':
+        if not is_admin:
+            return HttpResponseForbidden("Administrator privileges required.")
+        form = VirtualFundForm(request.POST, instance=fund)
+        formset = VirtualFundCompositionFormSet(request.POST, instance=fund)
+        if form.is_valid():
+            new_fund = form.save()
+            # Re-bind the formset to the (possibly newly created) fund instance.
+            formset = VirtualFundCompositionFormSet(request.POST, instance=new_fund)
+            if formset.is_valid():
+                formset.save()
+                return redirect('virtual_funds')
+    else:
+        form = VirtualFundForm(instance=fund)
+        formset = VirtualFundCompositionFormSet(instance=fund)
+
+    context = {
+        'form': form,
+        'formset': formset,
+        'fund': fund,
+        'is_edit': fund is not None,
+        'is_admin': is_admin,
+    }
+    return render(request, 'glidepath_app/virtual_fund_detail.html', context)
+
+
+@admin_required
+@require_POST
+def delete_virtual_fund(request, fund_id):
+    """Delete a virtual fund (cascades to its composition)."""
+    VirtualFund.objects.filter(id=fund_id).delete()
+    return redirect('virtual_funds')
+
+
+@admin_required
+@require_POST
+def refresh_provider_prices(request, provider_id):
+    """Manually trigger a price refresh for a provider's virtual funds."""
+    provider = FundProvider.objects.filter(id=provider_id).first()
+    if provider is None:
+        return redirect('virtual_funds')
+    try:
+        result = refresh_virtual_fund_prices(provider.slug)
+        summary = f"{provider.name}: updated {result['updated']} of {result['scraped_count']} scraped fund(s)."
+        if result['not_updated']:
+            summary += f" No price for {len(result['not_updated'])} fund(s)."
+        if result['unmatched_scraped']:
+            summary += f" {len(result['unmatched_scraped'])} scraped row(s) matched no fund."
+        request.session['vf_refresh_summary'] = summary
+    except Exception as exc:
+        request.session['vf_refresh_error'] = f"Price refresh failed: {exc}"
+    return redirect('virtual_funds')

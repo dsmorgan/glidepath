@@ -33,6 +33,12 @@ from glidepath_app.views import (
     delete_identity_provider,
     download_funds_csv,
     upload_funds_csv,
+    virtual_funds_view,
+    fund_provider_detail,
+    delete_fund_provider,
+    virtual_fund_detail,
+    delete_virtual_fund,
+    refresh_provider_prices,
 )
 
 urlpatterns = [
@@ -45,6 +51,14 @@ urlpatterns = [
     path('funds/', funds_view, name='funds'),
     path('funds/detail/', fund_detail, name='fund_detail'),
     path('funds/delete/<int:fund_id>/', delete_fund, name='delete_fund'),
+    path('virtual-funds/', virtual_funds_view, name='virtual_funds'),
+    path('virtual-funds/providers/add/', fund_provider_detail, name='fund_provider_add'),
+    path('virtual-funds/providers/<uuid:provider_id>/edit/', fund_provider_detail, name='fund_provider_edit'),
+    path('virtual-funds/providers/<uuid:provider_id>/delete/', delete_fund_provider, name='delete_fund_provider'),
+    path('virtual-funds/providers/<uuid:provider_id>/refresh/', refresh_provider_prices, name='refresh_provider_prices'),
+    path('virtual-funds/funds/add/', virtual_fund_detail, name='virtual_fund_add'),
+    path('virtual-funds/funds/<uuid:fund_id>/edit/', virtual_fund_detail, name='virtual_fund_edit'),
+    path('virtual-funds/funds/<uuid:fund_id>/delete/', delete_virtual_fund, name='delete_virtual_fund'),
     path('accounts/', accounts_view, name='accounts'),
     path('accounts/nysaves-template.csv', nysaves_csv_template, name='nysaves_csv_template'),
     path('accounts/upload/<uuid:upload_id>/', view_account_upload, name='view_account_upload'),

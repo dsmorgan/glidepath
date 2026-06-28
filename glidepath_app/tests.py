@@ -16,7 +16,8 @@ from .services import export_glidepath_rules, import_glidepath_rules
 from .account_services import (
     parse_nysaves_csv, get_portfolio_analysis, resolve_position_asset_categories,
 )
-from .forms import PortfolioForm
+from .forms import PortfolioForm, VirtualFundCompositionFormSet
+from .models import VirtualFundComposition
 from .education_projection import (
     calculate_education_projection, calculate_required_contribution,
 )
@@ -490,3 +491,71 @@ class AccessControlTests(TestCase):
         self.assertEqual(
             self.client.get(reverse("edit_portfolio", args=[self.portfolio.id])).status_code, 200
         )
+
+
+class VirtualFundAdminTests(TestCase):
+    """Admin CRUD for providers/funds/compositions + price refresh."""
+
+    def setUp(self):
+        self.admin = User.objects.create(username="adm", email="adm@example.com", role=0)
+        self.provider = FundProvider.objects.get(slug="nysaves")  # seeded
+
+    def _login(self, admin=True):
+        session = self.client.session
+        session["user_id"] = str(self.admin.id)
+        if admin:
+            session["is_admin"] = True
+        session.save()
+
+    def test_list_view_renders(self):
+        self._login(admin=False)
+        resp = self.client.get(reverse("virtual_funds"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "NY 529 Direct Plan")
+
+    def test_non_admin_cannot_create_provider(self):
+        self._login(admin=False)
+        resp = self.client.post(reverse("fund_provider_add"),
+                                {"name": "X", "slug": "x", "price_source_url": "",
+                                 "price_scraper": "", "notes": ""})
+        self.assertEqual(resp.status_code, 403)
+        self.assertFalse(FundProvider.objects.filter(slug="x").exists())
+
+    def test_admin_creates_provider(self):
+        self._login()
+        resp = self.client.post(reverse("fund_provider_add"),
+                                {"name": "Vanguard 529", "slug": "vanguard-529",
+                                 "price_source_url": "", "price_scraper": "", "notes": ""})
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(FundProvider.objects.filter(slug="vanguard-529").exists())
+
+    def _composition_data(self, p1, p2):
+        cat1 = AssetCategory.objects.get(name="US Total Market", asset_class__name="Stocks")
+        cat2 = AssetCategory.objects.get(name="International Market", asset_class__name="Stocks")
+        return {
+            "composition-TOTAL_FORMS": "2", "composition-INITIAL_FORMS": "0",
+            "composition-MIN_NUM_FORMS": "0", "composition-MAX_NUM_FORMS": "1000",
+            "composition-0-asset_category": str(cat1.id), "composition-0-percentage": str(p1), "composition-0-id": "",
+            "composition-1-asset_category": str(cat2.id), "composition-1-percentage": str(p2), "composition-1-id": "",
+        }
+
+    def test_composition_formset_requires_100(self):
+        fund = VirtualFund.objects.create(provider=self.provider, name="T", slug="t-fund")
+        self.assertTrue(VirtualFundCompositionFormSet(self._composition_data(60, 40), instance=fund).is_valid())
+        bad = VirtualFundCompositionFormSet(self._composition_data(60, 30), instance=fund)
+        self.assertFalse(bad.is_valid())
+        self.assertIn("100%", str(bad.non_form_errors()))
+
+    def test_refresh_provider_prices(self):
+        from datetime import date
+        feed = {"Growth Stock Index Portfolio": (Decimal("23.45"), date(2026, 6, 26))}
+        self._login()
+        with mock.patch.dict(scraper_service.SCRAPERS, {"nysaves": lambda p: feed}):
+            resp = self.client.post(reverse("refresh_provider_prices", args=[self.provider.id]))
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(VirtualFund.objects.get(slug="growth-stock-index").unit_price, Decimal("23.45"))
+
+    def test_non_admin_cannot_refresh(self):
+        self._login(admin=False)
+        resp = self.client.post(reverse("refresh_provider_prices", args=[self.provider.id]))
+        self.assertEqual(resp.status_code, 403)
