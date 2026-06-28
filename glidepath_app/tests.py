@@ -376,3 +376,16 @@ class EducationProjectionTests(TestCase):
         resp = self.client.get(reverse("education_dashboard", args=[pf.id]))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "529 dashboard")
+
+    def test_dashboard_denies_other_users_portfolio(self):
+        owner = User.objects.create(username="owner", email="owner@example.com")
+        pf = Portfolio.objects.create(user=owner, name="theirs", account_type="education",
+                                      years_to_enrollment=8, annual_withdrawal=Decimal("1"),
+                                      return_assumption=Decimal("6"))
+        # self.user is logged in but does not own the portfolio -> redirected away.
+        session = self.client.session
+        session["user_id"] = str(self.user.id)
+        session.save()
+        resp = self.client.get(reverse("education_dashboard", args=[pf.id]))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/portfolios/", resp["Location"])

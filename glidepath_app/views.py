@@ -857,10 +857,28 @@ def education_dashboard(request, portfolio_id):
     from .education_projection import calculate_education_projection
     from django.utils import timezone
 
-    try:
-        portfolio = Portfolio.objects.get(id=portfolio_id)
-    except Portfolio.DoesNotExist:
+    # Resolve the acting user (admins may act as a selected user), matching
+    # portfolios_view, then scope the portfolio to that user.
+    user_id = request.session.get('user_id')
+    is_admin = request.session.get('is_admin', False)
+    if is_admin and request.session.get('selected_user_id'):
+        current_user = User.objects.filter(id=request.session['selected_user_id']).first() \
+            or (User.objects.filter(id=user_id).first() if user_id else None)
+    else:
+        current_user = User.objects.filter(id=user_id).first() if user_id else None
+
+    if not current_user:
         return redirect('portfolios')
+
+    portfolio = Portfolio.objects.filter(id=portfolio_id).first()
+    if portfolio is None:
+        return redirect('portfolios')
+    # Owner-only, unless the acting user is an administrator.
+    if portfolio.user_id != current_user.id and not is_admin:
+        return redirect('portfolios')
+    # This route only serves education portfolios.
+    if portfolio.account_type != 'education':
+        return redirect(f'/portfolios/?portfolio={portfolio.id}')
 
     analysis_data = get_portfolio_analysis(portfolio)
     projection = calculate_education_projection(portfolio)
