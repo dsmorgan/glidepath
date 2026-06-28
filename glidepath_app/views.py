@@ -324,12 +324,26 @@ def rules_view(request):
         )
         class_chart, category_chart, pie_chart = _build_chart_data(list(rules))
 
-    # Generate year and retirement age options
-    years_born = list(range(1940, 2021))
-    retirement_ages = list(range(40, 81))
-
+    # Chart controls. Education and retirement share the same glide-path math
+    # (year = year_born + age + offset, marker at offset 0); only the anchor age,
+    # labels, and the milestone marker text differ.
     is_education = bool(selected_set and selected_set.account_type == 'education')
-    time_window_label = "Years to Enrollment" if is_education else "Years to Retirement"
+    if is_education:
+        years_born = list(range(2000, 2027))
+        age_options = list(range(16, 26))
+        age_label = "Enrollment Age"
+        marker_label = "Enrollment"
+        time_window_label = "Years from Enrollment"
+        default_year_born = 2018
+        default_age = 18
+    else:
+        years_born = list(range(1940, 2021))
+        age_options = list(range(40, 81))
+        age_label = "Retirement Age"
+        marker_label = "Retirement"
+        time_window_label = "Years to Retirement"
+        default_year_born = 1973
+        default_age = 58
 
     context = {
         "form": form,
@@ -343,7 +357,11 @@ def rules_view(request):
         "category_chart": json.dumps(category_chart),
         "class_pie_chart": json.dumps(pie_chart),
         "years_born": years_born,
-        "retirement_ages": retirement_ages,
+        "age_options": age_options,
+        "age_label": age_label,
+        "marker_label": marker_label,
+        "default_year_born": default_year_born,
+        "default_age": default_age,
         "is_admin": is_admin,
     }
 

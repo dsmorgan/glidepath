@@ -305,9 +305,11 @@ class RulesetSelect(forms.Select):
 class PortfolioForm(forms.ModelForm):
     """Form for creating and editing portfolios."""
 
-    # Generate year and retirement age choices
-    YEAR_BORN_CHOICES = [('', 'Select year')] + [(year, str(year)) for year in range(1940, 2021)]
+    # Generate year and age choices. Year-born spans both savers and students
+    # (a 529 beneficiary may have been born quite recently).
+    YEAR_BORN_CHOICES = [('', 'Select year')] + [(year, str(year)) for year in range(1940, 2027)]
     RETIREMENT_AGE_CHOICES = [('', 'Select age')] + [(age, str(age)) for age in range(40, 81)]
+    ENROLLMENT_AGE_CHOICES = [('', 'Select age')] + [(age, str(age)) for age in range(16, 26)]
 
     year_born = forms.IntegerField(
         required=False,
@@ -321,10 +323,16 @@ class PortfolioForm(forms.ModelForm):
             'class': 'w-full border border-gray-300 rounded-md p-2'
         })
     )
+    enrollment_age = forms.IntegerField(
+        required=False,
+        widget=forms.Select(choices=ENROLLMENT_AGE_CHOICES, attrs={
+            'class': 'w-full border border-gray-300 rounded-md p-2'
+        })
+    )
 
     # Education fields are optional; they only apply when account_type == education.
     EDUCATION_FIELDS = [
-        'years_to_enrollment', 'college_duration_years',
+        'enrollment_age', 'college_duration_years',
         'annual_withdrawal', 'annual_contribution', 'return_assumption',
     ]
 
@@ -332,7 +340,7 @@ class PortfolioForm(forms.ModelForm):
         model = Portfolio
         fields = [
             'name', 'account_type', 'ruleset', 'year_born', 'retirement_age',
-            'years_to_enrollment', 'college_duration_years',
+            'enrollment_age', 'college_duration_years',
             'annual_withdrawal', 'annual_contribution', 'return_assumption',
         ]
         widgets = {
@@ -345,10 +353,6 @@ class PortfolioForm(forms.ModelForm):
             }),
             'ruleset': RulesetSelect(attrs={
                 'class': 'w-full border border-gray-300 rounded-md p-2'
-            }),
-            'years_to_enrollment': forms.NumberInput(attrs={
-                'class': 'w-full border border-gray-300 rounded-md p-2',
-                'placeholder': 'e.g. 10 (negative = already enrolled)'
             }),
             'college_duration_years': forms.NumberInput(attrs={
                 'class': 'w-full border border-gray-300 rounded-md p-2', 'min': '1'
@@ -372,7 +376,7 @@ class PortfolioForm(forms.ModelForm):
             'ruleset': 'Glidepath Rule',
             'year_born': 'Year Born',
             'retirement_age': 'Retirement Age',
-            'years_to_enrollment': 'Years to Enrollment',
+            'enrollment_age': 'Enrollment Age',
             'college_duration_years': 'College Duration (years)',
             'annual_withdrawal': 'Annual Withdrawal',
             'annual_contribution': 'Annual Contribution',

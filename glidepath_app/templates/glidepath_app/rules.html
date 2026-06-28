@@ -5,13 +5,23 @@ window.chartDataStaged = {
     categoryChart: {{ category_chart|safe }},
     pieChart: {{ class_pie_chart|safe }}
 };
+// Account-type-specific chart framing. The glide-path math is identical for
+// retirement and education; only the milestone marker text and the default
+// anchor (Year Born + age) differ.
+window.glidepathConfig = {
+    isEducation: {{ is_education|yesno:"true,false" }},
+    markerLabel: "{{ marker_label }}",
+    defaultYearBorn: {{ default_year_born }},
+    defaultAge: {{ default_age }}
+};
 </script>
 
 {% if is_education %}
 <div class="mb-6 bg-purple-50 border-l-4 border-purple-400 p-4">
     <p class="text-sm text-purple-800">
-        <strong>Education / 529 rule set.</strong> Time windows below are <strong>{{ time_window_label|lower }}</strong>
-        (negative = student already enrolled). The Year Born / Retirement Age controls are retirement-oriented and don't apply here.
+        <strong>Education / 529 rule set.</strong> Time windows below are <strong>{{ time_window_label|lower }}</strong>:
+        negative = before college (accumulating), <strong>0 = enrollment</strong>, positive = during/after college (drawing down).
+        The controls below preview the path for a student of a given <strong>Year Born</strong> and <strong>Enrollment Age</strong>.
     </p>
 </div>
 {% endif %}
@@ -45,11 +55,11 @@ window.chartDataStaged = {
                         {% endfor %}
                     </select>
                 </div>
-                <!-- Retirement Age Dropdown -->
+                <!-- Anchor Age Dropdown (Retirement Age, or Enrollment Age for education) -->
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Retirement Age</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ age_label }}</label>
                     <select id="retirementAgeSelect" class="w-full border border-gray-300 rounded-md p-2 text-sm" onchange="updatePieChartSelection()">
-                        {% for age in retirement_ages %}
+                        {% for age in age_options %}
                             <option value="{{ age }}">{{ age }}</option>
                         {% endfor %}
                     </select>

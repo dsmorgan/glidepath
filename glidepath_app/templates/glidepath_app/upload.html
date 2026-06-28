@@ -99,9 +99,20 @@
 </div>
 
 <script>
+// Default anchor (Year Born + age). Education overrides these via glidepathConfig
+// so the preview lands on a sensible future enrollment instead of a retirement year.
+function glidepathDefaults() {
+    const cfg = window.glidepathConfig || {};
+    return {
+        yearBorn: cfg.defaultYearBorn || 1973,
+        age: cfg.defaultAge || 58,
+    };
+}
+
 function getYearOfRetirement() {
-    const yearBorn = parseInt(document.getElementById('yearBornSelect')?.value || 1973);
-    const retirementAge = parseInt(document.getElementById('retirementAgeSelect')?.value || 58);
+    const d = glidepathDefaults();
+    const yearBorn = parseInt(document.getElementById('yearBornSelect')?.value || d.yearBorn);
+    const retirementAge = parseInt(document.getElementById('retirementAgeSelect')?.value || d.age);
     return yearBorn + retirementAge;
 }
 
@@ -333,11 +344,15 @@ function initializeCharts() {
     const retirementAgeSelect = document.getElementById('retirementAgeSelect');
 
     if (yearBornSelect && retirementAgeSelect) {
-        const savedYearBorn = sessionStorage.getItem('yearBorn') || '1973';
-        const savedRetirementAge = sessionStorage.getItem('retirementAge') || '58';
+        const d = glidepathDefaults();
+        // Only reuse a saved value if it's a valid option for this ruleset type;
+        // retirement and education share the storage key but have disjoint ranges.
+        const inOptions = (sel, val) => Array.from(sel.options).some(o => o.value === val);
+        const savedYearBorn = sessionStorage.getItem('yearBorn');
+        const savedRetirementAge = sessionStorage.getItem('retirementAge');
 
-        yearBornSelect.value = savedYearBorn;
-        retirementAgeSelect.value = savedRetirementAge;
+        yearBornSelect.value = inOptions(yearBornSelect, savedYearBorn) ? savedYearBorn : String(d.yearBorn);
+        retirementAgeSelect.value = inOptions(retirementAgeSelect, savedRetirementAge) ? savedRetirementAge : String(d.age);
     }
 
     updateCharts();
@@ -408,7 +423,8 @@ function updateCharts() {
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'top';
                     // Draw at the top inside the chart area with small padding
-                    ctx.fillText('Retirement', x, chart.chartArea.top + 5);
+                    const markerLabel = (window.glidepathConfig && window.glidepathConfig.markerLabel) || 'Retirement';
+                    ctx.fillText(markerLabel, x, chart.chartArea.top + 5);
                     ctx.restore();
                 }
 
