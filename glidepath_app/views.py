@@ -2129,7 +2129,7 @@ def virtual_funds_view(request):
     now = timezone.now()
     providers = []
     for provider in FundProvider.objects.prefetch_related('virtual_funds').all():
-        # A successful refresh stamps last_price_refresh; throttle within the cooldown.
+        # last_price_refresh is stamped only when prices were updated; throttle within the cooldown.
         can_refresh = True
         minutes_ago = None
         if provider.last_price_refresh:
@@ -2232,8 +2232,8 @@ def refresh_provider_prices(request, provider_id):
     if provider is None:
         return redirect('virtual_funds')
 
-    # Throttle: a successful refresh stamps last_price_refresh (failures don't), so
-    # this blocks re-polling within the cooldown without blocking retries of failures.
+    # Throttle: last_price_refresh is stamped only when prices were retrieved, so this
+    # blocks re-polling within the cooldown without blocking retries of failed/empty fetches.
     if provider.last_price_refresh:
         elapsed = (timezone.now() - provider.last_price_refresh).total_seconds()
         if elapsed < PRICE_REFRESH_COOLDOWN_SECONDS:

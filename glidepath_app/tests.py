@@ -575,6 +575,16 @@ class VirtualFundAdminTests(TestCase):
             VirtualFund.objects.get(slug="growth-stock-index").unit_price, Decimal("99.99")
         )
 
+    def test_zero_update_refresh_does_not_start_cooldown(self):
+        from datetime import date
+        # A scraped name that matches no seeded fund -> updated 0 -> no timestamp.
+        feed = {"Nonexistent Portfolio": (Decimal("1.00"), date(2026, 6, 26))}
+        with mock.patch.dict(scraper_service.SCRAPERS, {"nysaves": lambda p: feed}):
+            result = scraper_service.refresh_virtual_fund_prices("nysaves")
+        self.assertEqual(result["updated"], 0)
+        self.provider.refresh_from_db()
+        self.assertIsNone(self.provider.last_price_refresh)
+
     def test_list_disables_refresh_within_cooldown(self):
         from django.utils import timezone
         self._login()
