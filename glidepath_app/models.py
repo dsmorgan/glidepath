@@ -4,8 +4,23 @@ from django.db import models
 from django.contrib.auth.hashers import make_password
 
 
+# Account types shared across Portfolio, RuleSet, and AccountUpload. Defined once
+# here so the choices stay consistent everywhere they are referenced.
+ACCOUNT_TYPE_CHOICES = [
+    ('retirement', 'Retirement'),
+    ('education', 'Education / 529'),
+    ('general', 'General'),
+]
+
+
 class RuleSet(models.Model):
     name = models.CharField(max_length=100, unique=True)
+    account_type = models.CharField(
+        max_length=20, choices=ACCOUNT_TYPE_CHOICES, default='retirement',
+        help_text="Which kind of portfolio this rule set applies to. For education "
+                  "rule sets, the age-band fields are interpreted as years to enrollment."
+    )
+    description = models.TextField(blank=True)
 
     def __str__(self) -> str:
         return self.name
@@ -141,6 +156,71 @@ class Fund(models.Model):
         return self.preference if self.preference is not None else 256
 
 
+class FundProvider(models.Model):
+    """An institution that offers virtual funds (e.g. a 529 plan)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=200)                       # "NY 529 Direct Plan"
+    slug = models.CharField(max_length=50, unique=True)           # "nysaves"
+    price_source_url = models.URLField(blank=True)                # Public price page URL
+    price_scraper = models.CharField(
+        max_length=50, blank=True,
+        help_text="Scraper identifier dispatched by scraper_service (e.g. 'nysaves')."
+    )
+    notes = models.TextField(blank=True)
+    last_price_refresh = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class VirtualFund(models.Model):
+    """A non-publicly-traded fund product (e.g. a NY 529 portfolio)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider = models.ForeignKey(
+        FundProvider, on_delete=models.CASCADE, related_name="virtual_funds"
+    )
+    name = models.CharField(max_length=200)        # "NY 529 Growth Stock Index Portfolio"
+    slug = models.CharField(max_length=100)        # "growth-stock-index"
+    unit_price = models.DecimalField(max_digits=12, decimal_places=4, null=True, blank=True)
+    price_as_of = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)  # Hide retired funds
+    notes = models.TextField(blank=True)           # E.g. underlying Vanguard fund name
+
+    class Meta:
+        unique_together = ("provider", "slug")
+        ordering = ["provider", "name"]
+
+    def __str__(self) -> str:
+        return f"{self.provider.name}: {self.name}"
+
+    def composition_total(self) -> Decimal:
+        """Sum of the composition percentages for this fund."""
+        total = self.composition.aggregate(total=models.Sum("percentage"))["total"]
+        return total or Decimal("0")
+
+
+class VirtualFundComposition(models.Model):
+    """The asset-category breakdown for a virtual fund. Percentages must sum to 100."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    virtual_fund = models.ForeignKey(
+        VirtualFund, on_delete=models.CASCADE, related_name="composition"
+    )
+    asset_category = models.ForeignKey(AssetCategory, on_delete=models.CASCADE)
+    percentage = models.DecimalField(max_digits=5, decimal_places=2)  # e.g. 36.00
+
+    class Meta:
+        unique_together = ("virtual_fund", "asset_category")
+
+    def __str__(self) -> str:
+        return f"{self.virtual_fund.name} -> {self.asset_category}: {self.percentage}%"
+
+
 class IdentityProvider(models.Model):
     """Stores OAuth2/OIDC identity provider configurations."""
 
@@ -226,6 +306,8 @@ class AccountUpload(models.Model):
     UPLOAD_TYPE_CHOICES = [
         ('fidelity', 'Fidelity'),
         ('etrade', 'E-Trade'),
+        ('nysaves', 'NY 529 (NYSaves)'),
+        # future: ('vanguard_529', 'Vanguard 529'), ('fidelity_529', 'Fidelity 529')
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -233,6 +315,13 @@ class AccountUpload(models.Model):
     upload_datetime = models.DateTimeField(auto_now_add=True)
     file_datetime = models.CharField(max_length=200, help_text="Raw date/time string from CSV file")
     upload_type = models.CharField(max_length=50, choices=UPLOAD_TYPE_CHOICES)
+    account_type = models.CharField(
+        max_length=20, choices=ACCOUNT_TYPE_CHOICES, default='retirement'
+    )
+    fund_provider = models.ForeignKey(
+        FundProvider, on_delete=models.SET_NULL, null=True, blank=True,
+        help_text="Set for virtual-fund uploads (e.g. 529 plans)."
+    )
     filename = models.CharField(max_length=255)
     entry_count = models.IntegerField(default=0)
 
@@ -248,9 +337,14 @@ class AccountPosition(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     upload = models.ForeignKey(AccountUpload, on_delete=models.CASCADE, related_name="positions")
+    virtual_fund = models.ForeignKey(
+        VirtualFund, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="positions",
+        help_text="Set for virtual-fund (e.g. 529) positions; null for real-ticker positions."
+    )
     account_number = models.CharField(max_length=50)
     account_name = models.CharField(max_length=200)
-    symbol = models.CharField(max_length=50)  # Normalized symbol
+    symbol = models.CharField(max_length=50)  # Normalized symbol (virtual fund slug for 529 positions)
     description = models.CharField(max_length=500)
     quantity = models.CharField(max_length=50, blank=True)
     last_price = models.CharField(max_length=50, blank=True)
@@ -281,8 +375,33 @@ class Portfolio(models.Model):
     ruleset = models.ForeignKey(
         RuleSet, on_delete=models.SET_NULL, null=True, blank=True, related_name="portfolios"
     )
+    account_type = models.CharField(
+        max_length=20, choices=ACCOUNT_TYPE_CHOICES, default='retirement'
+    )
     year_born = models.IntegerField(null=True, blank=True, help_text="Birth year for target allocation calculation")
     retirement_age = models.IntegerField(null=True, blank=True, help_text="Target retirement age for allocation")
+
+    # --- Education-specific fields (null for retirement portfolios) ---
+    years_to_enrollment = models.IntegerField(
+        null=True, blank=True,
+        help_text="Years until the student starts college (negative = already enrolled)"
+    )
+    college_duration_years = models.IntegerField(
+        default=4, help_text="Number of years funds will be withdrawn for school"
+    )
+    annual_withdrawal = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Fixed dollar amount withdrawn per year of school"
+    )
+    annual_contribution = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Annual savings contribution to this portfolio (also used by retirement projections)"
+    )
+    return_assumption = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text="Annual return assumption percentage used for projection (e.g. 6.00)"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

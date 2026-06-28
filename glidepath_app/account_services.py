@@ -1,13 +1,19 @@
 """Service functions for importing and managing account position CSV uploads and portfolio analysis."""
 
 import csv
+import logging
 import re
 from io import StringIO
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from django.db import transaction
 from django.db.models import Sum, DecimalField
 from django.db.models.functions import Coalesce
-from .models import AccountUpload, AccountPosition, User, Portfolio, Fund
+from .models import (
+    AccountUpload, AccountPosition, User, Portfolio, Fund,
+    FundProvider, VirtualFund,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_symbol(symbol: str) -> str:
@@ -365,6 +371,216 @@ def import_etrade_csv(file_obj, user: User, filename: str) -> AccountUpload:
     return upload
 
 
+def _parse_money(value: str):
+    """Parse a money/number string (stripping $ and commas) into a Decimal, or None."""
+    if value is None:
+        return None
+    cleaned = value.replace('$', '').replace(',', '').strip()
+    if not cleaned:
+        return None
+    try:
+        return Decimal(cleaned)
+    except Exception:
+        return None
+
+
+NYSAVES_CSV_COLUMNS = [
+    "Account Number", "Account Name", "Portfolio Name",
+    "Units", "Unit Price", "Current Value",
+]
+
+
+@transaction.atomic
+def parse_nysaves_csv(file_obj, user: User, filename: str) -> dict:
+    """
+    Import a NYSaves 529 holdings CSV (a purpose-built format, since NYSaves has
+    no export feature).
+
+    Expected columns: Account Number, Account Name, Portfolio Name, Units,
+    Unit Price (optional), Current Value (optional).
+
+    Each "Portfolio Name" is matched case-insensitively to a VirtualFund under the
+    NYSaves provider. When Unit Price is omitted, the most recent scraped unit
+    price for the matched fund is used; Current Value is derived (units x price)
+    when not supplied.
+
+    Returns a dict: {upload, matched (int), unmatched (list of raw portfolio names),
+    total_rows (int)}.
+
+    Raises:
+        ValueError: if the provider/catalog is missing, the file is malformed, or
+        no rows match a known NYSaves fund.
+    """
+    provider = FundProvider.objects.filter(slug='nysaves').first()
+    if provider is None:
+        raise ValueError(
+            "NYSaves provider is not configured. Run migrations to seed the fund catalog."
+        )
+
+    try:
+        content = file_obj.read()
+        if isinstance(content, bytes):
+            content = content.decode('utf-8-sig')
+    except Exception as e:
+        raise ValueError(f"Error reading file: {str(e)}")
+
+    reader = csv.DictReader(StringIO(content))
+    if not reader.fieldnames:
+        raise ValueError("CSV file is empty")
+
+    headers = {(h or '').strip() for h in reader.fieldnames}
+    missing = [c for c in ("Account Number", "Portfolio Name", "Units") if c not in headers]
+    if missing:
+        raise ValueError(f"NYSaves CSV is missing required column(s): {', '.join(missing)}")
+
+    # Case-insensitive lookup of NYSaves virtual funds by name.
+    fund_by_name = {
+        vf.name.strip().lower(): vf
+        for vf in VirtualFund.objects.filter(provider=provider)
+    }
+
+    matched_positions = []
+    unmatched = []
+    errors = []
+    total_rows = 0
+
+    for row in reader:
+        portfolio_name = (row.get('Portfolio Name') or '').strip()
+        account_number = (row.get('Account Number') or '').strip()
+        if not portfolio_name and not account_number:
+            continue  # skip blank/footer rows
+        total_rows += 1
+
+        fund = fund_by_name.get(portfolio_name.lower())
+        if fund is None:
+            unmatched.append(portfolio_name)
+            continue
+
+        label = f"{portfolio_name} (acct {account_number})"
+
+        # Units are required and must be a valid number — never store a value we
+        # could not parse, or it silently becomes $0 in portfolio analysis.
+        units = _parse_money(row.get('Units'))
+        if units is None:
+            errors.append(f"{label}: missing or invalid Units")
+            continue
+
+        unit_price = _parse_money(row.get('Unit Price'))
+        if unit_price is None:
+            unit_price = fund.unit_price  # fall back to latest scraped price (may be None)
+
+        current_value = _parse_money(row.get('Current Value'))
+        if current_value is None:
+            if unit_price is not None:
+                current_value = units * unit_price
+            else:
+                # No explicit value and no price available -> can't value this holding.
+                errors.append(
+                    f"{label}: no Unit Price/Current Value and no refreshed price available"
+                )
+                continue
+
+        matched_positions.append({
+            'fund': fund,
+            'account_number': account_number,
+            'account_name': (row.get('Account Name') or '').strip(),
+            'quantity': str(units),
+            'last_price': str(unit_price) if unit_price is not None else '',
+            'current_value': str(current_value),
+        })
+
+    if not matched_positions:
+        problems = []
+        if unmatched:
+            problems.append("unmatched portfolio names: " + ", ".join(sorted(set(unmatched))))
+        if errors:
+            problems.append("; ".join(errors))
+        if problems:
+            raise ValueError("No positions could be imported. " + " | ".join(problems))
+        raise ValueError("No valid position data found in NYSaves CSV file")
+
+    # Replace any prior upload of the same file (mirrors the other parsers).
+    AccountUpload.objects.filter(
+        user=user, upload_type='nysaves', filename=filename
+    ).delete()
+
+    upload = AccountUpload.objects.create(
+        user=user,
+        file_datetime="Manual NYSaves entry",
+        upload_type='nysaves',
+        account_type='education',
+        fund_provider=provider,
+        filename=filename,
+        entry_count=len(matched_positions),
+    )
+
+    for pos in matched_positions:
+        fund = pos['fund']
+        AccountPosition.objects.create(
+            upload=upload,
+            virtual_fund=fund,
+            account_number=pos['account_number'],
+            account_name=pos['account_name'],
+            symbol=fund.slug,
+            description=fund.name,
+            quantity=pos['quantity'],
+            last_price=pos['last_price'],
+            current_value=pos['current_value'],
+        )
+
+    return {
+        'upload': upload,
+        'matched': len(matched_positions),
+        'unmatched': unmatched,
+        'errors': errors,
+        'total_rows': total_rows,
+    }
+
+
+def explode_virtual_fund(virtual_fund, value: Decimal, quantity: Decimal) -> list:
+    """Look through a virtual-fund holding into its underlying asset categories.
+
+    Returns a list of (AssetCategory, composition_percentage, value_portion,
+    quantity_portion). Value and quantity are split pro-rata by composition
+    percentage, so portions sum back to the whole holding and each portion's
+    value/quantity preserves the fund's unit price.
+    """
+    contributions = []
+    for comp in virtual_fund.composition.select_related('asset_category__asset_class').all():
+        fraction = comp.percentage / Decimal('100')
+        contributions.append((
+            comp.asset_category,
+            comp.percentage,
+            value * fraction,
+            quantity * fraction,
+        ))
+    return contributions
+
+
+def resolve_position_asset_categories(position) -> list:
+    """Resolve an AccountPosition to its asset-category contributions.
+
+    Returns a list of (AssetCategory, effective_percentage, effective_value):
+    - virtual-fund (529) positions explode via VirtualFundComposition
+    - real-ticker positions map to their Fund.category at 100%
+    - unmapped positions return an empty list
+    """
+    value = _parse_money(position.current_value) or Decimal('0')
+    quantity = _parse_money(position.quantity) or Decimal('0')
+
+    if position.virtual_fund_id:
+        return [
+            (category, pct, value_portion)
+            for (category, pct, value_portion, _qty) in
+            explode_virtual_fund(position.virtual_fund, value, quantity)
+        ]
+
+    fund = Fund.objects.filter(ticker=position.symbol).first()
+    if fund and fund.category:
+        return [(fund.category, Decimal('100'), value)]
+    return []
+
+
 def get_portfolio_analysis(portfolio: Portfolio) -> dict:
     """
     Analyze a portfolio and generate breakdown data for charts and tables.
@@ -424,22 +640,25 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
             current_value_str = position.current_value.replace('$', '').replace(',', '').strip()
             try:
                 current_value = Decimal(current_value_str) if current_value_str else Decimal('0')
-            except:
+            except (InvalidOperation, AttributeError):
                 current_value = Decimal('0')
 
             # Parse quantity, handling commas
             quantity_str = position.quantity.replace(',', '').strip()
             try:
                 quantity = Decimal(quantity_str) if quantity_str else Decimal('0')
-            except:
+            except (InvalidOperation, AttributeError):
                 quantity = Decimal('0')
 
             # Store per-account data
             key = (account_number, symbol)
-            if key not in symbol_account_data:
-                symbol_account_data[key] = {'value': Decimal('0'), 'quantity': Decimal('0')}
-            symbol_account_data[key]['value'] += current_value
-            symbol_account_data[key]['quantity'] += quantity
+            entry = symbol_account_data.setdefault(
+                key, {'value': Decimal('0'), 'quantity': Decimal('0'), 'virtual_fund': None}
+            )
+            entry['value'] += current_value
+            entry['quantity'] += quantity
+            if position.virtual_fund_id:
+                entry['virtual_fund'] = position.virtual_fund
 
     # Build breakdowns by looking up fund information
     class_breakdown = {}  # class_name -> total value
@@ -455,6 +674,39 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
         if symbol not in ticker_breakdown:
             ticker_breakdown[symbol] = Decimal('0')
         ticker_breakdown[symbol] += value
+
+        # Virtual-fund (e.g. 529) positions look through to multiple categories.
+        virtual_fund = account_data.get('virtual_fund')
+        if virtual_fund is not None:
+            contributions = explode_virtual_fund(virtual_fund, value, quantity)
+            if contributions:
+                for category, _comp_pct, portion_value, portion_qty in contributions:
+                    asset_class = category.asset_class
+                    category_key = f"{asset_class.name}:{category.name}"
+                    class_breakdown[asset_class.name] = (
+                        class_breakdown.get(asset_class.name, Decimal('0')) + portion_value
+                    )
+                    category_breakdown[category_key] = (
+                        category_breakdown.get(category_key, Decimal('0')) + portion_value
+                    )
+                    details = category_details.setdefault(category_key, {
+                        'asset_class': asset_class.name,
+                        'category_name': category.name,
+                        'total': Decimal('0'),
+                        'symbols': [],
+                    })
+                    details['total'] += portion_value
+                    details['symbols'].append({
+                        'account_number': account_number,
+                        'ticker': symbol,
+                        'value': portion_value,
+                        'quantity': portion_qty,
+                        'fund_name': virtual_fund.name,
+                        'preference': None,
+                        'is_recommended': False,
+                    })
+                continue
+            # A virtual fund with no composition rows falls through to "Unknown" below.
 
         # Look up fund to get class and category
         fund = Fund.objects.filter(ticker=symbol).first()
@@ -561,18 +813,25 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
     years_to_retirement = None
     matching_rule = None
 
-    if portfolio.ruleset and portfolio.year_born and portfolio.retirement_age:
-        # Calculate years to retirement based on current year
-        # Formula: current_year - year_born - retirement_age
-        # Negative value = before retirement, Positive = after retirement
-        years_to_retirement = current_year - portfolio.year_born - portfolio.retirement_age
+    # Resolve the rule time-window value. Retirement rules key on years to
+    # retirement; education rules key on years to enrollment (entered directly).
+    time_window = None
+    if portfolio.ruleset:
+        if portfolio.account_type == 'education':
+            time_window = portfolio.years_to_enrollment
+        elif portfolio.year_born and portfolio.retirement_age:
+            # current_year - year_born - retirement_age
+            # Negative value = before retirement, Positive = after retirement
+            years_to_retirement = current_year - portfolio.year_born - portfolio.retirement_age
+            time_window = years_to_retirement
 
-        # Find the glidepath rule for this retirement age
+    if portfolio.ruleset and time_window is not None:
+        # Find the glidepath rule whose band contains the time-window value
         from .models import GlidepathRule
         matching_rule = GlidepathRule.objects.filter(
             ruleset=portfolio.ruleset,
-            gt_retire_age__lte=years_to_retirement,
-            lt_retire_age__gt=years_to_retirement
+            gt_retire_age__lte=time_window,
+            lt_retire_age__gt=time_window
         ).first()
 
         if matching_rule:
@@ -674,6 +933,8 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
         'retirement_age': portfolio.retirement_age,
         'years_to_retirement': years_to_retirement,
         'retirement_status': retirement_status,
+        'account_type': portfolio.account_type,
+        'years_to_enrollment': portfolio.years_to_enrollment,
         'rebalance_data': rebalance_data,
     }
 
@@ -992,8 +1253,11 @@ def calculate_rebalance_recommendations(portfolio: Portfolio, tolerance: float) 
                             }
                             for fund in asset_category.funds.filter(preference__gte=1, preference__lte=10).order_by('preference')
                         ]
-                except:
-                    pass
+                except Exception:
+                    logger.warning(
+                        "Failed to load recommended funds for %s:%s",
+                        buy_cat.get('asset_class'), buy_cat.get('category'), exc_info=True,
+                    )
 
                 recommendations.append({
                     'action': 'Buy',

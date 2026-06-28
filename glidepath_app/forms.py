@@ -287,6 +287,21 @@ class IdentityProviderForm(forms.ModelForm):
         self.fields['name_path'].required = False
 
 
+class RulesetSelect(forms.Select):
+    """Ruleset <select> that tags each option with its ruleset account_type via a
+    data-account-type attribute, so the portfolio form can filter the options
+    client-side to match the chosen account type."""
+    account_types = {}
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex, attrs)
+        raw = getattr(value, 'value', value)
+        account_type = self.account_types.get(str(raw))
+        if account_type:
+            option['attrs']['data-account-type'] = account_type
+        return option
+
+
 class PortfolioForm(forms.ModelForm):
     """Form for creating and editing portfolios."""
 
@@ -307,23 +322,61 @@ class PortfolioForm(forms.ModelForm):
         })
     )
 
+    # Education fields are optional; they only apply when account_type == education.
+    EDUCATION_FIELDS = [
+        'years_to_enrollment', 'college_duration_years',
+        'annual_withdrawal', 'annual_contribution', 'return_assumption',
+    ]
+
     class Meta:
         model = Portfolio
-        fields = ['name', 'ruleset', 'year_born', 'retirement_age']
+        fields = [
+            'name', 'account_type', 'ruleset', 'year_born', 'retirement_age',
+            'years_to_enrollment', 'college_duration_years',
+            'annual_withdrawal', 'annual_contribution', 'return_assumption',
+        ]
         widgets = {
             'name': forms.TextInput(attrs={
                 'class': 'w-full border border-gray-300 rounded-md p-2',
                 'placeholder': 'Enter portfolio name'
             }),
-            'ruleset': forms.Select(attrs={
+            'account_type': forms.Select(attrs={
                 'class': 'w-full border border-gray-300 rounded-md p-2'
+            }),
+            'ruleset': RulesetSelect(attrs={
+                'class': 'w-full border border-gray-300 rounded-md p-2'
+            }),
+            'years_to_enrollment': forms.NumberInput(attrs={
+                'class': 'w-full border border-gray-300 rounded-md p-2',
+                'placeholder': 'e.g. 10 (negative = already enrolled)'
+            }),
+            'college_duration_years': forms.NumberInput(attrs={
+                'class': 'w-full border border-gray-300 rounded-md p-2', 'min': '1'
+            }),
+            'annual_withdrawal': forms.NumberInput(attrs={
+                'class': 'w-full border border-gray-300 rounded-md p-2',
+                'step': '0.01', 'placeholder': '$ per school year'
+            }),
+            'annual_contribution': forms.NumberInput(attrs={
+                'class': 'w-full border border-gray-300 rounded-md p-2',
+                'step': '0.01', 'placeholder': '$ per year'
+            }),
+            'return_assumption': forms.NumberInput(attrs={
+                'class': 'w-full border border-gray-300 rounded-md p-2',
+                'step': '0.01', 'placeholder': 'e.g. 6.00'
             }),
         }
         labels = {
             'name': 'Portfolio Name',
+            'account_type': 'Account Type',
             'ruleset': 'Glidepath Rule',
             'year_born': 'Year Born',
             'retirement_age': 'Retirement Age',
+            'years_to_enrollment': 'Years to Enrollment',
+            'college_duration_years': 'College Duration (years)',
+            'annual_withdrawal': 'Annual Withdrawal',
+            'annual_contribution': 'Annual Contribution',
+            'return_assumption': 'Return Assumption (%)',
         }
 
     def __init__(self, *args, user=None, **kwargs):
@@ -332,11 +385,31 @@ class PortfolioForm(forms.ModelForm):
         self.fields['ruleset'].empty_label = "None (No glidepath rule)"
         self.fields['ruleset'].required = False
 
+        # Education fields are optional regardless of account type.
+        for field_name in self.EDUCATION_FIELDS:
+            self.fields[field_name].required = False
+        self.fields['college_duration_years'].initial = 4
+
+        # Tag ruleset options with their account_type for client-side filtering.
+        self.fields['ruleset'].widget.account_types = {
+            str(rs.pk): rs.account_type for rs in RuleSet.objects.all()
+        }
+
+    def clean_college_duration_years(self):
+        # Never store NULL (the column is non-nullable with a default of 4).
+        value = self.cleaned_data.get('college_duration_years')
+        return value if value is not None else 4
+
     def clean_name(self):
         """Ensure portfolio name is unique for the user."""
         name = self.cleaned_data.get('name')
         if not name:
             raise forms.ValidationError("Portfolio name is required.")
+
+        # Without a bound user we can't scope the uniqueness check; skip it rather
+        # than matching across all users.
+        if self.user is None:
+            return name
 
         # Check for duplicate names (excluding current instance if editing)
         query = Portfolio.objects.filter(user=self.user, name=name)

@@ -12,7 +12,7 @@ from .forms import GlidepathRuleUploadForm, APISettingsForm, FundForm, UserForm,
 from .models import GlidepathRule, RuleSet, APISettings, Fund, AssetCategory, User, IdentityProvider, AccountUpload, AccountPosition, Portfolio, PortfolioItem, AssumptionUpload, AssumptionData, SessionSettings
 from .services import export_glidepath_rules, import_glidepath_rules, import_blackrock_assumptions
 from .ticker_service import query_ticker as query_ticker_service
-from .account_services import import_fidelity_csv, import_etrade_csv, get_portfolio_analysis, calculate_rebalance_recommendations
+from .account_services import import_fidelity_csv, import_etrade_csv, parse_nysaves_csv, get_portfolio_analysis, calculate_rebalance_recommendations
 from .decorators import admin_required
 
 DEFAULT_COLORS = [
@@ -413,6 +413,7 @@ def accounts_view(request):
     """Accounts management view - manage investment accounts."""
     error = None
     success = None
+    warning = None
 
     # Determine which user's data to show
     # Get the logged-in user
@@ -451,6 +452,24 @@ def accounts_view(request):
                 elif upload_type == 'etrade':
                     upload = import_etrade_csv(file_obj, current_user, filename)
                     success = f"Successfully uploaded {upload.entry_count} positions from {filename}"
+                elif upload_type == 'nysaves':
+                    result = parse_nysaves_csv(file_obj, current_user, filename)
+                    success = f"Successfully uploaded {result['matched']} position(s) from {filename}"
+                    warnings = []
+                    if result['unmatched']:
+                        unmatched = sorted(set(result['unmatched']))
+                        warnings.append(
+                            f"{len(unmatched)} portfolio name(s) did not match a known "
+                            f"NYSaves fund and were skipped: {', '.join(unmatched)}."
+                        )
+                    if result.get('errors'):
+                        warnings.append(
+                            f"{len(result['errors'])} position(s) could not be valued and were "
+                            f"skipped: {'; '.join(result['errors'])}. Refresh prices or supply "
+                            "Unit Price/Current Value, then re-upload."
+                        )
+                    if warnings:
+                        warning = " ".join(warnings)
                 else:
                     error = f"Unsupported upload type: {upload_type}"
 
@@ -471,6 +490,7 @@ def accounts_view(request):
         'form': form,
         'error': error,
         'success': success,
+        'warning': warning,
         'uploads': uploads,
         'current_user': current_user,
     }
@@ -478,29 +498,59 @@ def accounts_view(request):
     return render(request, "glidepath_app/accounts.html", context)
 
 
+def nysaves_csv_template(request):
+    """Serve a downloadable starter CSV for NYSaves 529 holdings uploads."""
+    content = (
+        "Account Number,Account Name,Portfolio Name,Units,Unit Price,Current Value\n"
+        "NYS-001,Child 1 529,Growth Stock Index Portfolio,45.231,,\n"
+        "NYS-001,Child 1 529,Bond Market Index Portfolio,12.500,,\n"
+        "NYS-002,Child 2 529,Moderate Growth Portfolio,88.750,,\n"
+    )
+    response = HttpResponse(content, content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="nysaves-holdings-template.csv"'
+    return response
+
+
+def _acting_user(request):
+    """Resolve (current_user, is_admin) for the session, honoring an admin's
+    selected_user. current_user is None when not logged in."""
+    user_id = request.session.get('user_id')
+    is_admin = request.session.get('is_admin', False)
+    if is_admin and request.session.get('selected_user_id'):
+        current_user = User.objects.filter(id=request.session['selected_user_id']).first() \
+            or (User.objects.filter(id=user_id).first() if user_id else None)
+    else:
+        current_user = User.objects.filter(id=user_id).first() if user_id else None
+    return current_user, is_admin
+
+
+def _can_access(obj, current_user, is_admin):
+    """True if the acting user owns the object, or is an administrator."""
+    return current_user is not None and (obj.user_id == current_user.id or is_admin)
+
+
 def view_account_upload(request, upload_id):
     """View details of a specific account upload."""
-    try:
-        upload = AccountUpload.objects.get(id=upload_id)
-        positions = AccountPosition.objects.filter(upload=upload).order_by('account_number', 'symbol')
-
-        context = {
-            'upload': upload,
-            'positions': positions,
-        }
-        return render(request, "glidepath_app/account_upload_detail.html", context)
-    except AccountUpload.DoesNotExist:
+    current_user, is_admin = _acting_user(request)
+    upload = AccountUpload.objects.filter(id=upload_id).first()
+    if upload is None or not _can_access(upload, current_user, is_admin):
         return redirect('accounts')
+
+    positions = AccountPosition.objects.filter(upload=upload).order_by('account_number', 'symbol')
+    context = {
+        'upload': upload,
+        'positions': positions,
+    }
+    return render(request, "glidepath_app/account_upload_detail.html", context)
 
 
 @require_POST
 def delete_account_upload(request, upload_id):
     """Delete an account upload and all its positions."""
-    try:
-        upload = AccountUpload.objects.get(id=upload_id)
+    current_user, is_admin = _acting_user(request)
+    upload = AccountUpload.objects.filter(id=upload_id).first()
+    if upload is not None and _can_access(upload, current_user, is_admin):
         upload.delete()
-    except AccountUpload.DoesNotExist:
-        pass
     return redirect('accounts')
 
 
@@ -806,8 +856,10 @@ def portfolios_view(request):
             if analysis_data and 'category_details' in analysis_data:
                 analysis_data['category_details_json'] = json.dumps(analysis_data['category_details'])
 
-            # Calculate rebalance recommendations
-            rebalance_data = calculate_rebalance_recommendations(selected_portfolio, tolerance)
+            # Calculate rebalance recommendations (retirement/general only; education
+            # portfolios are drift-only and never get executable trade actions).
+            if selected_portfolio.account_type != 'education':
+                rebalance_data = calculate_rebalance_recommendations(selected_portfolio, tolerance)
     else:
         portfolios = Portfolio.objects.none()
         selected_portfolio = None
@@ -822,6 +874,75 @@ def portfolios_view(request):
     }
 
     return render(request, "glidepath_app/portfolios.html", context)
+
+
+def education_dashboard(request, portfolio_id):
+    """Education (529) dashboard: holdings, current-vs-target drift (read-only),
+    and the deterministic balance projection."""
+    from .education_projection import calculate_education_projection
+    from django.utils import timezone
+
+    # Scope the portfolio to the acting user (admins may act as a selected user).
+    current_user, is_admin = _acting_user(request)
+    portfolio = Portfolio.objects.filter(id=portfolio_id).first()
+    if portfolio is None or not _can_access(portfolio, current_user, is_admin):
+        return redirect('portfolios')
+    # This route only serves education portfolios.
+    if portfolio.account_type != 'education':
+        return redirect(f'/portfolios/?portfolio={portfolio.id}')
+
+    analysis_data = get_portfolio_analysis(portfolio)
+    projection = calculate_education_projection(portfolio)
+
+    # Per-virtual-fund holdings (latest upload per account), plus price staleness.
+    holdings = []
+    provider = None
+    for item in portfolio.items.all():
+        upload = AccountUpload.objects.filter(
+            user=portfolio.user, upload_type='nysaves',
+            positions__account_number=item.account_number
+        ).order_by('-upload_datetime').first()
+        if not upload:
+            continue
+        position = AccountPosition.objects.filter(
+            upload=upload, account_number=item.account_number, symbol=item.symbol
+        ).first()
+        if not position:
+            continue
+        vf = position.virtual_fund
+        if vf and vf.provider:
+            provider = vf.provider
+        holdings.append({
+            'account_number': item.account_number,
+            'fund_name': vf.name if vf else position.symbol,
+            'units': position.quantity,
+            'unit_price': position.last_price,
+            'value': position.current_value,
+            'price_as_of': vf.price_as_of if vf else None,
+        })
+
+    price_age_days = None
+    prices_never_refreshed = False
+    if provider:
+        if provider.last_price_refresh:
+            price_age_days = (timezone.now() - provider.last_price_refresh).days
+        else:
+            prices_never_refreshed = True
+
+    context = {
+        'portfolio': portfolio,
+        'analysis_data': analysis_data,
+        'projection': projection,
+        'projection_json': json.dumps({
+            'years': projection.get('years', []),
+            'balances': projection.get('balances', []),
+        }),
+        'holdings': holdings,
+        'provider': provider,
+        'price_age_days': price_age_days,
+        'prices_never_refreshed': prices_never_refreshed,
+    }
+    return render(request, "glidepath_app/education_dashboard.html", context)
 
 
 def create_portfolio(request):
@@ -921,42 +1042,19 @@ def create_portfolio(request):
 @require_POST
 def delete_portfolio(request, portfolio_id):
     """Delete a portfolio and all its items."""
-    try:
-        portfolio = Portfolio.objects.get(id=portfolio_id)
+    current_user, is_admin = _acting_user(request)
+    portfolio = Portfolio.objects.filter(id=portfolio_id).first()
+    if portfolio is not None and _can_access(portfolio, current_user, is_admin):
         portfolio.delete()
-    except Portfolio.DoesNotExist:
-        pass
     return redirect('portfolios')
 
 
 def edit_portfolio(request, portfolio_id):
     """Edit portfolio to select which account+symbol combinations to include and configure ruleset."""
-    try:
-        portfolio = Portfolio.objects.get(id=portfolio_id)
-    except Portfolio.DoesNotExist:
+    current_user, is_admin = _acting_user(request)
+    portfolio = Portfolio.objects.filter(id=portfolio_id).first()
+    if portfolio is None or not _can_access(portfolio, current_user, is_admin):
         return redirect('portfolios')
-
-    # Get the current user
-    # Get the logged-in user
-    user_id = request.session.get('user_id')
-    is_admin = request.session.get('is_admin', False)
-
-    # For admins, allow editing portfolios for other users via selected_user_id
-    # For regular users, always use their own user_id
-    if is_admin:
-        selected_user_id = request.session.get('selected_user_id')
-        if selected_user_id:
-            try:
-                current_user = User.objects.get(id=selected_user_id)
-            except User.DoesNotExist:
-                # Fall back to logged-in user
-                current_user = User.objects.get(id=user_id) if user_id else None
-        else:
-            # No user selected, use logged-in admin's own data
-            current_user = User.objects.get(id=user_id) if user_id else None
-    else:
-        # Regular users always edit their own data
-        current_user = User.objects.get(id=user_id) if user_id else None
 
     if request.method == "POST":
         # Handle portfolio configuration (name and ruleset)
@@ -1039,9 +1137,9 @@ def download_portfolio_csv(request, portfolio_id):
     import csv
     from io import StringIO
 
-    try:
-        portfolio = Portfolio.objects.get(id=portfolio_id)
-    except Portfolio.DoesNotExist:
+    current_user, is_admin = _acting_user(request)
+    portfolio = Portfolio.objects.filter(id=portfolio_id).first()
+    if portfolio is None or not _can_access(portfolio, current_user, is_admin):
         return redirect('portfolios')
 
     # Get portfolio analysis data
