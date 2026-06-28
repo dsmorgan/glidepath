@@ -45,6 +45,12 @@
                class="px-4 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 text-center whitespace-nowrap">
                 Download CSV
             </a>
+            {% if selected_portfolio.account_type == 'education' %}
+            <a href="{% url 'education_dashboard' selected_portfolio.id %}"
+               class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-center whitespace-nowrap">
+                529 Dashboard
+            </a>
+            {% endif %}
             {% endif %}
             {% else %}
             <p class="text-gray-500 ml-4">No portfolios created yet. Click "Add Portfolio" to get started.</p>

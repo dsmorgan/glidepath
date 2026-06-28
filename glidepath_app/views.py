@@ -831,8 +831,10 @@ def portfolios_view(request):
             if analysis_data and 'category_details' in analysis_data:
                 analysis_data['category_details_json'] = json.dumps(analysis_data['category_details'])
 
-            # Calculate rebalance recommendations
-            rebalance_data = calculate_rebalance_recommendations(selected_portfolio, tolerance)
+            # Calculate rebalance recommendations (retirement/general only; education
+            # portfolios are drift-only and never get executable trade actions).
+            if selected_portfolio.account_type != 'education':
+                rebalance_data = calculate_rebalance_recommendations(selected_portfolio, tolerance)
     else:
         portfolios = Portfolio.objects.none()
         selected_portfolio = None
@@ -847,6 +849,65 @@ def portfolios_view(request):
     }
 
     return render(request, "glidepath_app/portfolios.html", context)
+
+
+def education_dashboard(request, portfolio_id):
+    """Education (529) dashboard: holdings, current-vs-target drift (read-only),
+    and the deterministic balance projection."""
+    from .education_projection import calculate_education_projection
+    from django.utils import timezone
+
+    try:
+        portfolio = Portfolio.objects.get(id=portfolio_id)
+    except Portfolio.DoesNotExist:
+        return redirect('portfolios')
+
+    analysis_data = get_portfolio_analysis(portfolio)
+    projection = calculate_education_projection(portfolio)
+
+    # Per-virtual-fund holdings (latest upload per account), plus price staleness.
+    holdings = []
+    provider = None
+    for item in portfolio.items.all():
+        upload = AccountUpload.objects.filter(
+            user=portfolio.user, positions__account_number=item.account_number
+        ).order_by('-upload_datetime').first()
+        if not upload:
+            continue
+        position = AccountPosition.objects.filter(
+            upload=upload, account_number=item.account_number, symbol=item.symbol
+        ).first()
+        if not position:
+            continue
+        vf = position.virtual_fund
+        if vf and vf.provider:
+            provider = vf.provider
+        holdings.append({
+            'account_number': item.account_number,
+            'fund_name': vf.name if vf else position.symbol,
+            'units': position.quantity,
+            'unit_price': position.last_price,
+            'value': position.current_value,
+            'price_as_of': vf.price_as_of if vf else None,
+        })
+
+    price_age_days = None
+    if provider and provider.last_price_refresh:
+        price_age_days = (timezone.now() - provider.last_price_refresh).days
+
+    context = {
+        'portfolio': portfolio,
+        'analysis_data': analysis_data,
+        'projection': projection,
+        'projection_json': json.dumps({
+            'years': projection.get('years', []),
+            'balances': projection.get('balances', []),
+        }),
+        'holdings': holdings,
+        'provider': provider,
+        'price_age_days': price_age_days,
+    }
+    return render(request, "glidepath_app/education_dashboard.html", context)
 
 
 def create_portfolio(request):

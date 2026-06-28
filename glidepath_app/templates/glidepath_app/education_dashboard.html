@@ -1,0 +1,194 @@
+{% extends 'glidepath_app/base.html' %}
+{% block title %}Glidepath - 529 Dashboard{% endblock %}
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Header -->
+    <div class="bg-white shadow rounded-lg p-6">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">{{ portfolio.name }}</h1>
+                <p class="text-sm text-gray-500">Education / 529 dashboard</p>
+            </div>
+            <a href="{% url 'portfolios' %}?portfolio={{ portfolio.id }}"
+               class="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50">
+                &larr; Back to Portfolio
+            </a>
+        </div>
+
+        {% if price_age_days is not None %}
+        <p class="mt-3 text-xs {% if price_age_days > 7 %}text-amber-600{% else %}text-gray-500{% endif %}">
+            Unit prices last refreshed {{ price_age_days }} day{{ price_age_days|pluralize }} ago{% if provider %} ({{ provider.name }}){% endif %}.
+            {% if price_age_days > 7 %}Consider refreshing prices.{% endif %}
+        </p>
+        {% endif %}
+    </div>
+
+    <!-- Projection summary cards -->
+    {% if projection.available %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white shadow rounded-lg p-5">
+            <p class="text-xs uppercase text-gray-500">Current Balance</p>
+            <p class="text-2xl font-bold text-gray-900">${{ projection.current_balance|floatformat:2 }}</p>
+        </div>
+        <div class="bg-white shadow rounded-lg p-5">
+            <p class="text-xs uppercase text-gray-500">Projected at Enrollment</p>
+            <p class="text-2xl font-bold text-gray-900">
+                {% if projection.projected_balance_at_enrollment is not None %}${{ projection.projected_balance_at_enrollment|floatformat:2 }}{% else %}&mdash;{% endif %}
+            </p>
+        </div>
+        <div class="bg-white shadow rounded-lg p-5">
+            <p class="text-xs uppercase text-gray-500">Projected at Graduation</p>
+            <p class="text-2xl font-bold {% if projection.projected_balance_at_graduation < 0 %}text-red-600{% else %}text-gray-900{% endif %}">
+                ${{ projection.projected_balance_at_graduation|floatformat:2 }}
+            </p>
+        </div>
+        <div class="bg-white shadow rounded-lg p-5">
+            <p class="text-xs uppercase text-gray-500">Total Withdrawals</p>
+            <p class="text-2xl font-bold text-gray-900">${{ projection.total_withdrawals|floatformat:2 }}</p>
+        </div>
+    </div>
+
+    <!-- Funding gap / required contribution callout -->
+    <div class="rounded-lg p-5 {% if projection.shortfall %}bg-red-50 border-l-4 border-red-400{% else %}bg-green-50 border-l-4 border-green-400{% endif %}">
+        {% if projection.shortfall %}
+        <p class="text-sm text-red-800">
+            <strong>Projected shortfall.</strong> At the current plan, this 529 runs short by
+            <strong>${{ projection.funding_gap|floatformat:2 }}</strong> by graduation.
+            {% if projection.required_annual_contribution is not None %}
+            To fully fund it, contribute about
+            <strong>${{ projection.required_annual_contribution|floatformat:2 }}/year</strong> during accumulation.
+            {% else %}
+            The student is already enrolled, so additional contributions can no longer close the gap.
+            {% endif %}
+        </p>
+        {% else %}
+        <p class="text-sm text-green-800">
+            <strong>On track.</strong> The plan is projected to cover all withdrawals, ending at
+            <strong>${{ projection.projected_balance_at_graduation|floatformat:2 }}</strong>.
+        </p>
+        {% endif %}
+    </div>
+
+    <!-- Projection chart -->
+    <div class="bg-white shadow rounded-lg p-6">
+        <h2 class="text-xl font-semibold text-gray-900 mb-4">Balance Projection</h2>
+        <canvas id="projectionChart" height="100"></canvas>
+    </div>
+    {% else %}
+    <div class="bg-amber-50 border-l-4 border-amber-400 p-4">
+        <p class="text-sm text-amber-800">
+            Projection unavailable &mdash; set the following on this portfolio:
+            <strong>{{ projection.missing|join:", " }}</strong>.
+            <a href="{% url 'edit_portfolio' portfolio.id %}" class="underline">Edit portfolio</a>.
+        </p>
+    </div>
+    {% endif %}
+
+    <!-- Holdings -->
+    <div class="bg-white shadow rounded-lg p-6">
+        <h2 class="text-xl font-semibold text-gray-900 mb-4">Holdings</h2>
+        {% if holdings %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 border">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Portfolio (Fund)</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Units</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Unit Price</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Value</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Price As Of</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for h in holdings %}
+                    <tr>
+                        <td class="px-4 py-2 text-sm text-gray-900">{{ h.account_number }}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900">{{ h.fund_name }}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 text-right">{{ h.units }}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 text-right">{{ h.unit_price }}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 text-right">{{ h.value }}</td>
+                        <td class="px-4 py-2 text-sm text-gray-500">{{ h.price_as_of|default:"&mdash;" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-gray-500">No holdings in this portfolio yet. Add 529 positions on the Accounts page and include them via Edit Portfolio.</p>
+        {% endif %}
+    </div>
+
+    <!-- Allocation drift (read-only) -->
+    <div class="bg-white shadow rounded-lg p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-semibold text-gray-900">Allocation Drift</h2>
+        </div>
+        {% if analysis_data.target_category_breakdown %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 border">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Current %</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Target %</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Drift</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for c in analysis_data.category_details %}
+                    <tr>
+                        <td class="px-4 py-2 text-sm text-gray-900">{{ c.asset_class }}: {{ c.category }}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 text-right">{{ c.current_pct|floatformat:1 }}%</td>
+                        <td class="px-4 py-2 text-sm text-gray-900 text-right">{{ c.target_pct|default:0|floatformat:1 }}%</td>
+                        <td class="px-4 py-2 text-sm text-right {% if c.difference < 0 %}text-red-600{% elif c.difference > 0 %}text-green-700{% else %}text-gray-500{% endif %}">
+                            {% if c.target_pct %}{{ c.difference|floatformat:2 }}{% else %}&mdash;{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="mt-3 text-xs text-amber-700">
+            Note: NYSaves allows only <strong>2 investment exchanges per calendar year</strong>. This view is informational &mdash; no trades are executed.
+        </p>
+        {% else %}
+        <p class="text-gray-500">
+            Assign an education glidepath rule and set Years to Enrollment on this portfolio to see target allocation and drift.
+        </p>
+        {% endif %}
+    </div>
+
+</div>
+
+{% if projection.available %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(function () {
+    const data = {{ projection_json|safe }};
+    const ctx = document.getElementById('projectionChart');
+    if (!ctx || !data.years.length) return;
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.years,
+            datasets: [{
+                label: 'Projected Balance ($)',
+                data: data.balances,
+                borderColor: '#7c3aed',
+                backgroundColor: 'rgba(124, 58, 237, 0.1)',
+                fill: true,
+                tension: 0.2,
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v.toLocaleString() } } },
+            plugins: { legend: { display: false } }
+        }
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

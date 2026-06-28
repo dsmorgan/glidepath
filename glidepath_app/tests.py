@@ -5,6 +5,7 @@ from unittest import mock
 
 from django.conf import settings
 from django.test import TestCase
+from django.urls import reverse
 
 from .models import (
     AssetClass, AssetCategory, GlidepathRule, RuleSet, ClassAllocation,
@@ -16,6 +17,9 @@ from .account_services import (
     parse_nysaves_csv, get_portfolio_analysis, resolve_position_asset_categories,
 )
 from .forms import PortfolioForm
+from .education_projection import (
+    calculate_education_projection, calculate_required_contribution,
+)
 from . import scraper_service
 
 
@@ -310,3 +314,65 @@ class PortfolioFormTests(TestCase):
         form = PortfolioForm(user=self.user)
         html = str(form["ruleset"])
         self.assertIn('data-account-type="education"', html)
+
+
+class EducationProjectionTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create(username="e", email="e@example.com")
+
+    def test_required_contribution_zero_return(self):
+        # 10 accumulation years + 4 withdrawals of 10k at 0% return -> 10C = 40k -> C = 4000
+        req = calculate_required_contribution(Decimal("0"), 10, 4, Decimal("10000"), Decimal("0"))
+        self.assertEqual(req, Decimal("4000"))
+
+    def test_required_contribution_none_when_enrolled(self):
+        self.assertIsNone(
+            calculate_required_contribution(Decimal("0"), 0, 4, Decimal("10000"), Decimal("0"))
+        )
+
+    def test_projection_on_track(self):
+        pf = Portfolio.objects.create(
+            user=self.user, name="529proj", account_type="education",
+            years_to_enrollment=10, college_duration_years=4,
+            annual_withdrawal=Decimal("10000"), annual_contribution=Decimal("4000"),
+            return_assumption=Decimal("0"),
+        )
+        proj = calculate_education_projection(pf)
+        self.assertTrue(proj["available"])
+        self.assertEqual(len(proj["rows"]), 15)  # 10 accumulation + 4 withdrawal + start
+        self.assertAlmostEqual(proj["projected_balance_at_enrollment"], 40000.0, places=2)
+        self.assertAlmostEqual(proj["projected_balance_at_graduation"], 0.0, places=2)
+        self.assertFalse(proj["shortfall"])
+        self.assertAlmostEqual(proj["required_annual_contribution"], 4000.0, places=2)
+
+    def test_projection_shortfall(self):
+        pf = Portfolio.objects.create(
+            user=self.user, name="529short", account_type="education",
+            years_to_enrollment=5, college_duration_years=4,
+            annual_withdrawal=Decimal("20000"), annual_contribution=Decimal("0"),
+            return_assumption=Decimal("0"),
+        )
+        proj = calculate_education_projection(pf)
+        self.assertTrue(proj["shortfall"])
+        self.assertGreater(proj["funding_gap"], 0)
+
+    def test_projection_unavailable_when_inputs_missing(self):
+        pf = Portfolio.objects.create(
+            user=self.user, name="529bad", account_type="education",
+        )  # no years_to_enrollment / return / withdrawal
+        proj = calculate_education_projection(pf)
+        self.assertFalse(proj["available"])
+        self.assertIn("Years to Enrollment", proj["missing"])
+
+    def test_dashboard_view_renders(self):
+        pf = Portfolio.objects.create(
+            user=self.user, name="529view", account_type="education",
+            years_to_enrollment=8, annual_withdrawal=Decimal("15000"),
+            return_assumption=Decimal("6"),
+        )
+        session = self.client.session
+        session["user_id"] = str(self.user.id)
+        session.save()
+        resp = self.client.get(reverse("education_dashboard", args=[pf.id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "529 dashboard")
