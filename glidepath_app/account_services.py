@@ -515,6 +515,50 @@ def parse_nysaves_csv(file_obj, user: User, filename: str) -> dict:
     }
 
 
+def explode_virtual_fund(virtual_fund, value: Decimal, quantity: Decimal) -> list:
+    """Look through a virtual-fund holding into its underlying asset categories.
+
+    Returns a list of (AssetCategory, composition_percentage, value_portion,
+    quantity_portion). Value and quantity are split pro-rata by composition
+    percentage, so portions sum back to the whole holding and each portion's
+    value/quantity preserves the fund's unit price.
+    """
+    contributions = []
+    for comp in virtual_fund.composition.select_related('asset_category__asset_class').all():
+        fraction = comp.percentage / Decimal('100')
+        contributions.append((
+            comp.asset_category,
+            comp.percentage,
+            value * fraction,
+            quantity * fraction,
+        ))
+    return contributions
+
+
+def resolve_position_asset_categories(position) -> list:
+    """Resolve an AccountPosition to its asset-category contributions.
+
+    Returns a list of (AssetCategory, effective_percentage, effective_value):
+    - virtual-fund (529) positions explode via VirtualFundComposition
+    - real-ticker positions map to their Fund.category at 100%
+    - unmapped positions return an empty list
+    """
+    value = _parse_money(position.current_value) or Decimal('0')
+    quantity = _parse_money(position.quantity) or Decimal('0')
+
+    if position.virtual_fund_id:
+        return [
+            (category, pct, value_portion)
+            for (category, pct, value_portion, _qty) in
+            explode_virtual_fund(position.virtual_fund, value, quantity)
+        ]
+
+    fund = Fund.objects.filter(ticker=position.symbol).first()
+    if fund and fund.category:
+        return [(fund.category, Decimal('100'), value)]
+    return []
+
+
 def get_portfolio_analysis(portfolio: Portfolio) -> dict:
     """
     Analyze a portfolio and generate breakdown data for charts and tables.
@@ -586,10 +630,13 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
 
             # Store per-account data
             key = (account_number, symbol)
-            if key not in symbol_account_data:
-                symbol_account_data[key] = {'value': Decimal('0'), 'quantity': Decimal('0')}
-            symbol_account_data[key]['value'] += current_value
-            symbol_account_data[key]['quantity'] += quantity
+            entry = symbol_account_data.setdefault(
+                key, {'value': Decimal('0'), 'quantity': Decimal('0'), 'virtual_fund': None}
+            )
+            entry['value'] += current_value
+            entry['quantity'] += quantity
+            if position.virtual_fund_id:
+                entry['virtual_fund'] = position.virtual_fund
 
     # Build breakdowns by looking up fund information
     class_breakdown = {}  # class_name -> total value
@@ -605,6 +652,39 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
         if symbol not in ticker_breakdown:
             ticker_breakdown[symbol] = Decimal('0')
         ticker_breakdown[symbol] += value
+
+        # Virtual-fund (e.g. 529) positions look through to multiple categories.
+        virtual_fund = account_data.get('virtual_fund')
+        if virtual_fund is not None:
+            contributions = explode_virtual_fund(virtual_fund, value, quantity)
+            if contributions:
+                for category, _comp_pct, portion_value, portion_qty in contributions:
+                    asset_class = category.asset_class
+                    category_key = f"{asset_class.name}:{category.name}"
+                    class_breakdown[asset_class.name] = (
+                        class_breakdown.get(asset_class.name, Decimal('0')) + portion_value
+                    )
+                    category_breakdown[category_key] = (
+                        category_breakdown.get(category_key, Decimal('0')) + portion_value
+                    )
+                    details = category_details.setdefault(category_key, {
+                        'asset_class': asset_class.name,
+                        'category_name': category.name,
+                        'total': Decimal('0'),
+                        'symbols': [],
+                    })
+                    details['total'] += portion_value
+                    details['symbols'].append({
+                        'account_number': account_number,
+                        'ticker': symbol,
+                        'value': portion_value,
+                        'quantity': portion_qty,
+                        'fund_name': virtual_fund.name,
+                        'preference': None,
+                        'is_recommended': False,
+                    })
+                continue
+            # A virtual fund with no composition rows falls through to "Unknown" below.
 
         # Look up fund to get class and category
         fund = Fund.objects.filter(ticker=symbol).first()
@@ -711,18 +791,25 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
     years_to_retirement = None
     matching_rule = None
 
-    if portfolio.ruleset and portfolio.year_born and portfolio.retirement_age:
-        # Calculate years to retirement based on current year
-        # Formula: current_year - year_born - retirement_age
-        # Negative value = before retirement, Positive = after retirement
-        years_to_retirement = current_year - portfolio.year_born - portfolio.retirement_age
+    # Resolve the rule time-window value. Retirement rules key on years to
+    # retirement; education rules key on years to enrollment (entered directly).
+    time_window = None
+    if portfolio.ruleset:
+        if portfolio.account_type == 'education':
+            time_window = portfolio.years_to_enrollment
+        elif portfolio.year_born and portfolio.retirement_age:
+            # current_year - year_born - retirement_age
+            # Negative value = before retirement, Positive = after retirement
+            years_to_retirement = current_year - portfolio.year_born - portfolio.retirement_age
+            time_window = years_to_retirement
 
-        # Find the glidepath rule for this retirement age
+    if portfolio.ruleset and time_window is not None:
+        # Find the glidepath rule whose band contains the time-window value
         from .models import GlidepathRule
         matching_rule = GlidepathRule.objects.filter(
             ruleset=portfolio.ruleset,
-            gt_retire_age__lte=years_to_retirement,
-            lt_retire_age__gt=years_to_retirement
+            gt_retire_age__lte=time_window,
+            lt_retire_age__gt=time_window
         ).first()
 
         if matching_rule:
@@ -824,6 +911,8 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
         'retirement_age': portfolio.retirement_age,
         'years_to_retirement': years_to_retirement,
         'retirement_status': retirement_status,
+        'account_type': portfolio.account_type,
+        'years_to_enrollment': portfolio.years_to_enrollment,
         'rebalance_data': rebalance_data,
     }
 

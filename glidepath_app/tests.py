@@ -7,11 +7,14 @@ from django.conf import settings
 from django.test import TestCase
 
 from .models import (
-    AssetClass, GlidepathRule, RuleSet,
-    User, AccountUpload, AccountPosition, FundProvider, VirtualFund,
+    AssetClass, AssetCategory, GlidepathRule, RuleSet, ClassAllocation,
+    User, AccountUpload, AccountPosition, FundProvider, VirtualFund, Fund,
+    Portfolio, PortfolioItem,
 )
 from .services import export_glidepath_rules, import_glidepath_rules
-from .account_services import parse_nysaves_csv
+from .account_services import (
+    parse_nysaves_csv, get_portfolio_analysis, resolve_position_asset_categories,
+)
 from . import scraper_service
 
 
@@ -188,3 +191,79 @@ class ScraperServiceTests(TestCase):
 
         provider = FundProvider.objects.get(slug="nysaves")
         self.assertIsNotNone(provider.last_price_refresh)
+
+
+class PortfolioAnalysisTests(TestCase):
+    """Composition explosion and education-ruleset support in get_portfolio_analysis."""
+
+    def setUp(self):
+        self.user = User.objects.create(username="p", email="p@example.com")
+
+    def _upload_529(self, units="50", price="20.00"):
+        text = (
+            "Account Number,Account Name,Portfolio Name,Units,Unit Price,Current Value\n"
+            f"NYS-1,Kid,Moderate Growth Portfolio,{units},{price},\n"
+        )
+        return parse_nysaves_csv(_csv_file(text), self.user, "n.csv")
+
+    def test_resolve_position_asset_categories_explodes_virtual(self):
+        pos = AccountPosition.objects.get(upload=self._upload_529()["upload"])
+        contributions = resolve_position_asset_categories(pos)
+        # Moderate Growth has 4 composition rows; value portions sum to the holding.
+        self.assertEqual(len(contributions), 4)
+        self.assertAlmostEqual(float(sum(v for (_c, _p, v) in contributions)), 1000.0, places=2)
+
+    def test_virtual_fund_explodes_into_categories(self):
+        self._upload_529()  # 50 units x $20 = $1000 in Moderate Growth
+        pf = Portfolio.objects.create(user=self.user, name="529", account_type="education")
+        PortfolioItem.objects.create(portfolio=pf, account_number="NYS-1", symbol="moderate-growth")
+
+        a = get_portfolio_analysis(pf)
+        self.assertAlmostEqual(a["total_value"], 1000.0, places=2)
+        # Moderate Growth: Stocks 36+24=60%, Bonds 28+12=40%
+        self.assertAlmostEqual(a["class_breakdown"]["Stocks"], 600.0, places=2)
+        self.assertAlmostEqual(a["class_breakdown"]["Bonds"], 400.0, places=2)
+        self.assertAlmostEqual(a["category_breakdown"]["Stocks:US Total Market"], 360.0, places=2)
+        self.assertAlmostEqual(a["category_breakdown"]["Bonds:US Investment Grade"], 280.0, places=2)
+        self.assertEqual(a["account_type"], "education")
+
+    def test_education_ruleset_target_keyed_on_enrollment(self):
+        self._upload_529()
+        rs = RuleSet.objects.create(name="edu", account_type="education")
+        rule = GlidepathRule.objects.create(ruleset=rs, gt_retire_age=-100, lt_retire_age=100)
+        ClassAllocation.objects.create(rule=rule, asset_class=AssetClass.objects.get(name="Stocks"),
+                                       percentage=Decimal("50"))
+        ClassAllocation.objects.create(rule=rule, asset_class=AssetClass.objects.get(name="Bonds"),
+                                       percentage=Decimal("50"))
+        pf = Portfolio.objects.create(user=self.user, name="529b", account_type="education",
+                                      ruleset=rs, years_to_enrollment=10)
+        PortfolioItem.objects.create(portfolio=pf, account_number="NYS-1", symbol="moderate-growth")
+
+        a = get_portfolio_analysis(pf)
+        self.assertEqual(a["target_class_breakdown"], {"Stocks": 50.0, "Bonds": 50.0})
+        self.assertIsNone(a["years_to_retirement"])  # retirement framing not used for education
+        self.assertEqual(a["years_to_enrollment"], 10)
+
+    def test_retirement_real_fund_path_unchanged(self):
+        """Regression lock: the real-ticker retirement path still aggregates as before."""
+        stocks = AssetClass.objects.get(name="Stocks")
+        cat = AssetCategory.objects.create(name="Test Large Cap", asset_class=stocks)
+        Fund.objects.create(ticker="VTI", name="Vanguard Total", category=cat)
+        upload = AccountUpload.objects.create(user=self.user, file_datetime="x",
+                                              upload_type="fidelity", filename="f.csv", entry_count=1)
+        AccountPosition.objects.create(upload=upload, account_number="ACC1", symbol="VTI",
+                                       description="", quantity="10", current_value="1000")
+
+        rs = RuleSet.objects.create(name="ret-rs")  # default account_type='retirement'
+        rule = GlidepathRule.objects.create(ruleset=rs, gt_retire_age=-100, lt_retire_age=100)
+        ClassAllocation.objects.create(rule=rule, asset_class=stocks, percentage=Decimal("100"))
+        pf = Portfolio.objects.create(user=self.user, name="ret", account_type="retirement",
+                                      ruleset=rs, year_born=1990, retirement_age=65)
+        PortfolioItem.objects.create(portfolio=pf, account_number="ACC1", symbol="VTI")
+
+        a = get_portfolio_analysis(pf)
+        self.assertAlmostEqual(a["class_breakdown"]["Stocks"], 1000.0, places=2)
+        # retirement time-window still resolves via year_born/retirement_age
+        self.assertEqual(a["years_to_retirement"], a["current_year"] - 1990 - 65)
+        self.assertEqual(a["target_class_breakdown"], {"Stocks": 100.0})
+        self.assertEqual(a["account_type"], "retirement")
