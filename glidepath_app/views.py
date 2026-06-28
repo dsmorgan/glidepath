@@ -2114,18 +2114,33 @@ def modeling_view(request):
 # Virtual fund / provider administration (admin-gated)
 # ---------------------------------------------------------------------------
 
+PRICE_REFRESH_COOLDOWN_SECONDS = 3600  # prices update infrequently; throttle re-fetches
+
+
 def virtual_funds_view(request):
     """List fund providers and their virtual funds. Editing is admin-only."""
+    from django.utils import timezone
+
     is_admin = request.session.get('is_admin', False)
 
     refresh_summary = request.session.pop('vf_refresh_summary', None)
     refresh_error = request.session.pop('vf_refresh_error', None)
 
+    now = timezone.now()
     providers = []
     for provider in FundProvider.objects.prefetch_related('virtual_funds').all():
+        # A successful refresh stamps last_price_refresh; throttle within the cooldown.
+        can_refresh = True
+        minutes_ago = None
+        if provider.last_price_refresh:
+            elapsed = (now - provider.last_price_refresh).total_seconds()
+            minutes_ago = int(elapsed // 60)
+            can_refresh = elapsed >= PRICE_REFRESH_COOLDOWN_SECONDS
         providers.append({
             'provider': provider,
             'funds': provider.virtual_funds.all(),
+            'can_refresh': can_refresh,
+            'minutes_ago': minutes_ago,
         })
 
     context = {
@@ -2211,9 +2226,24 @@ def delete_virtual_fund(request, fund_id):
 @require_POST
 def refresh_provider_prices(request, provider_id):
     """Manually trigger a price refresh for a provider's virtual funds."""
+    from django.utils import timezone
+
     provider = FundProvider.objects.filter(id=provider_id).first()
     if provider is None:
         return redirect('virtual_funds')
+
+    # Throttle: a successful refresh stamps last_price_refresh (failures don't), so
+    # this blocks re-polling within the cooldown without blocking retries of failures.
+    if provider.last_price_refresh:
+        elapsed = (timezone.now() - provider.last_price_refresh).total_seconds()
+        if elapsed < PRICE_REFRESH_COOLDOWN_SECONDS:
+            mins = int((PRICE_REFRESH_COOLDOWN_SECONDS - elapsed) // 60) + 1
+            request.session['vf_refresh_summary'] = (
+                f"{provider.name}: prices were refreshed {int(elapsed // 60)} min ago. "
+                f"They update infrequently — try again in about {mins} min."
+            )
+            return redirect('virtual_funds')
+
     try:
         result = refresh_virtual_fund_prices(provider.slug)
         summary = f"{provider.name}: updated {result['updated']} of {result['scraped_count']} scraped fund(s)."

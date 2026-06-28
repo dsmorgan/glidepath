@@ -559,3 +559,30 @@ class VirtualFundAdminTests(TestCase):
         self._login(admin=False)
         resp = self.client.post(reverse("refresh_provider_prices", args=[self.provider.id]))
         self.assertEqual(resp.status_code, 403)
+
+    def test_refresh_throttled_within_cooldown(self):
+        from datetime import date
+        from django.utils import timezone
+        self.provider.last_price_refresh = timezone.now()  # just refreshed
+        self.provider.save(update_fields=["last_price_refresh"])
+        self._login()
+        feed = {"Growth Stock Index Portfolio": (Decimal("99.99"), date(2026, 6, 26))}
+        with mock.patch.dict(scraper_service.SCRAPERS, {"nysaves": lambda p: feed}):
+            resp = self.client.post(reverse("refresh_provider_prices", args=[self.provider.id]))
+        self.assertEqual(resp.status_code, 302)
+        # Throttled: price was NOT re-fetched.
+        self.assertNotEqual(
+            VirtualFund.objects.get(slug="growth-stock-index").unit_price, Decimal("99.99")
+        )
+
+    def test_list_disables_refresh_within_cooldown(self):
+        from django.utils import timezone
+        self._login()
+        # No recent refresh -> enabled form present.
+        resp = self.client.get(reverse("virtual_funds"))
+        self.assertContains(resp, "startRefresh(this)")
+        # Recent refresh -> disabled button with tooltip.
+        self.provider.last_price_refresh = timezone.now()
+        self.provider.save(update_fields=["last_price_refresh"])
+        resp = self.client.get(reverse("virtual_funds"))
+        self.assertContains(resp, "prices update infrequently")

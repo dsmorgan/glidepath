@@ -31,10 +31,14 @@
             {% if is_admin %}
             <div class="flex items-center space-x-2">
                 {% if entry.provider.price_scraper %}
-                <form method="post" action="{% url 'refresh_provider_prices' entry.provider.id %}" class="inline">
-                    {% csrf_token %}
-                    <button type="submit" class="px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm">Refresh Prices</button>
-                </form>
+                    {% if entry.can_refresh %}
+                    <form method="post" action="{% url 'refresh_provider_prices' entry.provider.id %}" class="inline" onsubmit="return startRefresh(this)">
+                        {% csrf_token %}
+                        <button type="submit" class="refresh-btn px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm disabled:opacity-60 disabled:cursor-not-allowed">Refresh Prices</button>
+                    </form>
+                    {% else %}
+                    <button type="button" disabled title="Refreshed {{ entry.minutes_ago }} min ago — prices update infrequently" class="px-3 py-1 bg-gray-300 text-gray-500 rounded-md text-sm cursor-not-allowed">Refresh Prices</button>
+                    {% endif %}
                 {% endif %}
                 <a href="{% url 'fund_provider_edit' entry.provider.id %}" class="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Edit</a>
                 <form method="post" action="{% url 'delete_fund_provider' entry.provider.id %}" class="inline" onsubmit="return confirm('Delete this provider and all its virtual funds?');">
@@ -96,4 +100,18 @@
     <p class="text-gray-500">No fund providers yet.{% if is_admin %} Click "Add Provider" to create one.{% endif %}</p>
     {% endfor %}
 </div>
+
+<script>
+function startRefresh(form) {
+    var btn = form.querySelector('.refresh-btn');
+    if (!btn || btn.dataset.busy === '1') return false;  // prevent double submit
+    btn.dataset.busy = '1';
+    // Disable after submission has been initiated so the POST still goes through.
+    setTimeout(function () {
+        btn.disabled = true;
+        btn.textContent = 'Refreshing…';
+    }, 0);
+    return true;
+}
+</script>
 {% endblock %}
