@@ -2131,6 +2131,7 @@ def virtual_funds_view(request):
 
     refresh_summary = request.session.pop('vf_refresh_summary', None)
     refresh_error = request.session.pop('vf_refresh_error', None)
+    refresh_info = request.session.pop('vf_refresh_info', None)
 
     now = timezone.now()
     providers = []
@@ -2154,6 +2155,7 @@ def virtual_funds_view(request):
         'is_admin': is_admin,
         'refresh_summary': refresh_summary,
         'refresh_error': refresh_error,
+        'refresh_info': refresh_info,
     }
     return render(request, 'glidepath_app/virtual_funds.html', context)
 
@@ -2243,7 +2245,7 @@ def refresh_provider_prices(request, provider_id):
         elapsed = (timezone.now() - provider.last_price_refresh).total_seconds()
         if elapsed < PRICE_REFRESH_COOLDOWN_SECONDS:
             mins = int((PRICE_REFRESH_COOLDOWN_SECONDS - elapsed) // 60) + 1
-            request.session['vf_refresh_summary'] = (
+            request.session['vf_refresh_info'] = (
                 f"{provider.name}: prices were refreshed {int(elapsed // 60)} min ago. "
                 f"They update infrequently — try again in about {mins} min."
             )

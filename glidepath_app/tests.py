@@ -568,12 +568,16 @@ class VirtualFundAdminTests(TestCase):
         self._login()
         feed = {"Growth Stock Index Portfolio": (Decimal("99.99"), date(2026, 6, 26))}
         with mock.patch.dict(scraper_service.SCRAPERS, {"nysaves": lambda p: feed}):
-            resp = self.client.post(reverse("refresh_provider_prices", args=[self.provider.id]))
-        self.assertEqual(resp.status_code, 302)
-        # Throttled: price was NOT re-fetched.
+            resp = self.client.post(
+                reverse("refresh_provider_prices", args=[self.provider.id]), follow=True
+            )
+        # Throttled: price was NOT re-fetched, and the notice is informational (blue),
+        # not a green success banner.
         self.assertNotEqual(
             VirtualFund.objects.get(slug="growth-stock-index").unit_price, Decimal("99.99")
         )
+        self.assertContains(resp, "try again in about")
+        self.assertContains(resp, "text-blue-700")
 
     def test_zero_update_refresh_does_not_start_cooldown(self):
         from datetime import date
