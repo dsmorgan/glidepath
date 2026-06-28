@@ -104,7 +104,8 @@
 <script>
 function startRefresh(form) {
     var btn = form.querySelector('.refresh-btn');
-    if (!btn || btn.dataset.busy === '1') return false;  // prevent double submit
+    if (!btn) return true;  // markup drift: still allow the POST, just without busy UI
+    if (btn.dataset.busy === '1') return false;  // prevent double submit
     btn.dataset.busy = '1';
     // Disable after submission has been initiated so the POST still goes through.
     setTimeout(function () {

@@ -596,3 +596,45 @@ class VirtualFundAdminTests(TestCase):
         self.provider.save(update_fields=["last_price_refresh"])
         resp = self.client.get(reverse("virtual_funds"))
         self.assertContains(resp, "prices update infrequently")
+
+    def _vfund_post(self, p1, p2):
+        cat1 = AssetCategory.objects.get(name="US Total Market", asset_class__name="Stocks")
+        cat2 = AssetCategory.objects.get(name="International Market", asset_class__name="Stocks")
+        return {
+            "provider": str(self.provider.id), "name": "Test Fund", "slug": "test-fund",
+            "unit_price": "", "price_as_of": "", "is_active": "on", "notes": "",
+            "composition-TOTAL_FORMS": "2", "composition-INITIAL_FORMS": "0",
+            "composition-MIN_NUM_FORMS": "0", "composition-MAX_NUM_FORMS": "1000",
+            "composition-0-asset_category": str(cat1.id), "composition-0-percentage": str(p1), "composition-0-id": "",
+            "composition-1-asset_category": str(cat2.id), "composition-1-percentage": str(p2), "composition-1-id": "",
+        }
+
+    def test_create_with_invalid_composition_saves_nothing(self):
+        self._login()
+        before = VirtualFund.objects.count()
+        resp = self.client.post(reverse("virtual_fund_add"), self._vfund_post(60, 30))  # sums to 90
+        self.assertEqual(resp.status_code, 200)  # re-rendered with error, not redirect
+        self.assertContains(resp, "100%")
+        self.assertEqual(VirtualFund.objects.count(), before)  # no orphan fund created
+
+    def test_create_with_valid_composition_saves(self):
+        self._login()
+        resp = self.client.post(reverse("virtual_fund_add"), self._vfund_post(60, 40))
+        self.assertEqual(resp.status_code, 302)
+        fund = VirtualFund.objects.get(slug="test-fund")
+        self.assertEqual(fund.composition.count(), 2)
+
+    def test_zero_update_refresh_shows_error_not_success(self):
+        from datetime import date
+        feed = {"Nonexistent Portfolio": (Decimal("1.00"), date(2026, 6, 26))}
+        self._login()
+        with mock.patch.dict(scraper_service.SCRAPERS, {"nysaves": lambda p: feed}):
+            resp = self.client.post(
+                reverse("refresh_provider_prices", args=[self.provider.id]), follow=True
+            )
+        self.assertContains(resp, "no prices were updated")
+
+    def test_non_admin_cannot_get_detail_forms(self):
+        self._login(admin=False)
+        self.assertEqual(self.client.get(reverse("fund_provider_add")).status_code, 403)
+        self.assertEqual(self.client.get(reverse("virtual_fund_add")).status_code, 403)

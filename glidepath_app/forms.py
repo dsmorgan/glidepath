@@ -516,7 +516,9 @@ class BaseCompositionFormSet(forms.BaseInlineFormSet):
             if cd.get('asset_category') is None and cd.get('percentage') is None:
                 continue
             rows += 1
-            total += cd.get('percentage') or Decimal('0')
+            pct = cd.get('percentage')
+            if pct is not None:  # Decimal('0') is falsy — don't use `or`
+                total += pct
         if rows and total != Decimal('100'):
             raise forms.ValidationError(
                 f"Composition percentages must sum to 100% (currently {total}%)."

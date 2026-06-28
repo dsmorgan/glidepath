@@ -74,6 +74,7 @@
     const rows = document.getElementById('comp-rows');
     const addBtn = document.getElementById('add-comp-row');
     const totalEl = document.getElementById('comp-total');
+    if (!totalForms || !rows || !addBtn || !totalEl) return;  // bail if markup is missing
 
     function recalc() {
         let sum = 0;

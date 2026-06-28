@@ -1,7 +1,11 @@
 import json
 import csv
 import io
+import logging
 
+import requests
+
+from django.db import transaction
 from django.http import HttpResponse, JsonResponse, HttpResponseForbidden
 from django.shortcuts import render, redirect
 from django.views.decorators.http import require_POST
@@ -15,6 +19,8 @@ from .ticker_service import query_ticker as query_ticker_service
 from .account_services import import_fidelity_csv, import_etrade_csv, parse_nysaves_csv, get_portfolio_analysis, calculate_rebalance_recommendations
 from .scraper_service import refresh_virtual_fund_prices
 from .decorators import admin_required
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_COLORS = [
     "#FF6384",
@@ -2152,16 +2158,14 @@ def virtual_funds_view(request):
     return render(request, 'glidepath_app/virtual_funds.html', context)
 
 
+@admin_required
 def fund_provider_detail(request, provider_id=None):
-    """Add or edit a fund provider."""
-    is_admin = request.session.get('is_admin', False)
+    """Add or edit a fund provider (admin only)."""
     provider = FundProvider.objects.filter(id=provider_id).first() if provider_id else None
     if provider_id and provider is None:
         return redirect('virtual_funds')
 
     if request.method == 'POST':
-        if not is_admin:
-            return HttpResponseForbidden("Administrator privileges required.")
         form = FundProviderForm(request.POST, instance=provider)
         if form.is_valid():
             form.save()
@@ -2169,7 +2173,7 @@ def fund_provider_detail(request, provider_id=None):
     else:
         form = FundProviderForm(instance=provider)
 
-    context = {'form': form, 'provider': provider, 'is_edit': provider is not None, 'is_admin': is_admin}
+    context = {'form': form, 'provider': provider, 'is_edit': provider is not None, 'is_admin': True}
     return render(request, 'glidepath_app/fund_provider_detail.html', context)
 
 
@@ -2181,25 +2185,26 @@ def delete_fund_provider(request, provider_id):
     return redirect('virtual_funds')
 
 
+@admin_required
 def virtual_fund_detail(request, fund_id=None):
-    """Add or edit a virtual fund, including its composition breakdown."""
-    is_admin = request.session.get('is_admin', False)
+    """Add or edit a virtual fund, including its composition breakdown (admin only)."""
     fund = VirtualFund.objects.filter(id=fund_id).first() if fund_id else None
     if fund_id and fund is None:
         return redirect('virtual_funds')
 
     if request.method == 'POST':
-        if not is_admin:
-            return HttpResponseForbidden("Administrator privileges required.")
         form = VirtualFundForm(request.POST, instance=fund)
-        formset = VirtualFundCompositionFormSet(request.POST, instance=fund)
-        if form.is_valid():
-            new_fund = form.save()
-            # Re-bind the formset to the (possibly newly created) fund instance.
-            formset = VirtualFundCompositionFormSet(request.POST, instance=new_fund)
-            if formset.is_valid():
+        # Bind to the existing fund, or a transient instance for create, so the
+        # composition can be validated BEFORE anything is written.
+        formset = VirtualFundCompositionFormSet(request.POST, instance=fund or VirtualFund())
+        if form.is_valid() and formset.is_valid():
+            # Atomic so an invalid composition never leaves an orphaned fund, and a
+            # later DB error rolls back the fund's field changes too.
+            with transaction.atomic():
+                saved_fund = form.save()
+                formset.instance = saved_fund
                 formset.save()
-                return redirect('virtual_funds')
+            return redirect('virtual_funds')
     else:
         form = VirtualFundForm(instance=fund)
         formset = VirtualFundCompositionFormSet(instance=fund)
@@ -2209,7 +2214,7 @@ def virtual_fund_detail(request, fund_id=None):
         'formset': formset,
         'fund': fund,
         'is_edit': fund is not None,
-        'is_admin': is_admin,
+        'is_admin': True,
     }
     return render(request, 'glidepath_app/virtual_fund_detail.html', context)
 
@@ -2246,12 +2251,26 @@ def refresh_provider_prices(request, provider_id):
 
     try:
         result = refresh_virtual_fund_prices(provider.slug)
-        summary = f"{provider.name}: updated {result['updated']} of {result['scraped_count']} scraped fund(s)."
-        if result['not_updated']:
-            summary += f" No price for {len(result['not_updated'])} fund(s)."
-        if result['unmatched_scraped']:
-            summary += f" {len(result['unmatched_scraped'])} scraped row(s) matched no fund."
-        request.session['vf_refresh_summary'] = summary
-    except Exception as exc:
+    except (ValueError, requests.RequestException) as exc:
+        logger.exception("Price refresh failed for provider %s", provider.slug)
         request.session['vf_refresh_error'] = f"Price refresh failed: {exc}"
+        return redirect('virtual_funds')
+
+    if result['updated'] == 0:
+        # Nothing was retrieved/applied — surface as an error, not a green success.
+        detail = f"returned {result['scraped_count']} row(s) but none matched a seeded fund"
+        if result['scraped_count'] == 0:
+            detail = "returned no prices (the feed may have changed or be unavailable)"
+        request.session['vf_refresh_error'] = (
+            f"{provider.name}: no prices were updated — the scraper {detail}. "
+            "Check fund names against the provider, then try again."
+        )
+        return redirect('virtual_funds')
+
+    summary = f"{provider.name}: updated {result['updated']} of {result['scraped_count']} scraped fund(s)."
+    if result['not_updated']:
+        summary += f" No price for {len(result['not_updated'])} fund(s)."
+    if result['unmatched_scraped']:
+        summary += f" {len(result['unmatched_scraped'])} scraped row(s) matched no fund."
+    request.session['vf_refresh_summary'] = summary
     return redirect('virtual_funds')
