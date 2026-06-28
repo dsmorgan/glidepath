@@ -503,29 +503,46 @@ def nysaves_csv_template(request):
     return response
 
 
+def _acting_user(request):
+    """Resolve (current_user, is_admin) for the session, honoring an admin's
+    selected_user. current_user is None when not logged in."""
+    user_id = request.session.get('user_id')
+    is_admin = request.session.get('is_admin', False)
+    if is_admin and request.session.get('selected_user_id'):
+        current_user = User.objects.filter(id=request.session['selected_user_id']).first() \
+            or (User.objects.filter(id=user_id).first() if user_id else None)
+    else:
+        current_user = User.objects.filter(id=user_id).first() if user_id else None
+    return current_user, is_admin
+
+
+def _can_access(obj, current_user, is_admin):
+    """True if the acting user owns the object, or is an administrator."""
+    return current_user is not None and (obj.user_id == current_user.id or is_admin)
+
+
 def view_account_upload(request, upload_id):
     """View details of a specific account upload."""
-    try:
-        upload = AccountUpload.objects.get(id=upload_id)
-        positions = AccountPosition.objects.filter(upload=upload).order_by('account_number', 'symbol')
-
-        context = {
-            'upload': upload,
-            'positions': positions,
-        }
-        return render(request, "glidepath_app/account_upload_detail.html", context)
-    except AccountUpload.DoesNotExist:
+    current_user, is_admin = _acting_user(request)
+    upload = AccountUpload.objects.filter(id=upload_id).first()
+    if upload is None or not _can_access(upload, current_user, is_admin):
         return redirect('accounts')
+
+    positions = AccountPosition.objects.filter(upload=upload).order_by('account_number', 'symbol')
+    context = {
+        'upload': upload,
+        'positions': positions,
+    }
+    return render(request, "glidepath_app/account_upload_detail.html", context)
 
 
 @require_POST
 def delete_account_upload(request, upload_id):
     """Delete an account upload and all its positions."""
-    try:
-        upload = AccountUpload.objects.get(id=upload_id)
+    current_user, is_admin = _acting_user(request)
+    upload = AccountUpload.objects.filter(id=upload_id).first()
+    if upload is not None and _can_access(upload, current_user, is_admin):
         upload.delete()
-    except AccountUpload.DoesNotExist:
-        pass
     return redirect('accounts')
 
 
@@ -857,24 +874,10 @@ def education_dashboard(request, portfolio_id):
     from .education_projection import calculate_education_projection
     from django.utils import timezone
 
-    # Resolve the acting user (admins may act as a selected user), matching
-    # portfolios_view, then scope the portfolio to that user.
-    user_id = request.session.get('user_id')
-    is_admin = request.session.get('is_admin', False)
-    if is_admin and request.session.get('selected_user_id'):
-        current_user = User.objects.filter(id=request.session['selected_user_id']).first() \
-            or (User.objects.filter(id=user_id).first() if user_id else None)
-    else:
-        current_user = User.objects.filter(id=user_id).first() if user_id else None
-
-    if not current_user:
-        return redirect('portfolios')
-
+    # Scope the portfolio to the acting user (admins may act as a selected user).
+    current_user, is_admin = _acting_user(request)
     portfolio = Portfolio.objects.filter(id=portfolio_id).first()
-    if portfolio is None:
-        return redirect('portfolios')
-    # Owner-only, unless the acting user is an administrator.
-    if portfolio.user_id != current_user.id and not is_admin:
+    if portfolio is None or not _can_access(portfolio, current_user, is_admin):
         return redirect('portfolios')
     # This route only serves education portfolios.
     if portfolio.account_type != 'education':
@@ -1025,42 +1028,19 @@ def create_portfolio(request):
 @require_POST
 def delete_portfolio(request, portfolio_id):
     """Delete a portfolio and all its items."""
-    try:
-        portfolio = Portfolio.objects.get(id=portfolio_id)
+    current_user, is_admin = _acting_user(request)
+    portfolio = Portfolio.objects.filter(id=portfolio_id).first()
+    if portfolio is not None and _can_access(portfolio, current_user, is_admin):
         portfolio.delete()
-    except Portfolio.DoesNotExist:
-        pass
     return redirect('portfolios')
 
 
 def edit_portfolio(request, portfolio_id):
     """Edit portfolio to select which account+symbol combinations to include and configure ruleset."""
-    try:
-        portfolio = Portfolio.objects.get(id=portfolio_id)
-    except Portfolio.DoesNotExist:
+    current_user, is_admin = _acting_user(request)
+    portfolio = Portfolio.objects.filter(id=portfolio_id).first()
+    if portfolio is None or not _can_access(portfolio, current_user, is_admin):
         return redirect('portfolios')
-
-    # Get the current user
-    # Get the logged-in user
-    user_id = request.session.get('user_id')
-    is_admin = request.session.get('is_admin', False)
-
-    # For admins, allow editing portfolios for other users via selected_user_id
-    # For regular users, always use their own user_id
-    if is_admin:
-        selected_user_id = request.session.get('selected_user_id')
-        if selected_user_id:
-            try:
-                current_user = User.objects.get(id=selected_user_id)
-            except User.DoesNotExist:
-                # Fall back to logged-in user
-                current_user = User.objects.get(id=user_id) if user_id else None
-        else:
-            # No user selected, use logged-in admin's own data
-            current_user = User.objects.get(id=user_id) if user_id else None
-    else:
-        # Regular users always edit their own data
-        current_user = User.objects.get(id=user_id) if user_id else None
 
     if request.method == "POST":
         # Handle portfolio configuration (name and ruleset)
@@ -1143,9 +1123,9 @@ def download_portfolio_csv(request, portfolio_id):
     import csv
     from io import StringIO
 
-    try:
-        portfolio = Portfolio.objects.get(id=portfolio_id)
-    except Portfolio.DoesNotExist:
+    current_user, is_admin = _acting_user(request)
+    portfolio = Portfolio.objects.filter(id=portfolio_id).first()
+    if portfolio is None or not _can_access(portfolio, current_user, is_admin):
         return redirect('portfolios')
 
     # Get portfolio analysis data

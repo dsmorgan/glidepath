@@ -389,3 +389,59 @@ class EducationProjectionTests(TestCase):
         resp = self.client.get(reverse("education_dashboard", args=[pf.id]))
         self.assertEqual(resp.status_code, 302)
         self.assertIn("/portfolios/", resp["Location"])
+
+
+class AccessControlTests(TestCase):
+    """Owner-only scoping on portfolio/account-upload routes (IDOR hardening)."""
+
+    def setUp(self):
+        self.owner = User.objects.create(username="owner", email="owner@example.com")
+        self.other = User.objects.create(username="other", email="other@example.com")
+        self.upload = AccountUpload.objects.create(
+            user=self.owner, file_datetime="x", upload_type="fidelity",
+            filename="f.csv", entry_count=0,
+        )
+        self.portfolio = Portfolio.objects.create(user=self.owner, name="owned")
+
+    def _login(self, user):
+        session = self.client.session
+        session["user_id"] = str(user.id)
+        session.save()
+
+    def test_non_owner_cannot_view_or_delete_upload(self):
+        self._login(self.other)
+        self.assertEqual(
+            self.client.get(reverse("view_account_upload", args=[self.upload.id])).status_code, 302
+        )
+        self.client.post(reverse("delete_account_upload", args=[self.upload.id]))
+        self.assertTrue(AccountUpload.objects.filter(id=self.upload.id).exists())
+
+    def test_non_owner_cannot_edit_delete_or_download_portfolio(self):
+        self._login(self.other)
+        self.assertEqual(
+            self.client.get(reverse("edit_portfolio", args=[self.portfolio.id])).status_code, 302
+        )
+        self.assertEqual(
+            self.client.get(reverse("download_portfolio_csv", args=[self.portfolio.id])).status_code, 302
+        )
+        self.client.post(reverse("delete_portfolio", args=[self.portfolio.id]))
+        self.assertTrue(Portfolio.objects.filter(id=self.portfolio.id).exists())
+
+    def test_owner_can_access(self):
+        self._login(self.owner)
+        self.assertEqual(
+            self.client.get(reverse("view_account_upload", args=[self.upload.id])).status_code, 200
+        )
+        resp = self.client.get(reverse("download_portfolio_csv", args=[self.portfolio.id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "text/csv")
+
+    def test_admin_can_access_other_users_portfolio(self):
+        admin = User.objects.create(username="admin", email="admin@example.com", role=0)
+        session = self.client.session
+        session["user_id"] = str(admin.id)
+        session["is_admin"] = True
+        session.save()
+        self.assertEqual(
+            self.client.get(reverse("edit_portfolio", args=[self.portfolio.id])).status_code, 200
+        )
