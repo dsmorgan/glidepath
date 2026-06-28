@@ -16,7 +16,8 @@ from .services import export_glidepath_rules, import_glidepath_rules
 from .account_services import (
     parse_nysaves_csv, get_portfolio_analysis, resolve_position_asset_categories,
 )
-from .forms import PortfolioForm
+from .forms import PortfolioForm, VirtualFundCompositionFormSet
+from .models import VirtualFundComposition
 from .education_projection import (
     calculate_education_projection, calculate_required_contribution,
 )
@@ -490,3 +491,154 @@ class AccessControlTests(TestCase):
         self.assertEqual(
             self.client.get(reverse("edit_portfolio", args=[self.portfolio.id])).status_code, 200
         )
+
+
+class VirtualFundAdminTests(TestCase):
+    """Admin CRUD for providers/funds/compositions + price refresh."""
+
+    def setUp(self):
+        self.admin = User.objects.create(username="adm", email="adm@example.com", role=0)
+        self.provider = FundProvider.objects.get(slug="nysaves")  # seeded
+
+    def _login(self, admin=True):
+        session = self.client.session
+        session["user_id"] = str(self.admin.id)
+        if admin:
+            session["is_admin"] = True
+        session.save()
+
+    def test_list_view_renders(self):
+        self._login(admin=False)
+        resp = self.client.get(reverse("virtual_funds"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "NY 529 Direct Plan")
+
+    def test_non_admin_cannot_create_provider(self):
+        self._login(admin=False)
+        resp = self.client.post(reverse("fund_provider_add"),
+                                {"name": "X", "slug": "x", "price_source_url": "",
+                                 "price_scraper": "", "notes": ""})
+        self.assertEqual(resp.status_code, 403)
+        self.assertFalse(FundProvider.objects.filter(slug="x").exists())
+
+    def test_admin_creates_provider(self):
+        self._login()
+        resp = self.client.post(reverse("fund_provider_add"),
+                                {"name": "Vanguard 529", "slug": "vanguard-529",
+                                 "price_source_url": "", "price_scraper": "", "notes": ""})
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(FundProvider.objects.filter(slug="vanguard-529").exists())
+
+    def _composition_data(self, p1, p2):
+        cat1 = AssetCategory.objects.get(name="US Total Market", asset_class__name="Stocks")
+        cat2 = AssetCategory.objects.get(name="International Market", asset_class__name="Stocks")
+        return {
+            "composition-TOTAL_FORMS": "2", "composition-INITIAL_FORMS": "0",
+            "composition-MIN_NUM_FORMS": "0", "composition-MAX_NUM_FORMS": "1000",
+            "composition-0-asset_category": str(cat1.id), "composition-0-percentage": str(p1), "composition-0-id": "",
+            "composition-1-asset_category": str(cat2.id), "composition-1-percentage": str(p2), "composition-1-id": "",
+        }
+
+    def test_composition_formset_requires_100(self):
+        fund = VirtualFund.objects.create(provider=self.provider, name="T", slug="t-fund")
+        self.assertTrue(VirtualFundCompositionFormSet(self._composition_data(60, 40), instance=fund).is_valid())
+        bad = VirtualFundCompositionFormSet(self._composition_data(60, 30), instance=fund)
+        self.assertFalse(bad.is_valid())
+        self.assertIn("100%", str(bad.non_form_errors()))
+
+    def test_refresh_provider_prices(self):
+        from datetime import date
+        feed = {"Growth Stock Index Portfolio": (Decimal("23.45"), date(2026, 6, 26))}
+        self._login()
+        with mock.patch.dict(scraper_service.SCRAPERS, {"nysaves": lambda p: feed}):
+            resp = self.client.post(reverse("refresh_provider_prices", args=[self.provider.id]))
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(VirtualFund.objects.get(slug="growth-stock-index").unit_price, Decimal("23.45"))
+
+    def test_non_admin_cannot_refresh(self):
+        self._login(admin=False)
+        resp = self.client.post(reverse("refresh_provider_prices", args=[self.provider.id]))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_refresh_throttled_within_cooldown(self):
+        from datetime import date
+        from django.utils import timezone
+        self.provider.last_price_refresh = timezone.now()  # just refreshed
+        self.provider.save(update_fields=["last_price_refresh"])
+        self._login()
+        feed = {"Growth Stock Index Portfolio": (Decimal("99.99"), date(2026, 6, 26))}
+        with mock.patch.dict(scraper_service.SCRAPERS, {"nysaves": lambda p: feed}):
+            resp = self.client.post(
+                reverse("refresh_provider_prices", args=[self.provider.id]), follow=True
+            )
+        # Throttled: price was NOT re-fetched, and the notice is informational (blue),
+        # not a green success banner.
+        self.assertNotEqual(
+            VirtualFund.objects.get(slug="growth-stock-index").unit_price, Decimal("99.99")
+        )
+        self.assertContains(resp, "try again in about")
+        self.assertContains(resp, "text-blue-700")
+
+    def test_zero_update_refresh_does_not_start_cooldown(self):
+        from datetime import date
+        # A scraped name that matches no seeded fund -> updated 0 -> no timestamp.
+        feed = {"Nonexistent Portfolio": (Decimal("1.00"), date(2026, 6, 26))}
+        with mock.patch.dict(scraper_service.SCRAPERS, {"nysaves": lambda p: feed}):
+            result = scraper_service.refresh_virtual_fund_prices("nysaves")
+        self.assertEqual(result["updated"], 0)
+        self.provider.refresh_from_db()
+        self.assertIsNone(self.provider.last_price_refresh)
+
+    def test_list_disables_refresh_within_cooldown(self):
+        from django.utils import timezone
+        self._login()
+        # No recent refresh -> enabled form present.
+        resp = self.client.get(reverse("virtual_funds"))
+        self.assertContains(resp, "startRefresh(this)")
+        # Recent refresh -> disabled button with tooltip.
+        self.provider.last_price_refresh = timezone.now()
+        self.provider.save(update_fields=["last_price_refresh"])
+        resp = self.client.get(reverse("virtual_funds"))
+        self.assertContains(resp, "prices update infrequently")
+
+    def _vfund_post(self, p1, p2):
+        cat1 = AssetCategory.objects.get(name="US Total Market", asset_class__name="Stocks")
+        cat2 = AssetCategory.objects.get(name="International Market", asset_class__name="Stocks")
+        return {
+            "provider": str(self.provider.id), "name": "Test Fund", "slug": "test-fund",
+            "unit_price": "", "price_as_of": "", "is_active": "on", "notes": "",
+            "composition-TOTAL_FORMS": "2", "composition-INITIAL_FORMS": "0",
+            "composition-MIN_NUM_FORMS": "0", "composition-MAX_NUM_FORMS": "1000",
+            "composition-0-asset_category": str(cat1.id), "composition-0-percentage": str(p1), "composition-0-id": "",
+            "composition-1-asset_category": str(cat2.id), "composition-1-percentage": str(p2), "composition-1-id": "",
+        }
+
+    def test_create_with_invalid_composition_saves_nothing(self):
+        self._login()
+        before = VirtualFund.objects.count()
+        resp = self.client.post(reverse("virtual_fund_add"), self._vfund_post(60, 30))  # sums to 90
+        self.assertEqual(resp.status_code, 200)  # re-rendered with error, not redirect
+        self.assertContains(resp, "100%")
+        self.assertEqual(VirtualFund.objects.count(), before)  # no orphan fund created
+
+    def test_create_with_valid_composition_saves(self):
+        self._login()
+        resp = self.client.post(reverse("virtual_fund_add"), self._vfund_post(60, 40))
+        self.assertEqual(resp.status_code, 302)
+        fund = VirtualFund.objects.get(slug="test-fund")
+        self.assertEqual(fund.composition.count(), 2)
+
+    def test_zero_update_refresh_shows_error_not_success(self):
+        from datetime import date
+        feed = {"Nonexistent Portfolio": (Decimal("1.00"), date(2026, 6, 26))}
+        self._login()
+        with mock.patch.dict(scraper_service.SCRAPERS, {"nysaves": lambda p: feed}):
+            resp = self.client.post(
+                reverse("refresh_provider_prices", args=[self.provider.id]), follow=True
+            )
+        self.assertContains(resp, "no prices were updated")
+
+    def test_non_admin_cannot_get_detail_forms(self):
+        self._login(admin=False)
+        self.assertEqual(self.client.get(reverse("fund_provider_add")).status_code, 403)
+        self.assertEqual(self.client.get(reverse("virtual_fund_add")).status_code, 403)

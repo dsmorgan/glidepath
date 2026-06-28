@@ -1,0 +1,121 @@
+{% extends 'glidepath_app/base.html' %}
+{% block title %}Glidepath - Virtual Funds{% endblock %}
+{% block content %}
+<div class="bg-white shadow rounded-lg p-8">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-bold text-gray-900">Virtual Funds</h1>
+        {% if is_admin %}
+        <a href="{% url 'fund_provider_add' %}" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium">
+            Add Provider
+        </a>
+        {% endif %}
+    </div>
+
+    {% if refresh_summary %}
+    <div class="bg-green-50 border-l-4 border-green-400 p-4 mb-6"><p class="text-sm text-green-700">{{ refresh_summary }}</p></div>
+    {% endif %}
+    {% if refresh_error %}
+    <div class="bg-red-50 border-l-4 border-red-400 p-4 mb-6"><p class="text-sm text-red-700">{{ refresh_error }}</p></div>
+    {% endif %}
+    {% if refresh_info %}
+    <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6"><p class="text-sm text-blue-700">{{ refresh_info }}</p></div>
+    {% endif %}
+
+    {% for entry in providers %}
+    <div class="border border-gray-200 rounded-lg mb-8">
+        <div class="flex items-center justify-between bg-gray-50 px-5 py-3 rounded-t-lg">
+            <div>
+                <h2 class="text-xl font-semibold text-gray-900">{{ entry.provider.name }}</h2>
+                <p class="text-xs text-gray-500">
+                    slug: {{ entry.provider.slug }}
+                    {% if entry.provider.last_price_refresh %}· prices refreshed {{ entry.provider.last_price_refresh|date:"Y-m-d H:i" }} UTC{% else %}· prices never refreshed{% endif %}
+                </p>
+            </div>
+            {% if is_admin %}
+            <div class="flex items-center space-x-2">
+                {% if entry.provider.price_scraper %}
+                    {% if entry.can_refresh %}
+                    <form method="post" action="{% url 'refresh_provider_prices' entry.provider.id %}" class="inline" onsubmit="return startRefresh(this)">
+                        {% csrf_token %}
+                        <button type="submit" class="refresh-btn px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm disabled:opacity-60 disabled:cursor-not-allowed">Refresh Prices</button>
+                    </form>
+                    {% else %}
+                    <button type="button" disabled title="Refreshed {{ entry.minutes_ago }} min ago — prices update infrequently" class="px-3 py-1 bg-gray-300 text-gray-500 rounded-md text-sm cursor-not-allowed">Refresh Prices</button>
+                    {% endif %}
+                {% endif %}
+                <a href="{% url 'fund_provider_edit' entry.provider.id %}" class="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Edit</a>
+                <form method="post" action="{% url 'delete_fund_provider' entry.provider.id %}" class="inline" onsubmit="return confirm('Delete this provider and all its virtual funds?');">
+                    {% csrf_token %}
+                    <button type="submit" class="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm">Delete</button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="p-5">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-sm font-medium text-gray-700 uppercase">Virtual Funds</h3>
+                {% if is_admin %}
+                <a href="{% url 'virtual_fund_add' %}" class="text-indigo-600 hover:text-indigo-900 text-sm font-medium">+ Add Fund</a>
+                {% endif %}
+            </div>
+            {% if entry.funds %}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 border">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Slug</th>
+                            <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Unit Price</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Price As Of</th>
+                            <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Active</th>
+                            {% if is_admin %}<th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>{% endif %}
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for fund in entry.funds %}
+                        <tr>
+                            <td class="px-4 py-2 text-sm text-gray-900">{{ fund.name }}</td>
+                            <td class="px-4 py-2 text-sm text-gray-500">{{ fund.slug }}</td>
+                            <td class="px-4 py-2 text-sm text-gray-900 text-right">{% if fund.unit_price is not None %}{{ fund.unit_price }}{% else %}&mdash;{% endif %}</td>
+                            <td class="px-4 py-2 text-sm text-gray-500">{{ fund.price_as_of|default:"&mdash;" }}</td>
+                            <td class="px-4 py-2 text-sm text-center">{% if fund.is_active %}<span class="text-green-600">Yes</span>{% else %}<span class="text-gray-400">No</span>{% endif %}</td>
+                            {% if is_admin %}
+                            <td class="px-4 py-2 text-right text-sm space-x-2 whitespace-nowrap">
+                                <a href="{% url 'virtual_fund_edit' fund.id %}" class="text-blue-600 hover:text-blue-900">Edit</a>
+                                <form method="post" action="{% url 'delete_virtual_fund' fund.id %}" class="inline" onsubmit="return confirm('Delete this virtual fund?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="text-red-600 hover:text-red-900">Delete</button>
+                                </form>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-gray-500 text-sm">No virtual funds for this provider yet.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% empty %}
+    <p class="text-gray-500">No fund providers yet.{% if is_admin %} Click "Add Provider" to create one.{% endif %}</p>
+    {% endfor %}
+</div>
+
+<script>
+function startRefresh(form) {
+    var btn = form.querySelector('.refresh-btn');
+    if (!btn) return true;  // markup drift: still allow the POST, just without busy UI
+    if (btn.dataset.busy === '1') return false;  // prevent double submit
+    btn.dataset.busy = '1';
+    // Disable after submission has been initiated so the POST still goes through.
+    setTimeout(function () {
+        btn.disabled = true;
+        btn.textContent = 'Refreshing…';
+    }, 0);
+    return true;
+}
+</script>
+{% endblock %}
