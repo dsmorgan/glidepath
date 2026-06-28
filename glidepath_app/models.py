@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 import uuid
 from django.db import models
@@ -426,7 +427,6 @@ class Portfolio(models.Model):
         """
         if self.year_born is None or self.enrollment_age is None:
             return None
-        from datetime import datetime
         return self.year_born + self.enrollment_age - datetime.now().year
 
     def get_balance_info(self):

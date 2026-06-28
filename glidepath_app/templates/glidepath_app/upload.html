@@ -273,8 +273,9 @@ function updateCurrentYearDisplay() {
 
 function updateTableYearAndAge() {
     // Calculate Year and Age for all table rows
-    const yearBorn = parseInt(document.getElementById('yearBornSelect')?.value || 1973);
-    const retirementAge = parseInt(document.getElementById('retirementAgeSelect')?.value || 58);
+    const d = glidepathDefaults();
+    const yearBorn = parseInt(document.getElementById('yearBornSelect')?.value || d.yearBorn);
+    const retirementAge = parseInt(document.getElementById('retirementAgeSelect')?.value || d.age);
     const yearOfRetirement = yearBorn + retirementAge;
 
     // Get all table rows with age data

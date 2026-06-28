@@ -4,10 +4,14 @@ Migration 0021 originally seeded the example 529 glide path with an inverted sig
 (positive = before enrollment). The convention has since flipped to match
 retirement (negative = before the milestone, 0 = milestone, positive = after).
 Databases that already applied the old 0021 still hold the inverted bands, so this
-deletes the example by name and recreates it with the corrected bands.
+deletes the example by name and recreates it with the corrected bands. Delete +
+recreate (rather than an in-place band flip) gives a deterministic end state on
+both fresh and already-migrated DBs without risk of a double flip.
 
-Idempotent: on a fresh database (where 0021 already seeds the new bands) this just
-replaces an identical record.
+Portfolio.ruleset is on_delete=SET_NULL, so any portfolio that referenced the old
+example is simply un-linked (not deleted); the example is a demo seed, so this is
+acceptable. The end state is identical on a fresh database, where 0021 already
+seeds the new bands.
 """
 from decimal import Decimal
 
