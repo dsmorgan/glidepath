@@ -24,7 +24,7 @@
                 <select id="rulesetSelect" name="ruleset" class="w-full border border-gray-300 rounded-md p-2" onchange="updateActions(); htmx.ajax('GET', '{% url 'rules' %}?ruleset=' + this.value, '#rules');">
                     <option value="">-- Select a Ruleset --</option>
                     {% for rs in rule_sets %}
-                        <option value="{{ rs.id }}" {% if selected_set and rs.id == selected_set.id %}selected{% endif %}>{{ rs.name }}</option>
+                        <option value="{{ rs.id }}" {% if selected_set and rs.id == selected_set.id %}selected{% endif %}>{{ rs.name }}{% if rs.account_type != 'retirement' %} — {{ rs.get_account_type_display }}{% endif %}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -59,8 +59,13 @@
                 <!-- Upload Button (Admin only) -->
                 <form method="post" enctype="multipart/form-data" class="inline-block">
                     {% csrf_token %}
-                    <div class="flex gap-2">
+                    <div class="flex gap-2 items-center">
                         <input type="file" name="file" required class="border border-gray-300 rounded-md p-2 text-sm">
+                        <select name="account_type" title="Account type for the imported rule set" class="border border-gray-300 rounded-md p-2 text-sm">
+                            <option value="retirement">Retirement</option>
+                            <option value="education">Education / 529</option>
+                            <option value="general">General</option>
+                        </select>
                         <button type="submit" class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 whitespace-nowrap">
                             Upload CSV
                         </button>

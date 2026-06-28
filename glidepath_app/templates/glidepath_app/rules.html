@@ -7,6 +7,15 @@ window.chartDataStaged = {
 };
 </script>
 
+{% if is_education %}
+<div class="mb-6 bg-purple-50 border-l-4 border-purple-400 p-4">
+    <p class="text-sm text-purple-800">
+        <strong>Education / 529 rule set.</strong> Time windows below are <strong>{{ time_window_label|lower }}</strong>
+        (negative = student already enrolled). The Year Born / Retirement Age controls are retirement-oriented and don't apply here.
+    </p>
+</div>
+{% endif %}
+
 <!-- Charts Section - Now at the top -->
 <div class="mb-8 flex flex-wrap justify-center gap-4">
     <div class="w-full lg:w-[32%] h-[40vh] min-w-[300px]">
@@ -86,9 +95,9 @@ window.chartDataStaged = {
                         {% endfor %}
                     </div>
 
-                    <!-- Right side: gt-retire-age to lt-retire-age -->
+                    <!-- Right side: gt to lt (years to retirement, or enrollment for education) -->
                     <span class="text-sm italic text-gray-600 whitespace-nowrap">
-                        {{ rule.gt_retire_age }} to {{ rule.lt_retire_age }}
+                        {{ rule.gt_retire_age }} to {{ rule.lt_retire_age }} {{ time_window_label|lower }}
                     </span>
                 </div>
                 <svg class="w-5 h-5 transform transition-transform flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -53,7 +53,10 @@ class ImportRulesTests(TestCase):
             f = io.BytesIO(data.encode("utf-8"))
             f.name = "rules.csv"
             import_glidepath_rules(f)
-        names = list(RuleSet.objects.order_by("id").values_list("name", flat=True))
+        names = list(
+            RuleSet.objects.filter(name__startswith="rules").order_by("id")
+            .values_list("name", flat=True)
+        )
         self.assertEqual(names[0], "rules")
         self.assertEqual(names[1], "rules (1)")
 
@@ -490,3 +493,33 @@ class AccessControlTests(TestCase):
         self.assertEqual(
             self.client.get(reverse("edit_portfolio", args=[self.portfolio.id])).status_code, 200
         )
+
+
+class EducationRulesetTests(TestCase):
+    def _rules_csv(self):
+        data = (
+            "gt-retire-age,lt-retire-age,Stocks,Bonds,Stocks:US Total Market,Bonds:US Investment Grade\n"
+            "-100,100,60,40,60,40\n"
+        )
+        f = io.BytesIO(data.encode("utf-8"))
+        f.name = "edu.csv"
+        return f
+
+    def test_import_sets_education_account_type(self):
+        rs = import_glidepath_rules(self._rules_csv(), account_type="education")
+        self.assertEqual(rs.account_type, "education")
+
+    def test_import_defaults_retirement_and_rejects_invalid(self):
+        rs = import_glidepath_rules(self._rules_csv(), account_type="bogus")
+        self.assertEqual(rs.account_type, "retirement")
+
+    def test_example_education_ruleset_seeded(self):
+        rs = RuleSet.objects.get(name="Example 529 Education Glide Path")
+        self.assertEqual(rs.account_type, "education")
+        self.assertEqual(rs.rules.count(), 6)
+        far = rs.rules.get(gt_retire_age=15)
+        classes = {c.asset_class.name: c.percentage for c in far.class_allocations.all()}
+        self.assertEqual(classes["Stocks"], Decimal("90.00"))
+        # category allocations sum to their parent class
+        cat_total = sum(c.percentage for c in far.category_allocations.all())
+        self.assertEqual(cat_total, Decimal("100.00"))

@@ -46,10 +46,15 @@ def _unique_ruleset_name(base: str) -> str:
     return name
 
 
-def import_glidepath_rules(file_obj) -> RuleSet:
+def import_glidepath_rules(file_obj, account_type: str = "retirement") -> RuleSet:
+    valid_types = {choice[0] for choice in RuleSet._meta.get_field("account_type").choices}
+    if account_type not in valid_types:
+        account_type = "retirement"
     name = os.path.splitext(os.path.basename(getattr(file_obj, "name", "") or "rules"))[0]
     name = name or "rules"
-    ruleset = RuleSet.objects.create(name=_unique_ruleset_name(name))
+    ruleset = RuleSet.objects.create(
+        name=_unique_ruleset_name(name), account_type=account_type
+    )
 
     text = io.TextIOWrapper(file_obj, encoding="utf-8")
     reader = csv.DictReader(text)

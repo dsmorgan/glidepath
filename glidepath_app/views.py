@@ -295,7 +295,8 @@ def rules_view(request):
             form = GlidepathRuleUploadForm(request.POST, request.FILES)
             if form.is_valid():
                 try:
-                    new_set = import_glidepath_rules(form.cleaned_data["file"])
+                    account_type = request.POST.get("account_type", "retirement")
+                    new_set = import_glidepath_rules(form.cleaned_data["file"], account_type)
                 except ValueError as exc:  # pragma: no cover - defensive
                     error = str(exc)
             else:  # pragma: no cover - defensive
@@ -327,12 +328,17 @@ def rules_view(request):
     years_born = list(range(1940, 2021))
     retirement_ages = list(range(40, 81))
 
+    is_education = bool(selected_set and selected_set.account_type == 'education')
+    time_window_label = "Years to Enrollment" if is_education else "Years to Retirement"
+
     context = {
         "form": form,
         "error": error,
         "rules": rules,
         "rule_sets": rule_sets,
         "selected_set": selected_set,
+        "is_education": is_education,
+        "time_window_label": time_window_label,
         "class_chart": json.dumps(class_chart),
         "category_chart": json.dumps(category_chart),
         "class_pie_chart": json.dumps(pie_chart),
