@@ -652,8 +652,40 @@ After successful authentication:
   - `/login/` - Login page
   - `/auth/idp/*/oidc/login/` - OAuth login initiation
   - `/auth/idp/*/oidc/callback/` - OAuth callback handler
+  - `/import/nysaves/submit/` - token-authenticated bookmarklet import (auths via `User.import_token`, not the session)
 - Checks for `user_id` in session to determine authentication state
 - Works with both internal and OAuth users
+
+## Access Control Model (admin vs. user)
+
+Two roles (`User.role`: 0 = Administrator, 1 = User), surfaced as `is_admin` in the
+session and as a template variable via the `users_context` context processor (so
+`{% if is_admin %}` works in any template — note `request.session.is_admin` does
+**not** resolve in templates).
+
+**Guiding principle: view-but-not-edit.** Non-admins can navigate to and *read*
+the configuration/catalog pages (Rules, Funds, Virtual Funds, Assumptions) to
+review the material; they just can't change anything there. Mutations are gated in
+the views, not by hiding the page.
+
+- **Nav (`base.html`)** keeps the restricted pages visible to everyone for
+  read-only review.
+- **Home dashboard (`home.html`)** is curated: a non-admin sees only the areas
+  they act in — **Accounts, Portfolios, Modeling**. The admin-oriented tiles
+  (Rules, Funds, Virtual Funds, Assumptions, Settings) are gated with `{% if is_admin %}`.
+- **Edit-gating** lives in the views: the `@admin_required` decorator (see
+  `decorators.py`), explicit `is_admin` checks, and `@require_POST` on mutating
+  routes. A non-admin POST to an admin route returns 403. Examples:
+  fund/provider/virtual-fund CRUD, glidepath rule import/delete, assumption upload.
+- **Non-admin actions are scoped to their own data**: their Accounts, Portfolios,
+  Modeling, and the education (529) dashboard. IDOR is prevented with
+  `_acting_user()` / `_can_access()`; admins may act as a selected user via the
+  blue user-selector.
+- **One deliberate shared-write exception**: the 529 dashboard's "Refresh prices"
+  (`refresh_education_prices`) is available to the portfolio owner, not just
+  admins. The price feed is shared, read-only-sourced, and cooldown-gated, so a
+  529 holder can freshen their own valuation; editing the funds themselves stays
+  admin-only on the Virtual Funds page.
 
 ## Architecture Decisions
 

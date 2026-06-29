@@ -549,20 +549,18 @@ class EducationProjectionTests(TestCase):
         self.assertEqual(resp.status_code, 302)
         self.assertIn("/portfolios/", resp["Location"])  # bounced, not the dashboard
 
-    def test_nav_hides_admin_sections_for_non_admin(self):
+    def test_home_curated_but_nav_allows_review_for_non_admin(self):
         session = self.client.session
         session["user_id"] = str(self.user.id)
         session.save()
-        html = self.client.get(reverse("portfolios")).content.decode()
-        self.assertNotIn(reverse("virtual_funds"), html)
-        self.assertNotIn(reverse("assumptions"), html)
-        # Re-fetch the session before mutating (the prior request cycled it).
-        session = self.client.session
-        session["is_admin"] = True
-        session.save()
-        html = self.client.get(reverse("portfolios")).content.decode()
-        self.assertIn(reverse("virtual_funds"), html)
-        self.assertIn(reverse("assumptions"), html)
+        home = self.client.get(reverse("home")).content.decode()
+        # Home tiles are curated to actionable areas: the admin Virtual Funds /
+        # Assumptions tiles are hidden (their unique descriptions are absent)...
+        self.assertNotIn("Browse 529/virtual-fund providers", home)
+        self.assertNotIn("capital-market assumption sets", home)
+        # ...but the restricted pages stay reachable in the nav for read-only review.
+        self.assertIn(reverse("virtual_funds"), home)
+        self.assertIn(reverse("assumptions"), home)
 
 
 class EducationConventionTests(TestCase):
