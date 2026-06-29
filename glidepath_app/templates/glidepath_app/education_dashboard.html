@@ -27,6 +27,23 @@
             {% if price_age_days > 7 %}Consider refreshing prices.{% endif %}
         </p>
         {% endif %}
+
+        {% if refresh_message %}
+        <div class="mt-3 text-sm p-3 rounded {% if refresh_level == 'success' %}bg-green-50 text-green-800{% elif refresh_level == 'info' %}bg-blue-50 text-blue-700{% else %}bg-red-50 text-red-700{% endif %}">
+            {{ refresh_message }}
+        </div>
+        {% endif %}
+
+        {% if provider %}
+        <form method="post" action="{% url 'refresh_education_prices' portfolio.id %}" class="mt-3">
+            {% csrf_token %}
+            <button type="submit"
+                    class="px-3 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700">
+                Refresh prices
+            </button>
+            <span class="text-xs text-gray-500 ml-2">Latest unit prices from {{ provider.name }} (shared across users; updates ~hourly).</span>
+        </form>
+        {% endif %}
     </div>
 
     <!-- Projection summary cards -->

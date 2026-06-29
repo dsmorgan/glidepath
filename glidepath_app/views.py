@@ -974,6 +974,8 @@ def education_dashboard(request, portfolio_id):
         'provider': provider,
         'price_age_days': price_age_days,
         'prices_never_refreshed': prices_never_refreshed,
+        'refresh_level': request.session.pop('edu_refresh_level', None),
+        'refresh_message': request.session.pop('edu_refresh_message', None),
     }
     return render(request, "glidepath_app/education_dashboard.html", context)
 
@@ -2255,53 +2257,96 @@ def delete_virtual_fund(request, fund_id):
     return redirect('virtual_funds')
 
 
-@admin_required
-@require_POST
-def refresh_provider_prices(request, provider_id):
-    """Manually trigger a price refresh for a provider's virtual funds."""
+def _refresh_provider_with_cooldown(provider):
+    """Run a virtual-fund price refresh, honoring the cooldown.
+
+    Returns (level, message) where level is 'info' (throttled), 'error', or
+    'success'. Shared by the admin Virtual Funds page and the 529 dashboard.
+    last_price_refresh is stamped only when prices were retrieved, so the cooldown
+    blocks re-polling without blocking retries of failed/empty fetches.
+    """
     from django.utils import timezone
 
-    provider = FundProvider.objects.filter(id=provider_id).first()
-    if provider is None:
-        return redirect('virtual_funds')
-
-    # Throttle: last_price_refresh is stamped only when prices were retrieved, so this
-    # blocks re-polling within the cooldown without blocking retries of failed/empty fetches.
     if provider.last_price_refresh:
         elapsed = (timezone.now() - provider.last_price_refresh).total_seconds()
         if elapsed < PRICE_REFRESH_COOLDOWN_SECONDS:
             mins = int((PRICE_REFRESH_COOLDOWN_SECONDS - elapsed) // 60) + 1
-            request.session['vf_refresh_info'] = (
-                f"{provider.name}: prices were refreshed {int(elapsed // 60)} min ago. "
-                f"They update infrequently — try again in about {mins} min."
-            )
-            return redirect('virtual_funds')
+            return ('info',
+                    f"{provider.name}: prices were refreshed {int(elapsed // 60)} min ago. "
+                    f"They update infrequently — try again in about {mins} min.")
 
     try:
         result = refresh_virtual_fund_prices(provider.slug)
     except (ValueError, requests.RequestException) as exc:
         logger.exception("Price refresh failed for provider %s", provider.slug)
-        request.session['vf_refresh_error'] = f"Price refresh failed: {exc}"
-        return redirect('virtual_funds')
+        return ('error', f"Price refresh failed: {exc}")
 
     if result['updated'] == 0:
-        # Nothing was retrieved/applied — surface as an error, not a green success.
         detail = f"returned {result['scraped_count']} row(s) but none matched a seeded fund"
         if result['scraped_count'] == 0:
             detail = "returned no prices (the feed may have changed or be unavailable)"
-        request.session['vf_refresh_error'] = (
-            f"{provider.name}: no prices were updated — the scraper {detail}. "
-            "Check fund names against the provider, then try again."
-        )
-        return redirect('virtual_funds')
+        return ('error',
+                f"{provider.name}: no prices were updated — the scraper {detail}. "
+                "Check fund names against the provider, then try again.")
 
     summary = f"{provider.name}: updated {result['updated']} of {result['scraped_count']} scraped fund(s)."
     if result['not_updated']:
         summary += f" No price for {len(result['not_updated'])} fund(s)."
     if result['unmatched_scraped']:
         summary += f" {len(result['unmatched_scraped'])} scraped row(s) matched no fund."
-    request.session['vf_refresh_summary'] = summary
+    return ('success', summary)
+
+
+def _provider_for_education_portfolio(portfolio):
+    """The FundProvider backing this education portfolio's held virtual funds, or None."""
+    for item in portfolio.items.all():
+        position = AccountPosition.objects.filter(
+            upload__user=portfolio.user, upload__upload_type='nysaves',
+            account_number=item.account_number, symbol=item.symbol,
+            virtual_fund__isnull=False,
+        ).select_related('virtual_fund__provider').order_by('-upload__upload_datetime').first()
+        if position and position.virtual_fund and position.virtual_fund.provider:
+            return position.virtual_fund.provider
+    return None
+
+
+@admin_required
+@require_POST
+def refresh_provider_prices(request, provider_id):
+    """Manually trigger a price refresh for a provider's virtual funds (admin)."""
+    provider = FundProvider.objects.filter(id=provider_id).first()
+    if provider is None:
+        return redirect('virtual_funds')
+    level, message = _refresh_provider_with_cooldown(provider)
+    session_key = {'info': 'vf_refresh_info', 'error': 'vf_refresh_error',
+                   'success': 'vf_refresh_summary'}[level]
+    request.session[session_key] = message
     return redirect('virtual_funds')
+
+
+@require_POST
+def refresh_education_prices(request, portfolio_id):
+    """Refresh 529 prices from the education dashboard.
+
+    Available to the portfolio owner (not admin-only): the price feed is shared,
+    read-only, and cooldown-gated, so a 529 holder can freshen their own valuation.
+    Editing providers/funds stays admin-only on the Virtual Funds page.
+    """
+    current_user, is_admin = _acting_user(request)
+    portfolio = Portfolio.objects.filter(id=portfolio_id).first()
+    if portfolio is None or not _can_access(portfolio, current_user, is_admin) \
+            or portfolio.account_type != 'education':
+        return redirect('portfolios')
+
+    provider = _provider_for_education_portfolio(portfolio)
+    if provider is None:
+        request.session['edu_refresh_level'] = 'error'
+        request.session['edu_refresh_message'] = "No 529 provider found for this portfolio's holdings."
+    else:
+        level, message = _refresh_provider_with_cooldown(provider)
+        request.session['edu_refresh_level'] = level
+        request.session['edu_refresh_message'] = message
+    return redirect('education_dashboard', portfolio_id=portfolio.id)
 
 
 def nysaves_import(request):

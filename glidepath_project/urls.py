@@ -40,6 +40,7 @@ from glidepath_app.views import (
     delete_fund_provider,
     virtual_fund_detail,
     delete_virtual_fund,
+    refresh_education_prices,
     refresh_provider_prices,
 )
 
@@ -74,6 +75,7 @@ urlpatterns = [
     path('portfolios/create/', create_portfolio, name='portfolio_create'),
     path('portfolios/<uuid:portfolio_id>/edit/', edit_portfolio, name='edit_portfolio'),
     path('portfolios/<uuid:portfolio_id>/education/', education_dashboard, name='education_dashboard'),
+    path('portfolios/<uuid:portfolio_id>/education/refresh/', refresh_education_prices, name='refresh_education_prices'),
     path('portfolios/<uuid:portfolio_id>/delete/', delete_portfolio, name='delete_portfolio'),
     path('portfolios/<uuid:portfolio_id>/download/', download_portfolio_csv, name='download_portfolio_csv'),
     path('modeling/', modeling_view, name='modeling'),

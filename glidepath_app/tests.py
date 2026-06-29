@@ -518,6 +518,52 @@ class EducationProjectionTests(TestCase):
         self.assertEqual(resp.status_code, 302)
         self.assertIn("/portfolios/", resp["Location"])
 
+    def test_non_admin_can_refresh_prices_from_dashboard(self):
+        text = (
+            "Account Number,Account Name,Portfolio Name,Units,Unit Price,Current Value\n"
+            "ACCT-R,Kid,Growth Stock Index Portfolio,5,12.00,\n"
+        )
+        parse_nysaves_csv(_csv_file(text), self.user, "n.csv")
+        pf = Portfolio.objects.create(user=self.user, name="rfr", account_type="education",
+                                      year_born=_year_born_for(5), enrollment_age=18,
+                                      annual_withdrawal=Decimal("1"), return_assumption=Decimal("6"))
+        PortfolioItem.objects.create(portfolio=pf, account_number="ACCT-R", symbol="growth-stock-index")
+        session = self.client.session
+        session["user_id"] = str(self.user.id)  # plain user, no is_admin
+        session.save()
+        feed = {"Growth Stock Index Portfolio": (Decimal("88.00"), date(2026, 6, 26))}
+        with mock.patch.dict(scraper_service.SCRAPERS, {"nysaves": lambda p: feed}):
+            resp = self.client.post(reverse("refresh_education_prices", args=[pf.id]))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn(f"/portfolios/{pf.id}/education/", resp["Location"])
+        self.assertEqual(VirtualFund.objects.get(slug="growth-stock-index").unit_price, Decimal("88.00"))
+
+    def test_refresh_prices_denies_other_users_portfolio(self):
+        owner = User.objects.create(username="owner3", email="owner3@example.com")
+        pf = Portfolio.objects.create(user=owner, name="theirs3", account_type="education",
+                                      year_born=_year_born_for(5), enrollment_age=18)
+        session = self.client.session
+        session["user_id"] = str(self.user.id)
+        session.save()
+        resp = self.client.post(reverse("refresh_education_prices", args=[pf.id]))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/portfolios/", resp["Location"])  # bounced, not the dashboard
+
+    def test_nav_hides_admin_sections_for_non_admin(self):
+        session = self.client.session
+        session["user_id"] = str(self.user.id)
+        session.save()
+        html = self.client.get(reverse("portfolios")).content.decode()
+        self.assertNotIn(reverse("virtual_funds"), html)
+        self.assertNotIn(reverse("assumptions"), html)
+        # Re-fetch the session before mutating (the prior request cycled it).
+        session = self.client.session
+        session["is_admin"] = True
+        session.save()
+        html = self.client.get(reverse("portfolios")).content.decode()
+        self.assertIn(reverse("virtual_funds"), html)
+        self.assertIn(reverse("assumptions"), html)
+
 
 class EducationConventionTests(TestCase):
     """The education glide path shares the retirement sign convention:
