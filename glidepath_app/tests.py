@@ -977,3 +977,26 @@ class NYSavesBookmarkletImportTests(TestCase):
         self.client.post(reverse("nysaves_import"), {"rotate": "1"})
         self.user.refresh_from_db()
         self.assertNotEqual(self.user.import_token, self.token)
+
+
+class UserIdentityDropdownTests(TestCase):
+    """The purple identity dropdown must always show the logged-in user, even when
+    an admin has switched the viewed account via the user selector."""
+
+    def test_identity_dropdown_shows_logged_in_user_not_switched_account(self):
+        admin = User.objects.create(username="adminx", email="adminx@example.com", role=0)
+        other = User.objects.create(username="otherx", email="otherx@example.com", role=1)
+        session = self.client.session
+        session["user_id"] = str(admin.id)
+        session["is_admin"] = True
+        session["selected_user_id"] = str(other.id)  # admin switched the viewed account
+        session.save()
+        resp = self.client.get(reverse("portfolios"))
+        # Identity dropdown binds to logged_in_user (the admin), never the switch target.
+        self.assertEqual(resp.context["logged_in_user"], admin)
+        self.assertEqual(resp.context["selected_user"], other)
+        # The view still scopes page content to the selected user.
+        self.assertEqual(resp.context["current_user"], other)
+        # The "Administrator" badge renders only in the identity dropdown, from the
+        # logged-in user — present despite the non-admin selection.
+        self.assertContains(resp, "Administrator")

@@ -42,5 +42,9 @@ def users_context(request):
         'all_users': all_users,
         'selected_user': selected_user,
         'current_user': current_user,
+        # The actual logged-in user, never overridden by a view's context (several
+        # views pass their own `current_user` = the selected/acting user). The
+        # identity dropdown binds to this so it always shows who you're logged in as.
+        'logged_in_user': current_user,
         'is_admin': is_admin,
     }

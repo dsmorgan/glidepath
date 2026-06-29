@@ -89,38 +89,38 @@
                     </div>
                     {% endif %}
 
-                    <!-- Current User Dropdown -->
-                    {% if current_user %}
+                    <!-- Current User Dropdown — always the logged-in user, even when an admin has switched the viewed account. -->
+                    {% if logged_in_user %}
                     <div class="relative group">
                         <button class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 whitespace-nowrap">
-                            <span>{{ current_user.username }}</span>
+                            <span>{{ logged_in_user.username }}</span>
                             <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
                             </svg>
                         </button>
                         <div class="hidden group-hover:block absolute right-0 mt-1 w-72 bg-white rounded-md shadow-lg z-50 py-2 border border-gray-200">
                             <div class="px-4 py-3 border-b border-gray-200 bg-gray-50">
-                                <div class="text-sm font-semibold text-gray-900">{{ current_user.username }}</div>
+                                <div class="text-sm font-semibold text-gray-900">{{ logged_in_user.username }}</div>
                             </div>
                             <!-- User Info Section -->
                             <div class="px-4 py-3 space-y-3">
                                 <div>
                                     <div class="text-xs font-semibold text-gray-600 uppercase tracking-wider">Username</div>
-                                    <div class="text-sm text-gray-900 mt-1">{{ current_user.username }}</div>
+                                    <div class="text-sm text-gray-900 mt-1">{{ logged_in_user.username }}</div>
                                 </div>
                                 <div>
                                     <div class="text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</div>
-                                    <div class="text-sm text-gray-900 mt-1">{{ current_user.email }}</div>
+                                    <div class="text-sm text-gray-900 mt-1">{{ logged_in_user.email }}</div>
                                 </div>
                                 <div>
                                     <div class="text-xs font-semibold text-gray-600 uppercase tracking-wider">Name</div>
-                                    <div class="text-sm text-gray-900 mt-1">{{ current_user.name }}</div>
+                                    <div class="text-sm text-gray-900 mt-1">{{ logged_in_user.name }}</div>
                                 </div>
                                 <div>
                                     <div class="text-xs font-semibold text-gray-600 uppercase tracking-wider">Identity Provider</div>
                                     <div class="text-sm text-gray-900 mt-1">
-                                        {% if current_user.identity_provider %}
-                                            {{ current_user.identity_provider.name }}
+                                        {% if logged_in_user.identity_provider %}
+                                            {{ logged_in_user.identity_provider.name }}
                                         {% else %}
                                             <span class="text-gray-600">Internal</span>
                                         {% endif %}
@@ -129,7 +129,7 @@
                                 <div>
                                     <div class="text-xs font-semibold text-gray-600 uppercase tracking-wider">Role</div>
                                     <div class="text-sm mt-1">
-                                        {% if current_user.is_admin %}
+                                        {% if logged_in_user.is_admin %}
                                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Administrator</span>
                                         {% else %}
                                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">User</span>
