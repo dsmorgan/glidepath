@@ -1,0 +1,35 @@
+<!--
+  SANITIZED sample of a NYSaves (Ascensus "Unite") account summary page.
+  Real account numbers, owner/beneficiary names, units and balances have been
+  replaced with fake values. The STRUCTURE mirrors the live page so it can drive
+  the holdings-extraction bookmarklet/parser:
+    - account number:  span.unite-header-account-number  (e.g. "12345678-02")
+    - account switcher: select#jumpAcct  (one <option> per beneficiary; selected = shown)
+    - holdings:         the Knockout "ko component" UniteAccordion JSON comment
+  Portfolio names are the real public NYSaves portfolio names (they match seeded VirtualFunds).
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>NYSaves 529 - Account Summary (sanitized sample)</title></head>
+<body>
+  <form id="acctForm">
+    <label for="jumpAcct" class="unite-select-label unite-accessible">Acct</label>
+    <select name="cse" id="jumpAcct" class="unite-select-basic" data-width="140px">
+      <option value="01">01 - Sam Q Sample</option>
+      <option value="02" selected="selected">02 - Alex R Sample</option>
+    </select>
+
+    <p class="unite-header-account">
+      <span class="unite-header-account-number">12345678-02</span>
+      <span class="unite-header-account-type">Individual</span>
+    </p>
+  </form>
+
+  <div id="caoBalDiv" style="margin-bottom:20px;">&nbsp;</div>
+
+  <!-- ko component: {"name":"UniteAccordion","params":{"list":[{"item":{"toggleTitle":"<a href=\"/home/funds/1003026.html\" target=\"invChoice\">Developed Markets Index Portfolio</a>","values":[{"type":"Units","definition":["100.0000"]},{"type":"Price ","definition":["$50.00"]},{"type":"Current Value","definition":["$5,000.00"]}]}},{"item":{"toggleTitle":"<a href=\"/home/funds/1003014.html\" target=\"invChoice\">Global Equity Portfolio</a>","values":[{"type":"Units","definition":["200.0000"]},{"type":"Price ","definition":["$85.00"]},{"type":"Current Value","definition":["$17,000.00"]}]}},{"item":{"toggleTitle":"<a href=\"/home/funds/1003021.html\" target=\"invChoice\">Growth Stock Index Portfolio</a>","values":[{"type":"Units","definition":["50.0000"]},{"type":"Price ","definition":["$130.00"]},{"type":"Current Value","definition":["$6,500.00"]}]}},{"item":{"toggleTitle":"<a href=\"/home/funds/1003017.html\" target=\"invChoice\">Income Portfolio</a>","values":[{"type":"Units","definition":["150.0000"]},{"type":"Price ","definition":["$28.00"]},{"type":"Current Value","definition":["$4,200.00"]}]}},{"item":{"toggleTitle":"<a href=\"/home/funds/1003024.html\" target=\"invChoice\">Bond Market Index Portfolio</a>","values":[{"type":"Units","definition":["1,000.0000"]},{"type":"Price ","definition":["$19.00"]},{"type":"Current Value","definition":["$19,000.00"]}]}}]}} -->
+  <ul class="unite-accordion" data-bind="accordion">
+    <!-- Knockout renders the accordion items from the JSON above -->
+  </ul>
+</body>
+</html>

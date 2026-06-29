@@ -1,0 +1,122 @@
+{% extends 'glidepath_app/base.html' %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto py-8">
+    <h1 class="text-3xl font-bold text-gray-900 mb-2">Import 529 holdings from NYSaves</h1>
+    <p class="text-gray-600 mb-6">
+        NYSaves has no export, so grab your holdings straight from the account page with a
+        <strong>bookmarklet</strong> (a bookmark that runs a tiny script). Your login stays in your
+        browser &mdash; Glidepath never sees your NYSaves credentials.
+    </p>
+
+    <!-- Token -->
+    <div class="bg-white border border-gray-200 rounded-lg p-5 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-1">Your import token</h2>
+        <p class="text-sm text-gray-600 mb-3">
+            The bookmarklet below already embeds this token; it's how the import authenticates as you.
+            Rotate it if it's ever exposed (you'll then need to re-drag the bookmarklet).
+        </p>
+        <div class="flex items-center gap-3">
+            <code class="flex-1 bg-gray-100 rounded px-3 py-2 text-sm break-all">{{ import_token }}</code>
+            <form method="post" action="{% url 'nysaves_import' %}">
+                {% csrf_token %}
+                <button name="rotate" value="1"
+                        class="bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm font-medium px-4 py-2 rounded"
+                        onclick="return confirm('Rotate the token? The current bookmarklet will stop working until you re-drag it.');">
+                    Rotate
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bookmarklets -->
+    <div class="bg-white border border-gray-200 rounded-lg p-5 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">1. Add a bookmarklet</h2>
+        <p class="text-sm text-gray-600 mb-4">
+            Easiest: <strong>drag</strong> a button below onto your bookmarks bar (make it visible first
+            &mdash; Chrome: ⌘⇧B, Safari: View &rarr; Show Favorites Bar). If dragging won't work, click
+            <strong>Copy code</strong>, then create a new bookmark and paste it as the bookmark's
+            <em>URL/address</em>.
+        </p>
+
+        <div class="space-y-5">
+            <!-- Direct POST -->
+            <div>
+                <a id="bm-post" href="#"
+                   class="inline-block bg-indigo-600 text-white font-semibold px-4 py-2 rounded cursor-move select-none">
+                    📥 Send 529 → Glidepath
+                </a>
+                <button type="button" data-copy="bm-post-code"
+                        class="js-copy-code inline-block bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium px-3 py-2 rounded ml-2">
+                    Copy code
+                </button>
+                <span class="text-sm text-gray-500 ml-2">Sends holdings straight into Glidepath (use your deployed HTTPS site).</span>
+                <details class="mt-2"><summary class="text-xs text-indigo-600 cursor-pointer">Show code</summary>
+                    <textarea id="bm-post-code" readonly rows="4"
+                              class="w-full mt-2 text-xs font-mono bg-gray-50 border border-gray-200 rounded p-2">javascript:(function(){var T="{{ import_token|escapejs }}",U="{{ submit_url|escapejs }}";function tx(s){return (s||"").replace(/\s+/g," ").trim();}function dec(s){return (s||"").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,"&");}var an=document.querySelector(".unite-header-account-number"),acct=an?tx(an.textContent):"";var opt=document.querySelector("#jumpAcct option:checked")||document.querySelector("#jumpAcct option[selected]");var name=opt?tx(opt.textContent).replace(/^\d+\s*-\s*/,""):"";var data=null,it=document.createNodeIterator(document.body,NodeFilter.SHOW_COMMENT),c;while((c=it.nextNode())){var m=c.nodeValue.match(/ko component:\s*(\{"name".*\}\})\s*$/);if(m){try{var d=JSON.parse(m[1]);if(d.name=="UniteAccordion"){data=d;break;}}catch(e){}}}function num(s){return (s||"").replace(/[$,]/g,"").trim();}var pos=[];if(data&&data.params&&Array.isArray(data.params.list)){data.params.list.forEach(function(x){var t=tx(dec((x.item.toggleTitle||"").replace(/<[^>]+>/g,"")));var v={};(x.item.values||[]).forEach(function(o){v[(o.type||"").trim()]=(o.definition&&o.definition[0])||"";});var u=num(v["Units"]);if(t&&u)pos.push({portfolio_name:t,units:u,unit_price:num(v["Price"]),current_value:num(v["Current Value"])});});}if(!pos.length){alert("No NYSaves holdings found. Open an account's holdings/summary view and try again.");return;}fetch(U,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({token:T,account_number:acct,account_name:name,positions:pos})}).then(function(r){return r.json();}).then(function(j){alert(j.ok?("Imported account "+acct+": matched "+j.matched+", unmatched "+(j.unmatched||[]).length):("Import failed: "+(j.error||"unknown error")));}).catch(function(e){alert("Could not reach Glidepath at "+U+". If it's on http://localhost, use the Copy-as-CSV bookmarklet instead.\n\n"+e);});})();</textarea>
+                </details>
+            </div>
+
+            <!-- Clipboard CSV -->
+            <div>
+                <a id="bm-csv" href="#"
+                   class="inline-block bg-gray-700 text-white font-semibold px-4 py-2 rounded cursor-move select-none">
+                    📋 Copy 529 as CSV
+                </a>
+                <button type="button" data-copy="bm-csv-code"
+                        class="js-copy-code inline-block bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium px-3 py-2 rounded ml-2">
+                    Copy code
+                </button>
+                <span class="text-sm text-gray-500 ml-2">Copies a CSV to your clipboard; upload it on the Accounts page. Works for local/HTTP.</span>
+                <details class="mt-2"><summary class="text-xs text-indigo-600 cursor-pointer">Show code</summary>
+                    <textarea id="bm-csv-code" readonly rows="4"
+                              class="w-full mt-2 text-xs font-mono bg-gray-50 border border-gray-200 rounded p-2">javascript:(function(){function tx(s){return (s||"").replace(/\s+/g," ").trim();}function dec(s){return (s||"").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,"&");}var an=document.querySelector(".unite-header-account-number"),acct=an?tx(an.textContent):"";var opt=document.querySelector("#jumpAcct option:checked")||document.querySelector("#jumpAcct option[selected]");var name=opt?tx(opt.textContent).replace(/^\d+\s*-\s*/,""):"";var data=null,it=document.createNodeIterator(document.body,NodeFilter.SHOW_COMMENT),c;while((c=it.nextNode())){var m=c.nodeValue.match(/ko component:\s*(\{"name".*\}\})\s*$/);if(m){try{var d=JSON.parse(m[1]);if(d.name=="UniteAccordion"){data=d;break;}}catch(e){}}}function num(s){return (s||"").replace(/[$,]/g,"").trim();}var rows=[["Account Number","Account Name","Portfolio Name","Units","Unit Price","Current Value"]];if(data&&data.params&&Array.isArray(data.params.list)){data.params.list.forEach(function(x){var t=tx(dec((x.item.toggleTitle||"").replace(/<[^>]+>/g,"")));var v={};(x.item.values||[]).forEach(function(o){v[(o.type||"").trim()]=(o.definition&&o.definition[0])||"";});var u=num(v["Units"]);if(t&&u)rows.push([acct,name,t,u,num(v["Price"]),num(v["Current Value"])]);});}if(rows.length<2){alert("No NYSaves holdings found on this page.");return;}var csv=rows.map(function(r){return r.map(function(c){return /[",\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c;}).join(",");}).join("\n");function done(n){alert("Copied "+n+" holdings as CSV. Paste into a .csv file and upload it on the Accounts page (NY 529).");}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(csv).then(function(){done(rows.length-1);},function(){window.prompt("Copy this CSV:",csv);});}else{window.prompt("Copy this CSV:",csv);}})();</textarea>
+                </details>
+            </div>
+        </div>
+    </div>
+
+    <!-- Steps -->
+    <div class="bg-white border border-gray-200 rounded-lg p-5">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">2. Use it</h2>
+        <ol class="list-decimal list-inside text-sm text-gray-700 space-y-2">
+            <li>Log into NYSaves and open an account's <strong>holdings / summary</strong> view.</li>
+            <li>Click the bookmarklet. It reads the account number, beneficiary, and per-portfolio units.</li>
+            <li><strong>Send</strong> imports directly; <strong>Copy as CSV</strong> puts it on your clipboard to upload on the Accounts page.</li>
+            <li>Have more than one beneficiary? Switch accounts in the NYSaves dropdown and run it again.</li>
+        </ol>
+        <p class="text-xs text-gray-500 mt-4">
+            Note: a browser won't let an HTTPS page (NYSaves) POST to <code>http://localhost</code>
+            (mixed content). For a local Glidepath, use <strong>Copy as CSV</strong>; the direct
+            <strong>Send</strong> is for your deployed HTTPS site.
+        </p>
+    </div>
+</div>
+
+<script>
+    // Wire the draggable links from the textarea code (avoids HTML-attribute escaping of the JS).
+    (function () {
+        var pairs = [['bm-post', 'bm-post-code'], ['bm-csv', 'bm-csv-code']];
+        pairs.forEach(function (p) {
+            var link = document.getElementById(p[0]), code = document.getElementById(p[1]);
+            if (link && code) link.setAttribute('href', code.value);
+        });
+    })();
+
+    // One-click "Copy code" — copies the bookmarklet's javascript: code to the clipboard.
+    document.querySelectorAll('.js-copy-code').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var code = document.getElementById(btn.getAttribute('data-copy'));
+            if (!code) return;
+            var label = btn.textContent;
+            function flash(msg) { btn.textContent = msg; setTimeout(function () { btn.textContent = label; }, 1500); }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(code.value).then(function () { flash('Copied!'); },
+                                                               function () { code.select(); flash('Select + ⌘C'); });
+            } else {
+                code.select(); document.execCommand && document.execCommand('copy'); flash('Copied!');
+            }
+        });
+    });
+</script>
+{% endblock %}

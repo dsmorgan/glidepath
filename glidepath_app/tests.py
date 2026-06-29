@@ -1,4 +1,6 @@
 import io
+import json
+import re
 from datetime import date, datetime
 from decimal import Decimal
 from unittest import mock
@@ -817,3 +819,117 @@ class VirtualFundAdminTests(TestCase):
         self._login(admin=False)
         self.assertEqual(self.client.get(reverse("fund_provider_add")).status_code, 403)
         self.assertEqual(self.client.get(reverse("virtual_fund_add")).status_code, 403)
+
+
+class NYSavesBookmarkletImportTests(TestCase):
+    """Token-authenticated holdings import endpoint + the sanitized sample fixture."""
+
+    def setUp(self):
+        self.user = User.objects.create(username="bm", email="bm@example.com")
+        self.token = self.user.ensure_import_token()
+        self.url = reverse("nysaves_import_submit")
+
+    def _post(self, payload):
+        return self.client.post(self.url, data=json.dumps(payload), content_type="text/plain")
+
+    def test_valid_import_creates_upload_and_positions(self):
+        payload = {
+            "token": self.token, "account_number": "12345678-02", "account_name": "Alex Sample",
+            "positions": [
+                {"portfolio_name": "Growth Stock Index Portfolio", "units": "96.5681",
+                 "unit_price": "$129.79", "current_value": "$12,533.57"},
+                {"portfolio_name": "Bond Market Index Portfolio", "units": "2,385.9146",
+                 "unit_price": "$19.44", "current_value": "$46,382.18"},
+            ],
+        }
+        resp = self._post(payload)
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["matched"], 2)
+        upload = AccountUpload.objects.get(id=body["upload_id"])
+        self.assertEqual(upload.upload_type, "nysaves")
+        self.assertEqual(upload.user, self.user)
+        pos = AccountPosition.objects.get(upload=upload, symbol="growth-stock-index")
+        self.assertEqual(pos.account_number, "12345678-02")
+        self.assertIsNotNone(pos.virtual_fund)
+        # $ and commas are stripped by _parse_money.
+        self.assertEqual(pos.quantity, str(Decimal("96.5681")))
+        self.assertEqual(pos.current_value, str(Decimal("12533.57")))
+
+    def test_invalid_token_rejected(self):
+        resp = self._post({"token": "nope", "positions": [{"portfolio_name": "Income Portfolio", "units": "1"}]})
+        self.assertEqual(resp.status_code, 401)
+        self.assertFalse(resp.json()["ok"])
+        self.assertEqual(AccountUpload.objects.count(), 0)
+
+    def test_missing_positions_rejected(self):
+        resp = self._post({"token": self.token, "positions": []})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_disabled_user_token_rejected(self):
+        self.user.disabled = True
+        self.user.save(update_fields=["disabled"])
+        resp = self._post({"token": self.token, "account_number": "A1",
+                           "positions": [{"portfolio_name": "Income Portfolio", "units": "1",
+                                          "unit_price": "10", "current_value": "10"}]})
+        self.assertEqual(resp.status_code, 401)
+        self.assertEqual(AccountUpload.objects.count(), 0)
+
+    def test_non_dict_position_rejected_with_cors(self):
+        resp = self._post({"token": self.token, "account_number": "A1", "positions": [1, "x"]})
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp["Access-Control-Allow-Origin"], "*")  # error path still CORS-wrapped
+        self.assertEqual(AccountUpload.objects.count(), 0)
+
+    def test_unmatched_portfolio_reported(self):
+        payload = {"token": self.token, "account_number": "A1", "positions": [
+            {"portfolio_name": "Totally Made Up Fund", "units": "5", "unit_price": "10", "current_value": "50"},
+            {"portfolio_name": "Income Portfolio", "units": "3", "unit_price": "10", "current_value": "30"},
+        ]}
+        body = self._post(payload).json()
+        self.assertEqual(body["matched"], 1)
+        self.assertIn("Totally Made Up Fund", body["unmatched"])
+
+    def test_options_preflight_has_cors(self):
+        resp = self.client.options(self.url)
+        self.assertEqual(resp.status_code, 204)
+        self.assertEqual(resp["Access-Control-Allow-Origin"], "*")
+
+    def test_submit_response_has_cors_and_skips_session_auth(self):
+        # No session set: the auth middleware must NOT redirect this endpoint to login.
+        resp = self._post({"token": self.token, "account_number": "A1",
+                           "positions": [{"portfolio_name": "Income Portfolio", "units": "1",
+                                          "unit_price": "10", "current_value": "10"}]})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Access-Control-Allow-Origin"], "*")
+
+    def test_end_to_end_from_sample_fixture(self):
+        """Mirror the bookmarklet's extraction on the sanitized fixture, then import it."""
+        src = (settings.BASE_DIR / "sample_input" / "sample-nysaves-account.html").read_text()
+        m = re.search(r'ko component:\s*(\{"name".*?\}\})\s*-->', src, re.S)
+        data = json.loads(m.group(1))
+        account = re.search(r'unite-header-account-number">([^<]+)<', src).group(1).strip()
+        positions = []
+        for it in data["params"]["list"]:
+            name = re.sub("<[^>]+>", "", it["item"]["toggleTitle"]).strip()
+            vals = {v["type"].strip(): v["definition"][0] for v in it["item"]["values"]}
+            positions.append({"portfolio_name": name, "units": vals["Units"],
+                              "unit_price": vals["Price"], "current_value": vals["Current Value"]})
+        body = self._post({"token": self.token, "account_number": account,
+                           "account_name": "Alex R Sample", "positions": positions}).json()
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["matched"], 5)   # all 5 sample portfolios match seeded funds
+        self.assertEqual(body["unmatched"], [])
+
+    def test_import_page_renders_and_rotate(self):
+        session = self.client.session
+        session["user_id"] = str(self.user.id)
+        session.save()
+        resp = self.client.get(reverse("nysaves_import"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, self.token)
+        # Rotate changes the token.
+        self.client.post(reverse("nysaves_import"), {"rotate": "1"})
+        self.user.refresh_from_db()
+        self.assertNotEqual(self.user.import_token, self.token)
