@@ -6,6 +6,13 @@ SECRET_KEY = 'django-insecure-replace-this'
 DEBUG = True
 ALLOWED_HOSTS: list[str] = ["*"]
 
+# Behind an HTTPS-terminating reverse proxy that forwards the original scheme in
+# X-Forwarded-Proto (the deployment already relies on this for OAuth redirects).
+# Without this, request.scheme is http, so request.build_absolute_uri() bakes an
+# http:// URL into the bookmarklet and the cross-origin POST is blocked as mixed
+# content. Only takes effect when the header is present (no-op for local http).
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',

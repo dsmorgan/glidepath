@@ -978,6 +978,18 @@ class NYSavesBookmarkletImportTests(TestCase):
         self.user.refresh_from_db()
         self.assertNotEqual(self.user.import_token, self.token)
 
+    def test_bookmarklet_submit_url_is_https_behind_proxy(self):
+        # With X-Forwarded-Proto: https (set by the reverse proxy), the embedded
+        # submit URL must be https, or the HTTPS NYSaves page blocks the POST as
+        # mixed content. Relies on SECURE_PROXY_SSL_HEADER.
+        session = self.client.session
+        session["user_id"] = str(self.user.id)
+        session.save()
+        body = self.client.get(reverse("nysaves_import"),
+                                HTTP_X_FORWARDED_PROTO="https").content.decode()
+        self.assertIn('U="https://', body)
+        self.assertNotIn('U="http://', body)
+
 
 class UserIdentityDropdownTests(TestCase):
     """The purple identity dropdown must always show the logged-in user, even when
