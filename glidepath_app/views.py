@@ -2349,13 +2349,21 @@ def nysaves_import_submit(request):
     if request.method == 'OPTIONS':
         return _cors(HttpResponse(status=204))
 
+    # Cap the body before parsing — a token-holder could otherwise post a huge
+    # positions array. 64 KB is far more than any real NYSaves account.
+    if len(request.body) > 64 * 1024:
+        return _cors(JsonResponse({'ok': False, 'error': 'Payload too large.'}, status=413))
+
     try:
         payload = json.loads(request.body.decode('utf-8'))
     except (ValueError, UnicodeDecodeError):
         return _cors(JsonResponse({'ok': False, 'error': 'Invalid JSON body.'}, status=400))
+    if not isinstance(payload, dict):
+        return _cors(JsonResponse({'ok': False, 'error': 'Invalid JSON body.'}, status=400))
 
     token = (payload.get('token') or '').strip()
-    user = User.objects.filter(import_token=token).first() if token else None
+    # Exclude disabled accounts, matching the login / OIDC paths.
+    user = User.objects.filter(import_token=token, disabled=False).first() if token else None
     if user is None:
         return _cors(JsonResponse({'ok': False, 'error': 'Invalid or missing import token.'}, status=401))
 
@@ -2364,6 +2372,8 @@ def nysaves_import_submit(request):
     positions = payload.get('positions') or []
     if not isinstance(positions, list) or not positions:
         return _cors(JsonResponse({'ok': False, 'error': 'No positions provided.'}, status=400))
+    if not all(isinstance(p, dict) for p in positions):
+        return _cors(JsonResponse({'ok': False, 'error': 'Each position must be an object.'}, status=400))
 
     # _parse_money (in ingest) strips $ and commas, so raw values pass through fine.
     rows = [{

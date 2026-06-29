@@ -834,6 +834,21 @@ class NYSavesBookmarkletImportTests(TestCase):
         resp = self._post({"token": self.token, "positions": []})
         self.assertEqual(resp.status_code, 400)
 
+    def test_disabled_user_token_rejected(self):
+        self.user.disabled = True
+        self.user.save(update_fields=["disabled"])
+        resp = self._post({"token": self.token, "account_number": "A1",
+                           "positions": [{"portfolio_name": "Income Portfolio", "units": "1",
+                                          "unit_price": "10", "current_value": "10"}]})
+        self.assertEqual(resp.status_code, 401)
+        self.assertEqual(AccountUpload.objects.count(), 0)
+
+    def test_non_dict_position_rejected_with_cors(self):
+        resp = self._post({"token": self.token, "account_number": "A1", "positions": [1, "x"]})
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp["Access-Control-Allow-Origin"], "*")  # error path still CORS-wrapped
+        self.assertEqual(AccountUpload.objects.count(), 0)
+
     def test_unmatched_portfolio_reported(self):
         payload = {"token": self.token, "account_number": "A1", "positions": [
             {"portfolio_name": "Totally Made Up Fund", "units": "5", "unit_price": "10", "current_value": "50"},

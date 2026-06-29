@@ -292,7 +292,13 @@ class User(models.Model):
                 fields=['identity_provider', 'external_provider_id'],
                 condition=models.Q(identity_provider__isnull=False, external_provider_id__gt=''),
                 name='unique_provider_external_id'
-            )
+            ),
+            # Generated tokens must be unique; the "" default is allowed on many rows.
+            models.UniqueConstraint(
+                fields=['import_token'],
+                condition=models.Q(import_token__gt=''),
+                name='unique_import_token'
+            ),
         ]
 
     def __str__(self) -> str:
