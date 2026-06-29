@@ -79,6 +79,20 @@
                         {% if analysis_data.current_year %}{{ analysis_data.current_year }}{% else %}-{% endif %}
                     </p>
                 </div>
+                {% if selected_portfolio.account_type == 'education' %}
+                <div class="bg-blue-50 p-4 rounded border border-blue-200">
+                    <p class="text-sm text-gray-600">Enrollment Age</p>
+                    <p class="text-lg font-semibold text-gray-900">
+                        {% if analysis_data.enrollment_age %}{{ analysis_data.enrollment_age }}{% else %}-{% endif %}
+                    </p>
+                </div>
+                <div class="bg-blue-50 p-4 rounded border border-blue-200">
+                    <p class="text-sm text-gray-600">Enrollment Status</p>
+                    <p class="text-lg font-semibold text-gray-900">
+                        {% if analysis_data.enrollment_status %}{{ analysis_data.enrollment_status }}{% else %}-{% endif %}
+                    </p>
+                </div>
+                {% else %}
                 <div class="bg-blue-50 p-4 rounded border border-blue-200">
                     <p class="text-sm text-gray-600">Retirement Age</p>
                     <p class="text-lg font-semibold text-gray-900">
@@ -91,6 +105,7 @@
                         {% if analysis_data.retirement_status %}{{ analysis_data.retirement_status }}{% else %}-{% endif %}
                     </p>
                 </div>
+                {% endif %}
             </div>
 
             <p class="text-gray-600">
@@ -517,6 +532,16 @@
     {% if selected_portfolio and analysis_data.target_category_breakdown %}
     <div class="mt-8 bg-white shadow rounded-lg p-8">
         <h3 class="text-2xl font-semibold text-gray-900 mb-6">Rebalance Recommendations</h3>
+
+        {% if selected_portfolio.account_type == 'education' %}
+        <div class="mb-6 bg-amber-50 border-l-4 border-amber-400 p-4 text-sm text-amber-800">
+            <strong>Advisory only.</strong> 529 holdings are virtual funds that can't be sold by asset
+            category &mdash; you rebalance by <strong>exchanging a whole fund</strong> (and NYSaves caps
+            exchanges to ~2/year). These rows are <strong>category-level guidance</strong>, not per-fund
+            trade orders; the same fund may appear in more than one row, so weigh the overall direction
+            rather than acting on individual line amounts.
+        </div>
+        {% endif %}
 
         <!-- Tolerance Dropdown -->
         <div class="mb-6">

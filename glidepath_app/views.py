@@ -889,10 +889,10 @@ def portfolios_view(request):
             if analysis_data and 'category_details' in analysis_data:
                 analysis_data['category_details_json'] = json.dumps(analysis_data['category_details'])
 
-            # Calculate rebalance recommendations (retirement/general only; education
-            # portfolios are drift-only and never get executable trade actions).
-            if selected_portfolio.account_type != 'education':
-                rebalance_data = calculate_rebalance_recommendations(selected_portfolio, tolerance)
+            # Rebalance recommendations for every account type. For 529s these are
+            # advisory: you rebalance by exchanging whole portfolios (NYSaves caps
+            # exchanges), so treat the category-level trades as guidance.
+            rebalance_data = calculate_rebalance_recommendations(selected_portfolio, tolerance)
     else:
         portfolios = Portfolio.objects.none()
         selected_portfolio = None
