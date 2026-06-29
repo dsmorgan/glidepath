@@ -990,6 +990,32 @@ class NYSavesBookmarkletImportTests(TestCase):
         self.assertIn('U="https://', body)
         self.assertNotIn('U="http://', body)
 
+    def test_admin_acting_as_user_imports_to_that_user(self):
+        # An admin working under another account (user-switcher) gets that account's
+        # token, so imports land there — matching how a CSV upload behaves.
+        admin = User.objects.create(username="adm2", email="adm2@example.com", role=0)
+        target = User.objects.create(username="dsm2", email="dsm2@example.com", role=1)
+        session = self.client.session
+        session["user_id"] = str(admin.id)
+        session["is_admin"] = True
+        session["selected_user_id"] = str(target.id)
+        session.save()
+        page = self.client.get(reverse("nysaves_import")).content.decode()
+        target.refresh_from_db()
+        self.assertTrue(target.import_token)
+        self.assertIn(target.import_token, page)  # page embeds the acting user's token
+        body = self.client.post(
+            self.url,
+            data=json.dumps({"token": target.import_token, "account_number": "A1",
+                             "positions": [{"portfolio_name": "Income Portfolio", "units": "1",
+                                            "unit_price": "10", "current_value": "10"}]}),
+            content_type="text/plain",
+        ).json()
+        self.assertTrue(body["ok"])
+        self.assertEqual(AccountUpload.objects.get(id=body["upload_id"]).user, target)
+        admin.refresh_from_db()
+        self.assertFalse(admin.import_token)  # admin's own token was never used
+
 
 class UserIdentityDropdownTests(TestCase):
     """The purple identity dropdown must always show the logged-in user, even when

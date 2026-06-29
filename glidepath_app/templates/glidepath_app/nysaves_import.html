@@ -9,12 +9,19 @@
         browser &mdash; Glidepath never sees your NYSaves credentials.
     </p>
 
+    <div class="mb-6 bg-blue-50 border-l-4 border-blue-400 p-4 text-sm text-blue-800">
+        Imports from this bookmarklet land in the account you're working in:
+        <strong>{{ import_account.username }}</strong>. Switch accounts (top-right selector) and
+        re-grab the bookmarklet to import into a different one.
+    </div>
+
     <!-- Token -->
     <div class="bg-white border border-gray-200 rounded-lg p-5 mb-6">
-        <h2 class="text-lg font-semibold text-gray-900 mb-1">Your import token</h2>
+        <h2 class="text-lg font-semibold text-gray-900 mb-1">Import token for {{ import_account.username }}</h2>
         <p class="text-sm text-gray-600 mb-3">
-            The bookmarklet below already embeds this token; it's how the import authenticates as you.
-            Rotate it if it's ever exposed (you'll then need to re-drag the bookmarklet).
+            The bookmarklet below already embeds this token; it's how the import authenticates as
+            <strong>{{ import_account.username }}</strong>. Rotate it if it's ever exposed (you'll then
+            need to re-drag the bookmarklet).
         </p>
         <div class="flex items-center gap-3">
             <code class="flex-1 bg-gray-100 rounded px-3 py-2 text-sm break-all">{{ import_token }}</code>

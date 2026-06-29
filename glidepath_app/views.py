@@ -2350,12 +2350,14 @@ def refresh_education_prices(request, portfolio_id):
 
 
 def nysaves_import(request):
-    """Per-user page that shows the holdings-import token and the bookmarklets.
+    """Page that shows the holdings-import token and the bookmarklets.
 
-    POST rotates the token. The token authenticates the cross-origin POST from the
-    bookmarklet (the NYSaves page can't send a Glidepath session cookie)."""
-    user_id = request.session.get('user_id')
-    user = User.objects.filter(id=user_id).first() if user_id else None
+    The token belongs to the *acting* account (the user an admin has switched to,
+    else the logged-in user), so imports land on the same account as a CSV upload
+    would. POST rotates that account's token. The token authenticates the
+    cross-origin POST from the bookmarklet (the NYSaves page can't send a session
+    cookie)."""
+    user, is_admin = _acting_user(request)
     if user is None:
         return redirect('login')
 
@@ -2368,6 +2370,7 @@ def nysaves_import(request):
     return render(request, 'glidepath_app/nysaves_import.html', {
         'import_token': token,
         'submit_url': submit_url,
+        'import_account': user,
     })
 
 
