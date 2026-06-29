@@ -28,6 +28,14 @@
         </a>
         {% endif %}
 
+        <!-- Virtual Funds Card -->
+        <a href="{% url 'virtual_funds' %}" class="block p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-50 transition">
+            <h2 class="text-2xl font-semibold text-indigo-600 mb-3">Virtual Funds</h2>
+            <p class="text-gray-600">
+                Manage 529/virtual-fund providers and their portfolios, including underlying asset-category composition and prices.
+            </p>
+        </a>
+
         <!-- Accounts Card -->
         <a href="{% url 'accounts' %}" class="block p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-50 transition">
             <h2 class="text-2xl font-semibold text-indigo-600 mb-3">Accounts</h2>
@@ -49,6 +57,14 @@
             <h2 class="text-2xl font-semibold text-indigo-600 mb-3">Modeling</h2>
             <p class="text-gray-600">
                 Run simulations and model different retirement scenarios and allocation strategies.
+            </p>
+        </a>
+
+        <!-- Assumptions Card -->
+        <a href="{% url 'assumptions' %}" class="block p-6 bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-50 transition">
+            <h2 class="text-2xl font-semibold text-indigo-600 mb-3">Assumptions</h2>
+            <p class="text-gray-600">
+                Review the market return/risk assumptions used by modeling, and (admins) upload capital-market assumption sets.
             </p>
         </a>
 

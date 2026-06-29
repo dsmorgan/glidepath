@@ -921,6 +921,17 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
         else:
             retirement_status = f"{years_to_retirement} years past retirement"
 
+    # Education analogue of retirement_status, keyed on years to enrollment.
+    yte = portfolio.years_to_enrollment
+    enrollment_status = None
+    if yte is not None:
+        if yte > 0:
+            enrollment_status = f"{yte} years to enrollment"
+        elif yte == 0:
+            enrollment_status = "Enrolling this year!"
+        else:
+            enrollment_status = f"{abs(yte)} years into college"
+
     # Calculate rebalance recommendations if tolerance is provided
     rebalance_data = None
 
@@ -938,6 +949,8 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
         'retirement_status': retirement_status,
         'account_type': portfolio.account_type,
         'years_to_enrollment': portfolio.years_to_enrollment,
+        'enrollment_age': portfolio.enrollment_age,
+        'enrollment_status': enrollment_status,
         'rebalance_data': rebalance_data,
     }
 

@@ -341,6 +341,32 @@ class PortfolioAnalysisTests(TestCase):
         self.assertEqual(a["account_type"], "retirement")
 
 
+    def test_analysis_has_enrollment_status_for_education(self):
+        self._upload_529()
+        pf = Portfolio.objects.create(user=self.user, name="enr", account_type="education",
+                                      year_born=_year_born_for(-3), enrollment_age=18)
+        PortfolioItem.objects.create(portfolio=pf, account_number="NYS-1", symbol="moderate-growth")
+        a = get_portfolio_analysis(pf)
+        self.assertEqual(a["enrollment_age"], 18)
+        self.assertEqual(a["enrollment_status"], "3 years into college")  # years_to_enrollment = -3
+        self.assertIsNone(a["retirement_status"])  # retirement framing not used for education
+
+    def test_education_portfolio_view_shows_rebalance(self):
+        """Regression: 529 portfolios now get (advisory) rebalance recommendations."""
+        self._upload_529()  # $1000 in Moderate Growth, drifted vs the seeded glide path
+        rs = RuleSet.objects.get(name="Example 529 Education Glide Path")
+        pf = Portfolio.objects.create(user=self.user, name="rb", account_type="education",
+                                      ruleset=rs, year_born=_year_born_for(5), enrollment_age=18)
+        PortfolioItem.objects.create(portfolio=pf, account_number="NYS-1", symbol="moderate-growth")
+        session = self.client.session
+        session["user_id"] = str(self.user.id)
+        session.save()
+        resp = self.client.get(reverse("portfolios"), {"portfolio": str(pf.id)})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNotNone(resp.context["rebalance_data"])
+        self.assertIsNone(resp.context["rebalance_data"].get("message"))  # rule resolved, ran
+
+
 class PortfolioFormTests(TestCase):
     def setUp(self):
         self.user = User.objects.create(username="f", email="f@example.com")

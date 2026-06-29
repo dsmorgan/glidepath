@@ -79,6 +79,20 @@
                         {% if analysis_data.current_year %}{{ analysis_data.current_year }}{% else %}-{% endif %}
                     </p>
                 </div>
+                {% if selected_portfolio.account_type == 'education' %}
+                <div class="bg-blue-50 p-4 rounded border border-blue-200">
+                    <p class="text-sm text-gray-600">Enrollment Age</p>
+                    <p class="text-lg font-semibold text-gray-900">
+                        {% if analysis_data.enrollment_age %}{{ analysis_data.enrollment_age }}{% else %}-{% endif %}
+                    </p>
+                </div>
+                <div class="bg-blue-50 p-4 rounded border border-blue-200">
+                    <p class="text-sm text-gray-600">Enrollment Status</p>
+                    <p class="text-lg font-semibold text-gray-900">
+                        {% if analysis_data.enrollment_status %}{{ analysis_data.enrollment_status }}{% else %}-{% endif %}
+                    </p>
+                </div>
+                {% else %}
                 <div class="bg-blue-50 p-4 rounded border border-blue-200">
                     <p class="text-sm text-gray-600">Retirement Age</p>
                     <p class="text-lg font-semibold text-gray-900">
@@ -91,6 +105,7 @@
                         {% if analysis_data.retirement_status %}{{ analysis_data.retirement_status }}{% else %}-{% endif %}
                     </p>
                 </div>
+                {% endif %}
             </div>
 
             <p class="text-gray-600">
