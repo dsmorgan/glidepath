@@ -363,8 +363,15 @@ class PortfolioAnalysisTests(TestCase):
         session.save()
         resp = self.client.get(reverse("portfolios"), {"portfolio": str(pf.id)})
         self.assertEqual(resp.status_code, 200)
-        self.assertIsNotNone(resp.context["rebalance_data"])
-        self.assertIsNone(resp.context["rebalance_data"].get("message"))  # rule resolved, ran
+        rb = resp.context["rebalance_data"]
+        self.assertIsNotNone(rb)
+        self.assertIsNone(rb.get("message"))  # rule resolved, recommender ran
+        # 100% Moderate Growth is drifted vs the glide path, so it must produce trades,
+        # and they must reference categories the fund actually explodes into.
+        recs = rb["recommendations"]
+        self.assertTrue(recs)
+        moderate_growth_categories = {"US Total Market", "International Market", "US Investment Grade"}
+        self.assertTrue(any(r["category"] in moderate_growth_categories for r in recs))
 
 
 class PortfolioFormTests(TestCase):

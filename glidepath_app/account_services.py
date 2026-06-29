@@ -948,6 +948,8 @@ def get_portfolio_analysis(portfolio: Portfolio) -> dict:
         'years_to_retirement': years_to_retirement,
         'retirement_status': retirement_status,
         'account_type': portfolio.account_type,
+        # Note: positive = enrollment still ahead — the OPPOSITE sign of
+        # years_to_retirement above (negative = before retirement).
         'years_to_enrollment': portfolio.years_to_enrollment,
         'enrollment_age': portfolio.enrollment_age,
         'enrollment_status': enrollment_status,
