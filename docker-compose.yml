@@ -1,7 +1,11 @@
+# Run with podman-compose (or `podman compose`); also works with Docker.
+# The `:Z` on the app volume is an SELinux relabel, required on SELinux hosts
+# (Fedora/RHEL/CentOS) for podman to access the bind mount. It is a no-op on
+# non-SELinux hosts and is ignored by Docker Desktop.
 services:
   web:
     build: .
     ports:
       - "8000:8000"
     volumes:
-      - .:/app
+      - .:/app:Z
